@@ -1,0 +1,254 @@
+import { useEffect, useState } from 'react'
+import { Search } from 'lucide-react'
+import { BackBtn, Btn, Table, TinyBtn, Badge, Modal, Field, Input, ErrorBox } from '../components/ui'
+import { api, ApiError, type Customer, type Product, type PaymentMethod, type SalesChannel } from '../lib/api'
+import { customerTierLabel, paymentMethodLabel, salesChannelLabel } from '../lib/labels'
+
+interface CartLine { product: Product; soLuong: number; giamGia: number }
+
+export function CreateOrderScreen({ onBack, onCreated }: { onBack: () => void; onCreated: (orderId: string) => void }) {
+  const [customerQuery, setCustomerQuery] = useState('')
+  const [customerResults, setCustomerResults] = useState<Customer[]>([])
+  const [customer, setCustomer] = useState<Customer | null>(null)
+  const [showNewCustomer, setShowNewCustomer] = useState(false)
+
+  const [productQuery, setProductQuery] = useState('')
+  const [productResults, setProductResults] = useState<Product[]>([])
+  const [cart, setCart] = useState<CartLine[]>([])
+
+  const [kenhBan, setKenhBan] = useState<SalesChannel>('TAI_CUA_HANG')
+  const [phuongThuc, setPhuongThuc] = useState<PaymentMethod>('TIEN_MAT')
+  const [ghiChu, setGhiChu] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (customer || customerQuery.trim().length < 2) { setCustomerResults([]); return }
+    const handle = setTimeout(() => {
+      api.customers.list({ q: customerQuery, pageSize: 5 }).then(res => setCustomerResults(res.items))
+    }, 250)
+    return () => clearTimeout(handle)
+  }, [customerQuery, customer])
+
+  useEffect(() => {
+    if (productQuery.trim().length < 2) { setProductResults([]); return }
+    const handle = setTimeout(() => {
+      api.products.list({ q: productQuery, pageSize: 5 }).then(res => setProductResults(res.items))
+    }, 250)
+    return () => clearTimeout(handle)
+  }, [productQuery])
+
+  function addToCart(product: Product) {
+    setCart(prev => {
+      const existing = prev.find(l => l.product.id === product.id)
+      if (existing) return prev.map(l => l.product.id === product.id ? { ...l, soLuong: l.soLuong + 1 } : l)
+      return [...prev, { product, soLuong: 1, giamGia: 0 }]
+    })
+    setProductQuery('')
+    setProductResults([])
+  }
+
+  function updateLine(productId: string, patch: Partial<CartLine>) {
+    setCart(prev => prev.map(l => l.product.id === productId ? { ...l, ...patch } : l))
+  }
+
+  function removeLine(productId: string) {
+    setCart(prev => prev.filter(l => l.product.id !== productId))
+  }
+
+  const tamTinh = cart.reduce((sum, l) => sum + l.soLuong * l.product.giaBan, 0)
+  const giamGiaTong = cart.reduce((sum, l) => sum + l.giamGia, 0)
+  const tongCong = tamTinh - giamGiaTong
+
+  async function handleSubmit() {
+    if (!customer) { setError('Vui lòng chọn khách hàng.'); return }
+    if (cart.length === 0) { setError('Vui lòng thêm ít nhất một sản phẩm.'); return }
+    setError(null)
+    setSubmitting(true)
+    try {
+      const order = await api.orders.create({
+        khachHangId: customer.id,
+        kenhBan,
+        phuongThucThanhToan: phuongThuc,
+        ghiChu: ghiChu || undefined,
+        items: cart.map(l => ({ productId: l.product.id, soLuong: l.soLuong, giamGia: l.giamGia })),
+      })
+      onCreated(order.id)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Không thể tạo đơn hàng.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="p-5 space-y-4 overflow-y-auto h-full">
+      <div className="flex items-center gap-3">
+        <BackBtn label="Quay lại đơn hàng" onClick={onBack} />
+        <h1 className="text-base font-bold text-slate-800">Tạo đơn hàng</h1>
+        <span className="text-xs text-slate-400">— Nhập thủ công đơn hàng nội bộ</span>
+      </div>
+
+      {error && <ErrorBox message={error} />}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 space-y-4">
+          <div className="bg-white rounded-lg border border-slate-200 p-4">
+            <h3 className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wide">Khách hàng</h3>
+            {!customer ? (
+              <>
+                <div className="flex gap-2 relative">
+                  <div className="relative flex-1">
+                    <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
+                    <input value={customerQuery} onChange={e => setCustomerQuery(e.target.value)}
+                      className="w-full pl-7 pr-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-blue-400"
+                      placeholder="Tìm khách hàng theo tên hoặc số điện thoại..." />
+                  </div>
+                  <Btn variant="secondary" small onClick={() => setShowNewCustomer(true)}>+ Thêm khách mới</Btn>
+                </div>
+                {customerResults.length > 0 && (
+                  <div className="mt-2 border border-slate-200 rounded-lg divide-y divide-slate-100">
+                    {customerResults.map(c => (
+                      <button key={c.id} onClick={() => { setCustomer(c); setCustomerQuery('') }}
+                        className="w-full text-left px-3 py-2 hover:bg-blue-50 text-xs cursor-pointer">
+                        <span className="font-semibold text-slate-800">{c.hoTen}</span> · {c.sdt} · <Badge label={customerTierLabel[c.hangKhachHang]} />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="p-3 border border-blue-200 rounded-lg bg-blue-50/30">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: '#1a56db' }}>{customer.hoTen[0]}</div>
+                  <div>
+                    <div className="text-sm font-semibold text-slate-800">{customer.hoTen}</div>
+                    <div className="text-xs text-slate-500">{customer.sdt} · <Badge label={customerTierLabel[customer.hangKhachHang]} /></div>
+                  </div>
+                  <button onClick={() => setCustomer(null)} className="ml-auto text-[10px] text-slate-400 hover:text-red-500 cursor-pointer">✕ Xóa</button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-lg border border-slate-200 p-4">
+            <h3 className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wide">Sản phẩm</h3>
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
+              <input value={productQuery} onChange={e => setProductQuery(e.target.value)}
+                className="w-full pl-7 pr-3 py-2 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-blue-400"
+                placeholder="Tìm sản phẩm theo tên, SKU hoặc barcode..." />
+            </div>
+            {productResults.length > 0 && (
+              <div className="mt-2 border border-slate-200 rounded-lg divide-y divide-slate-100 mb-3">
+                {productResults.map(p => (
+                  <button key={p.id} onClick={() => addToCart(p)}
+                    className="w-full text-left px-3 py-2 hover:bg-blue-50 text-xs cursor-pointer flex justify-between">
+                    <span><span className="font-semibold text-slate-800">{p.ten}</span> · {p.sku}</span>
+                    <span>{p.giaBan.toLocaleString('vi-VN')} VNĐ · Tồn {p.tonKho}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {cart.length > 0 && (
+              <Table
+                cols={['Sản phẩm', 'SKU', 'Số lượng', 'Đơn giá', 'Giảm giá', 'Thành tiền', '']}
+                rows={cart.map(l => [
+                  <span className="font-medium text-slate-800">{l.product.ten}</span>,
+                  <span className="font-mono text-[10px] text-slate-500">{l.product.sku}</span>,
+                  <input type="number" min={1} value={l.soLuong} onChange={e => updateLine(l.product.id, { soLuong: Math.max(1, Number(e.target.value)) })}
+                    className="w-14 text-center text-xs border border-slate-200 rounded px-1 py-0.5" />,
+                  <span>{l.product.giaBan.toLocaleString('vi-VN')} VNĐ</span>,
+                  <input type="number" min={0} value={l.giamGia} onChange={e => updateLine(l.product.id, { giamGia: Math.max(0, Number(e.target.value)) })}
+                    className="w-20 text-center text-xs border border-slate-200 rounded px-1 py-0.5" />,
+                  <span className="font-semibold">{(l.soLuong * l.product.giaBan - l.giamGia).toLocaleString('vi-VN')} VNĐ</span>,
+                  <TinyBtn danger onClick={() => removeLine(l.product.id)}>✕</TinyBtn>,
+                ])}
+              />
+            )}
+          </div>
+
+          <div className="bg-white rounded-lg border border-slate-200 p-4">
+            <h3 className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wide">Thông tin đơn hàng</h3>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <label className="block text-slate-500 mb-1">Kênh bán hàng</label>
+                <select value={kenhBan} onChange={e => setKenhBan(e.target.value as SalesChannel)}
+                  className="w-full text-xs px-2.5 py-2 border border-slate-200 rounded-md bg-white focus:outline-none focus:border-blue-400">
+                  {Object.entries(salesChannelLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-slate-500 mb-1">Phương thức thanh toán</label>
+                <select value={phuongThuc} onChange={e => setPhuongThuc(e.target.value as PaymentMethod)}
+                  className="w-full text-xs px-2.5 py-2 border border-slate-200 rounded-md bg-white focus:outline-none focus:border-blue-400">
+                  {Object.entries(paymentMethodLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+              <div className="col-span-2">
+                <label className="block text-slate-500 mb-1">Ghi chú</label>
+                <input value={ghiChu} onChange={e => setGhiChu(e.target.value)} className="w-full text-xs px-2.5 py-2 border border-slate-200 rounded-md focus:outline-none focus:border-blue-400" placeholder="Ghi chú nội bộ..." />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="bg-white rounded-lg border border-slate-200 p-4">
+            <h3 className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wide">Tổng kết</h3>
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between text-slate-600"><span>Tạm tính</span><span>{tamTinh.toLocaleString('vi-VN')} VNĐ</span></div>
+              <div className="flex justify-between text-slate-600"><span>Giảm giá</span><span>{giamGiaTong.toLocaleString('vi-VN')} VNĐ</span></div>
+              <div className="flex justify-between font-bold text-base text-slate-900 pt-2 border-t border-slate-200">
+                <span className="text-sm">Tổng cộng</span><span className="text-sm" style={{ color: '#1a56db' }}>{tongCong.toLocaleString('vi-VN')} VNĐ</span>
+              </div>
+            </div>
+            <div className="mt-4 space-y-2">
+              <Btn onClick={handleSubmit} disabled={submitting}>{submitting ? 'Đang tạo...' : 'Tạo đơn hàng'}</Btn>
+              <Btn variant="secondary" onClick={onBack}>Hủy</Btn>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {showNewCustomer && (
+        <NewCustomerModal onClose={() => setShowNewCustomer(false)} onCreated={c => { setCustomer(c); setShowNewCustomer(false) }} />
+      )}
+    </div>
+  )
+}
+
+export function NewCustomerModal({ onClose, onCreated }: { onClose: () => void; onCreated: (c: Customer) => void }) {
+  const [hoTen, setHoTen] = useState('')
+  const [sdt, setSdt] = useState('')
+  const [email, setEmail] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  async function handleSubmit() {
+    if (!hoTen || !sdt) { setError('Vui lòng nhập tên và số điện thoại.'); return }
+    setError(null)
+    setSubmitting(true)
+    try {
+      const customer = await api.customers.create({ hoTen, sdt, email: email || undefined })
+      onCreated(customer)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Không thể tạo khách hàng.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Modal title="Thêm khách hàng mới" onClose={onClose}>
+      <ErrorBox message={error} />
+      <Field label="Họ tên"><Input value={hoTen} onChange={e => setHoTen(e.target.value)} placeholder="Nguyễn Văn A" /></Field>
+      <Field label="Số điện thoại"><Input value={sdt} onChange={e => setSdt(e.target.value)} placeholder="09xxxxxxxx" /></Field>
+      <Field label="Email (tùy chọn)"><Input value={email} onChange={e => setEmail(e.target.value)} placeholder="email@example.com" /></Field>
+      <div className="flex gap-2 mt-4">
+        <Btn onClick={handleSubmit} disabled={submitting}>{submitting ? 'Đang lưu...' : 'Lưu khách hàng'}</Btn>
+        <Btn variant="secondary" onClick={onClose}>Hủy</Btn>
+      </div>
+    </Modal>
+  )
+}

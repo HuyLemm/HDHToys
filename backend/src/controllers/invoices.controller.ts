@@ -1,0 +1,31 @@
+import type { Request, Response } from "express"
+import { z } from "zod"
+import { badRequest } from "../errors/HttpError.js"
+import { renderInvoicePdf } from "../lib/invoicePdf.js"
+import * as invoicesService from "../services/invoices.service.js"
+
+const listQuerySchema = z.object({
+  q: z.string().optional(),
+  khachHangId: z.string().optional(),
+  phuongThucThanhToan: z.enum(["TIEN_MAT", "CHUYEN_KHOAN", "THE", "QR_CODE"]).optional(),
+  nguoiTaoId: z.string().optional(),
+  tuNgay: z.coerce.date().optional(),
+  denNgay: z.coerce.date().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+})
+
+export async function list(req: Request, res: Response) {
+  const parsed = listQuerySchema.safeParse(req.query)
+  if (!parsed.success) throw badRequest("Tham số tìm kiếm không hợp lệ.")
+  res.json(await invoicesService.list(parsed.data))
+}
+
+export async function get(req: Request, res: Response) {
+  res.json(await invoicesService.get(req.params.id))
+}
+
+export async function getPdf(req: Request, res: Response) {
+  const invoice = await invoicesService.get(req.params.id)
+  renderInvoicePdf(invoice, res)
+}

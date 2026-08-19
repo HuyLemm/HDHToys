@@ -1,0 +1,262 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum StaffRole {
+  ADMIN
+  MANAGER
+  ACCOUNTANT
+  INVENTORY_STAFF
+}
+
+enum StaffStatus {
+  ACTIVE
+  LOCKED
+}
+
+model Staff {
+  id           String      @id @default(cuid())
+  hoTen        String
+  email        String      @unique
+  matKhauHash  String
+  vaiTro       StaffRole
+  trangThai    StaffStatus @default(ACTIVE)
+  orders       Order[]
+  inventoryTransactions InventoryTransaction[]
+  invoicesCreated Invoice[]
+  incomeExpenses  IncomeExpense[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@map("staff")
+}
+
+enum ProductStatus {
+  CON_HANG
+  SAP_HET
+  HET_HANG
+  NGUNG_KINH_DOANH
+}
+
+model Product {
+  id             String        @id @default(cuid())
+  sku            String        @unique
+  ten            String
+  barcode        String?
+  danhMuc        String
+  nhaCungCap     String
+  anhUrl         String?
+  giaVon         Int
+  giaBan         Int
+  tonKho         Int           @default(0)
+  tonKhoToiThieu Int           @default(0)
+  daBan          Int           @default(0)
+  trangThai      ProductStatus @default(CON_HANG)
+  orderItems     OrderItem[]
+  inventoryTransactions InventoryTransaction[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@map("products")
+}
+
+enum CustomerTier {
+  NEW
+  MEMBER
+  VIP
+}
+
+model Customer {
+  id            String         @id @default(cuid())
+  hoTen         String
+  sdt           String         @unique
+  email         String?
+  ngaySinh      DateTime?
+  hangKhachHang CustomerTier   @default(NEW)
+  diemTichLuy   Int            @default(0)
+  ghiChu        CustomerNote[]
+  orders        Order[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@map("customers")
+}
+
+model CustomerNote {
+  id         String   @id @default(cuid())
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId String
+  noiDung    String
+  nguoiTaoId String
+  createdAt  DateTime @default(now())
+
+  @@map("customer_notes")
+}
+
+enum OrderStatus {
+  MOI
+  DANG_XU_LY
+  HOAN_THANH
+  DA_HUY
+  HOAN_TIEN
+}
+
+enum PaymentMethod {
+  TIEN_MAT
+  CHUYEN_KHOAN
+  THE
+  QR_CODE
+}
+
+enum SalesChannel {
+  TAI_CUA_HANG
+  DIEN_THOAI
+  FACEBOOK
+  KHAC
+}
+
+model Order {
+  id                  String        @id @default(cuid())
+  soThuTu             Int           @unique @default(autoincrement())
+  ma                  String        @unique
+  khachHang           Customer      @relation(fields: [khachHangId], references: [id])
+  khachHangId         String
+  nhanVien            Staff         @relation(fields: [nhanVienId], references: [id])
+  nhanVienId          String
+  kenhBan             SalesChannel  @default(TAI_CUA_HANG)
+  phuongThucThanhToan PaymentMethod
+  trangThai           OrderStatus   @default(MOI)
+  tamTinh             Int
+  giamGia             Int           @default(0)
+  vat                 Int           @default(0)
+  tongCong            Int
+  ghiChu              String?
+  items               OrderItem[]
+  invoice             Invoice?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@map("orders")
+}
+
+model Invoice {
+  id         String   @id @default(cuid())
+  soThuTu    Int      @unique @default(autoincrement())
+  soHoaDon   String   @unique
+  order      Order    @relation(fields: [orderId], references: [id])
+  orderId    String   @unique
+  nguoiTao   Staff    @relation(fields: [nguoiTaoId], references: [id])
+  nguoiTaoId String
+  createdAt  DateTime @default(now())
+
+  @@map("invoices")
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId   String
+  product   Product @relation(fields: [productId], references: [id])
+  productId String
+  soLuong   Int
+  donGia    Int
+  giaVon    Int     @default(0)
+  giamGia   Int     @default(0)
+  thanhTien Int
+
+  @@map("order_items")
+}
+
+enum InventoryTransactionType {
+  NHAP
+  XUAT
+  DIEU_CHINH
+  TRA_HANG
+}
+
+model InventoryTransaction {
+  id              String                    @id @default(cuid())
+  soThuTu         Int                       @unique @default(autoincrement())
+  maGiaoDich      String                    @unique
+  product         Product                   @relation(fields: [productId], references: [id])
+  productId       String
+  loai            InventoryTransactionType
+  soLuongThayDoi  Int
+  tonTruoc        Int
+  tonSau          Int
+  nguoiThucHien   Staff                     @relation(fields: [nguoiThucHienId], references: [id])
+  nguoiThucHienId String
+  thamChieu       String?
+  ghiChu          String?
+  createdAt       DateTime                  @default(now())
+
+  @@map("inventory_transactions")
+}
+
+enum TransactionKind {
+  THU
+  CHI
+}
+
+enum IncomeExpenseCategory {
+  BAN_HANG
+  NHAP_HANG
+  VAN_CHUYEN
+  LUONG
+  DIEN_NUOC
+  MARKETING
+  KHAC
+}
+
+model IncomeExpense {
+  id         String                @id @default(cuid())
+  soThuTu    Int                   @unique @default(autoincrement())
+  maPhieu    String                @unique
+  loai       TransactionKind
+  danhMuc    IncomeExpenseCategory
+  noiDung    String
+  soTien     Int
+  nguoiTao   Staff                 @relation(fields: [nguoiTaoId], references: [id])
+  nguoiTaoId String
+  createdAt  DateTime              @default(now())
+
+  @@map("income_expenses")
+}
+
+enum DebtType {
+  PHAI_THU
+  PHAI_TRA
+}
+
+model Debt {
+  id           String   @id @default(cuid())
+  doiTuong     String
+  loai         DebtType
+  ngayPhatSinh DateTime
+  ngayDenHan   DateTime
+  soTien       Int
+  daThanhToan  Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("debts")
+}
+
+model AccountingBalance {
+  id                  String   @id @default("singleton")
+  tienMat             Int      @default(0)
+  tienNganHang        Int      @default(0)
+  vonChuSoHuu         Int      @default(0)
+  taiSanKhac          Int      @default(0)
+  chiPhiChuaThanhToan Int      @default(0)
+  khoanPhaiTraKhac    Int      @default(0)
+  updatedAt           DateTime @updatedAt
+
+  @@map("accounting_balance")
+}

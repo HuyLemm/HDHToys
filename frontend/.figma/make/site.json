@@ -1,0 +1,10 @@
+{
+  "description": "Delivers a modern, visually appealing interface that enhances user experience and engagement through sleek, contemporary design elements.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
