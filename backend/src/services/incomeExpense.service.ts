@@ -1,6 +1,7 @@
 import type { IncomeExpenseCategory, Prisma, TransactionKind } from "@prisma/client"
 import { prisma } from "../lib/prisma.js"
 import { resolveDateRange, type RangeKey } from "../lib/dateRange.js"
+import { notFound } from "../errors/HttpError.js"
 
 const MA_PREFIX = { THU: "PT", CHI: "PC" } as const
 
@@ -80,4 +81,10 @@ export async function create(params: { loai: TransactionKind; danhMuc: IncomeExp
 
 export function update(id: string, data: Partial<{ danhMuc: IncomeExpenseCategory; noiDung: string; soTien: number }>) {
   return prisma.incomeExpense.update({ where: { id }, data, include: { nguoiTao: { select: { id: true, hoTen: true } } } })
+}
+
+export async function remove(id: string) {
+  const current = await prisma.incomeExpense.findUnique({ where: { id } })
+  if (!current) throw notFound("Không tìm thấy phiếu thu/chi.")
+  await prisma.incomeExpense.delete({ where: { id } })
 }

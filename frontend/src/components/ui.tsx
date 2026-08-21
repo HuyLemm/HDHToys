@@ -21,8 +21,26 @@ export const statusColor: Record<string, string> = {
   'Sắp đến hạn': 'bg-amber-50 text-amber-700 border-amber-200',
   'Quá hạn': 'bg-red-50 text-red-700 border-red-200',
   'Đã thanh toán': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  'Chưa thanh toán': 'bg-red-50 text-red-700 border-red-200',
   'Hoạt động': 'bg-emerald-50 text-emerald-700 border-emerald-200',
   'Tạm khóa': 'bg-red-50 text-red-700 border-red-200',
+  'Đã khớp': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  'Không khớp': 'bg-slate-100 text-slate-500 border-slate-200',
+  'Sai số tiền': 'bg-amber-50 text-amber-700 border-amber-200',
+  'Chờ hàng': 'bg-amber-50 text-amber-700 border-amber-200',
+  'Sẵn sàng giao': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  'Đã chuyển đơn': 'bg-blue-50 text-blue-700 border-blue-200',
+  'Facebook': 'bg-blue-50 text-blue-700 border-blue-200',
+  'Zalo': 'bg-sky-50 text-sky-700 border-sky-200',
+  'TikTok': 'bg-slate-100 text-slate-700 border-slate-300',
+  'Tại cửa hàng': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  'Điện thoại': 'bg-purple-50 text-purple-700 border-purple-200',
+  'Khách tới lấy': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  'Ship': 'bg-blue-50 text-blue-700 border-blue-200',
+  'SPX (Shopee Express)': 'bg-orange-50 text-orange-700 border-orange-200',
+  'GrabExpress': 'bg-green-50 text-green-700 border-green-200',
+  'Có sẵn': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  'Pre-order': 'bg-purple-50 text-purple-700 border-purple-200',
 }
 
 export function Badge({ label }: { label: string }) {
@@ -218,10 +236,10 @@ export function Modal({ title, onClose, children, width = 'max-w-md' }: {
   )
 }
 
-export function Field({ label, children }: { label: string; children: React.ReactNode }) {
+export function Field({ label, children, required }: { label: string; children: React.ReactNode; required?: boolean }) {
   return (
     <div className="mb-3">
-      <label className="text-xs font-semibold text-slate-700 block mb-1">{label}</label>
+      <label className="text-xs font-semibold text-slate-700 block mb-1">{label}{required && <span className="text-red-500"> *</span>}</label>
       {children}
     </div>
   )

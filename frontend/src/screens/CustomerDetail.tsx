@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { BackBtn, Badge, Btn, KpiCard, Tabs, Table, Spinner, Field, Input, ErrorBox } from '../components/ui'
-import { api, ApiError, type Customer, type CustomerNote, type Order, type Invoice } from '../lib/api'
-import { customerTierLabel, orderStatusLabel, paymentMethodLabel } from '../lib/labels'
+import { BackBtn, Badge, Btn, KpiCard, Tabs, Table, Spinner, Field, Input, ErrorBox, TinyBtn, Modal } from '../components/ui'
+import { api, ApiError, type Customer, type CustomerNote, type Order, type Invoice, type SalesChannel } from '../lib/api'
+import { customerTierLabel, orderStatusLabel, paymentMethodLabel, salesChannelLabel } from '../lib/labels'
+import { useDialog } from '../lib/dialog'
 
 type Overview = {
   customer: Customer
@@ -15,8 +16,11 @@ type Overview = {
 export function CustomerDetailScreen({ customerId, onBack, onOrderDetail }: {
   customerId: string; onBack: () => void; onOrderDetail: (id: string) => void
 }) {
+  const dialog = useDialog()
   const [overview, setOverview] = useState<Overview | null>(null)
   const [tab, setTab] = useState('Tổng quan')
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [showEdit, setShowEdit] = useState(false)
 
   function reload() {
     api.customers.overview(customerId).then(setOverview as (o: unknown) => void)
@@ -24,12 +28,31 @@ export function CustomerDetailScreen({ customerId, onBack, onOrderDetail }: {
 
   useEffect(reload, [customerId])
 
+  async function handleDeleteCustomer() {
+    if (!overview) return
+    if (!(await dialog.confirm(`Xóa khách hàng "${overview.customer.hoTen}"? Không thể hoàn tác.`))) return
+    setDeleteError(null)
+    try {
+      await api.customers.delete(customerId)
+      onBack()
+    } catch (err) {
+      setDeleteError(err instanceof ApiError ? err.message : 'Không thể xóa khách hàng.')
+    }
+  }
+
   if (!overview) return <Spinner />
   const { customer, kpi } = overview
 
   return (
     <div className="p-5 space-y-4 overflow-y-auto h-full">
-      <BackBtn label="Danh sách khách hàng" onClick={onBack} />
+      <div className="flex items-center justify-between">
+        <BackBtn label="Danh sách khách hàng" onClick={onBack} />
+        <div className="flex gap-2">
+          <Btn small onClick={() => setShowEdit(true)}>Chỉnh sửa</Btn>
+          <Btn variant="danger" small onClick={handleDeleteCustomer}>Xóa khách hàng</Btn>
+        </div>
+      </div>
+      {deleteError && <ErrorBox message={deleteError} />}
 
       <div className="bg-white rounded-lg border border-slate-200 p-4">
         <div className="flex items-start gap-4 flex-wrap">
@@ -38,6 +61,7 @@ export function CustomerDetailScreen({ customerId, onBack, onOrderDetail }: {
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base font-bold text-slate-900">{customer.hoTen}</h2>
               <Badge label={customerTierLabel[customer.hangKhachHang]} />
+              <Badge label={salesChannelLabel[customer.nguonKhachHang]} />
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mt-3 text-xs">
               {[
@@ -45,13 +69,26 @@ export function CustomerDetailScreen({ customerId, onBack, onOrderDetail }: {
                 ['Ngày sinh', customer.ngaySinh ? new Date(customer.ngaySinh).toLocaleDateString('vi-VN') : '—'],
                 ['Khách hàng từ', new Date(customer.createdAt).toLocaleDateString('vi-VN')],
                 ['Điểm tích lũy', `${customer.diemTichLuy} điểm`],
+                ['Địa chỉ', customer.diaChi || '—'],
+                ['Facebook', customer.linkFacebook
+                  ? <a href={customer.linkFacebook.startsWith('http') ? customer.linkFacebook : `https://${customer.linkFacebook}`} target="_blank" rel="noreferrer" className="hover:underline" style={{ color: '#1a56db' }}>{customer.linkFacebook}</a>
+                  : '—'],
               ].map(([k, v]) => (
-                <div key={k}><div className="text-slate-400">{k}</div><div className="font-semibold text-slate-800 mt-0.5">{v}</div></div>
+                <div key={k as string}><div className="text-slate-400">{k}</div><div className="font-semibold text-slate-800 mt-0.5">{v}</div></div>
               ))}
             </div>
+            {customer.luuY && (
+              <div className="mt-3 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                <span className="font-semibold">Lưu ý:</span> {customer.luuY}
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      {showEdit && (
+        <EditCustomerModal customer={customer} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); reload() }} />
+      )}
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <KpiCard label="Tổng chi tiêu" value={`${kpi.tongChiTieu.toLocaleString('vi-VN')} VNĐ`} />
@@ -175,6 +212,7 @@ function ProductsBoughtTab({ customerId }: { customerId: string }) {
 }
 
 function InvoicesTab({ customerId }: { customerId: string }) {
+  const dialog = useDialog()
   const [items, setItems] = useState<Invoice[] | null>(null)
   useEffect(() => { api.customers.invoices(customerId).then(res => setItems(res.items)) }, [customerId])
   if (!items) return <Spinner />
@@ -186,13 +224,14 @@ function InvoicesTab({ customerId }: { customerId: string }) {
         <span className="font-mono text-[10px] font-semibold" style={{ color: '#1a56db' }}>{inv.soHoaDon}</span>,
         new Date(inv.createdAt).toLocaleDateString('vi-VN'), inv.order.ma, `${inv.order.tongCong.toLocaleString('vi-VN')} VNĐ`,
         paymentMethodLabel[inv.order.phuongThucThanhToan],
-        <button onClick={() => api.invoices.openPdf(inv.id).catch(err => alert(err instanceof ApiError ? err.message : 'Không thể tải hóa đơn.'))} className="text-[10px] px-1.5 py-0.5 rounded border border-slate-200 hover:bg-slate-50 cursor-pointer">Xem</button>,
+        <button onClick={() => api.invoices.openPdf(inv.id).catch(err => dialog.alert(err instanceof ApiError ? err.message : 'Không thể tải hóa đơn.'))} className="text-[10px] px-1.5 py-0.5 rounded border border-slate-200 hover:bg-slate-50 cursor-pointer">Xem</button>,
       ])}
     />
   )
 }
 
 function NotesTab({ customerId }: { customerId: string }) {
+  const dialog = useDialog()
   const [notes, setNotes] = useState<CustomerNote[] | null>(null)
   const [text, setText] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -216,14 +255,28 @@ function NotesTab({ customerId }: { customerId: string }) {
     }
   }
 
+  async function handleDeleteNote(noteId: string) {
+    if (!(await dialog.confirm('Xóa ghi chú này?'))) return
+    setError(null)
+    try {
+      await api.customers.deleteNote(customerId, noteId)
+      reload()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Không thể xóa ghi chú.')
+    }
+  }
+
   if (!notes) return <Spinner />
   return (
     <div className="space-y-3">
       <ErrorBox message={error} />
       {notes.length === 0 ? <div className="text-xs text-slate-400">Chưa có ghi chú nào</div> : notes.map(n => (
-        <div key={n.id} className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-          <div className="text-amber-500 mb-1">{new Date(n.createdAt).toLocaleString('vi-VN')}</div>
-          {n.noiDung}
+        <div key={n.id} className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 flex items-start justify-between gap-2">
+          <div>
+            <div className="text-amber-500 mb-1">{new Date(n.createdAt).toLocaleString('vi-VN')}</div>
+            {n.noiDung}
+          </div>
+          <TinyBtn danger onClick={() => handleDeleteNote(n.id)}>Xóa</TinyBtn>
         </div>
       ))}
       <div className="flex gap-2">
@@ -233,5 +286,62 @@ function NotesTab({ customerId }: { customerId: string }) {
         <Btn small onClick={handleAdd} disabled={submitting}>+ Thêm ghi chú</Btn>
       </div>
     </div>
+  )
+}
+
+function EditCustomerModal({ customer, onClose, onSaved }: { customer: Customer; onClose: () => void; onSaved: () => void }) {
+  const [hoTen, setHoTen] = useState(customer.hoTen)
+  const [email, setEmail] = useState(customer.email ?? '')
+  const [ngaySinh, setNgaySinh] = useState(customer.ngaySinh ? customer.ngaySinh.slice(0, 10) : '')
+  const [diaChi, setDiaChi] = useState(customer.diaChi ?? '')
+  const [linkFacebook, setLinkFacebook] = useState(customer.linkFacebook ?? '')
+  const [luuY, setLuuY] = useState(customer.luuY ?? '')
+  const [nguonKhachHang, setNguonKhachHang] = useState<SalesChannel>(customer.nguonKhachHang)
+  const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+
+  async function handleSubmit() {
+    if (!hoTen.trim()) { setError('Vui lòng nhập họ tên.'); return }
+    setError(null)
+    setSubmitting(true)
+    try {
+      await api.customers.update(customer.id, {
+        hoTen: hoTen.trim(),
+        email: email || undefined,
+        ngaySinh: ngaySinh || undefined,
+        diaChi: diaChi || undefined,
+        linkFacebook: linkFacebook || undefined,
+        luuY: luuY || undefined,
+        nguonKhachHang,
+      })
+      onSaved()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Không thể cập nhật khách hàng.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Modal title="Chỉnh sửa khách hàng" onClose={onClose}>
+      <ErrorBox message={error} />
+      <Field label="Họ tên" required><Input value={hoTen} onChange={e => setHoTen(e.target.value)} /></Field>
+      <Field label="Số điện thoại"><Input value={customer.sdt} disabled className="opacity-60 cursor-not-allowed" /></Field>
+      <Field label="Email (tùy chọn)"><Input value={email} onChange={e => setEmail(e.target.value)} /></Field>
+      <Field label="Ngày sinh (tùy chọn)"><Input type="date" value={ngaySinh} onChange={e => setNgaySinh(e.target.value)} /></Field>
+      <Field label="Địa chỉ (tùy chọn)"><Input value={diaChi} onChange={e => setDiaChi(e.target.value)} placeholder="Số nhà, đường, quận/huyện, tỉnh/TP" /></Field>
+      <Field label="Link Facebook (tùy chọn)"><Input value={linkFacebook} onChange={e => setLinkFacebook(e.target.value)} placeholder="facebook.com/..." /></Field>
+      <Field label="Nguồn khách hàng" required>
+        <select value={nguonKhachHang} onChange={e => setNguonKhachHang(e.target.value as SalesChannel)}
+          className="w-full text-xs px-2.5 py-1.5 border border-slate-200 rounded-md bg-white">
+          {Object.entries(salesChannelLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+      </Field>
+      <Field label="Lưu ý (tùy chọn)"><Input value={luuY} onChange={e => setLuuY(e.target.value)} placeholder="Ghi chú nhanh về khách hàng..." /></Field>
+      <div className="flex gap-2 mt-2">
+        <Btn onClick={handleSubmit} disabled={submitting}>{submitting ? 'Đang lưu...' : 'Lưu thay đổi'}</Btn>
+        <Btn variant="secondary" onClick={onClose}>Hủy</Btn>
+      </div>
+    </Modal>
   )
 }

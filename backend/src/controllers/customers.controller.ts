@@ -6,6 +6,7 @@ import * as customersService from "../services/customers.service.js"
 const listQuerySchema = z.object({
   q: z.string().optional(),
   hangKhachHang: z.enum(["NEW", "MEMBER", "VIP"]).optional(),
+  nguonKhachHang: z.enum(["TAI_CUA_HANG", "DIEN_THOAI", "FACEBOOK", "ZALO", "TIKTOK", "KHAC"]).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 })
@@ -25,6 +26,12 @@ const createSchema = z.object({
   sdt: z.string().min(1),
   email: z.string().email().optional(),
   ngaySinh: z.coerce.date().optional(),
+  diaChi: z.string().optional(),
+  luuY: z.string().optional(),
+  linkFacebook: z.string().optional(),
+  nguonKhachHang: z.enum(["TAI_CUA_HANG", "DIEN_THOAI", "FACEBOOK", "ZALO", "TIKTOK", "KHAC"], {
+    message: "Vui lòng chọn nguồn khách hàng.",
+  }),
   hangKhachHang: z.enum(["NEW", "MEMBER", "VIP"]).default("NEW"),
 })
 
@@ -38,6 +45,10 @@ const updateSchema = z.object({
   hoTen: z.string().min(1).optional(),
   email: z.string().email().optional(),
   ngaySinh: z.coerce.date().optional(),
+  diaChi: z.string().optional(),
+  luuY: z.string().optional(),
+  linkFacebook: z.string().optional(),
+  nguonKhachHang: z.enum(["TAI_CUA_HANG", "DIEN_THOAI", "FACEBOOK", "ZALO", "TIKTOK", "KHAC"]).optional(),
   hangKhachHang: z.enum(["NEW", "MEMBER", "VIP"]).optional(),
   diemTichLuy: z.number().int().min(0).optional(),
 })
@@ -82,4 +93,14 @@ export async function addNote(req: Request, res: Response) {
   const parsed = noteSchema.safeParse(req.body)
   if (!parsed.success) throw badRequest("Nội dung ghi chú không được để trống.")
   res.status(201).json(await customersService.addNote(req.params.id, parsed.data.noiDung, req.auth!.sub))
+}
+
+export async function removeNote(req: Request, res: Response) {
+  await customersService.removeNote(req.params.id, req.params.noteId)
+  res.status(204).send()
+}
+
+export async function remove(req: Request, res: Response) {
+  await customersService.remove(req.params.id)
+  res.status(204).send()
 }

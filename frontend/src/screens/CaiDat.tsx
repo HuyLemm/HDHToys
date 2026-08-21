@@ -3,6 +3,7 @@ import { Btn, Table, Badge, Spinner, Modal, Field, Input, ErrorBox } from '../co
 import { api, ApiError, type Staff, type StaffRole } from '../lib/api'
 import { staffRoleLabel, staffStatusLabel } from '../lib/labels'
 import { useAuth } from '../lib/auth'
+import { useDialog } from '../lib/dialog'
 
 const placeholderSections = [
   ['Thông tin cửa hàng', 'Tên, địa chỉ, hotline, logo'],
@@ -28,10 +29,12 @@ const permissionMatrix: [string, boolean, boolean, boolean, boolean][] = [
 ]
 
 export function CaiDatScreen() {
+  const dialog = useDialog()
   const { staff: currentStaff } = useAuth()
   const [users, setUsers] = useState<Staff[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const isAdmin = currentStaff?.vaiTro === 'ADMIN'
 
   function reload() {
@@ -44,6 +47,17 @@ export function CaiDatScreen() {
   async function toggleLock(u: Staff) {
     await api.staff.update(u.id, { trangThai: u.trangThai === 'ACTIVE' ? 'LOCKED' : 'ACTIVE' })
     reload()
+  }
+
+  async function handleDelete(u: Staff) {
+    if (!(await dialog.confirm(`Xóa nhân viên "${u.hoTen}"? Chỉ xóa được nếu tài khoản này chưa tạo/xử lý dữ liệu gì. Không thể hoàn tác.`))) return
+    setDeleteError(null)
+    try {
+      await api.staff.delete(u.id)
+      reload()
+    } catch (err) {
+      setDeleteError(err instanceof ApiError ? err.message : 'Không thể xóa nhân viên.')
+    }
   }
 
   return (
@@ -68,6 +82,7 @@ export function CaiDatScreen() {
             <h2 className="text-sm font-semibold text-slate-800">Người dùng hệ thống</h2>
             <Btn small onClick={() => setShowCreate(true)}>+ Thêm người dùng</Btn>
           </div>
+          {deleteError && <ErrorBox message={deleteError} />}
           {loading ? <Spinner /> : (
             <Table
               cols={['Họ tên', 'Email', 'Vai trò', 'Trạng thái', 'Thao tác']}
@@ -76,9 +91,12 @@ export function CaiDatScreen() {
                 u.email, staffRoleLabel[u.vaiTro],
                 <Badge label={staffStatusLabel[u.trangThai ?? 'ACTIVE']} />,
                 u.id === currentStaff?.id ? '—' : (
-                  <button onClick={() => toggleLock(u)} className={`text-[10px] px-1.5 py-0.5 rounded border cursor-pointer ${u.trangThai === 'ACTIVE' ? 'border-red-200 text-red-600 hover:bg-red-50' : 'border-slate-200 hover:bg-slate-50 text-slate-600'}`}>
-                    {u.trangThai === 'ACTIVE' ? 'Khóa' : 'Mở khóa'}
-                  </button>
+                  <div className="flex gap-1">
+                    <button onClick={() => toggleLock(u)} className={`text-[10px] px-1.5 py-0.5 rounded border cursor-pointer ${u.trangThai === 'ACTIVE' ? 'border-red-200 text-red-600 hover:bg-red-50' : 'border-slate-200 hover:bg-slate-50 text-slate-600'}`}>
+                      {u.trangThai === 'ACTIVE' ? 'Khóa' : 'Mở khóa'}
+                    </button>
+                    <button onClick={() => handleDelete(u)} className="text-[10px] px-1.5 py-0.5 rounded border border-red-200 text-red-600 hover:bg-red-50 cursor-pointer">Xóa</button>
+                  </div>
                 ),
               ])}
             />

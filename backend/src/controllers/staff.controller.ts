@@ -45,3 +45,8 @@ export async function resetPassword(req: Request, res: Response) {
   await staffService.resetPassword(req.params.id, parsed.data.matKhauMoi)
   res.json({ ok: true })
 }
+
+export async function remove(req: Request, res: Response) {
+  await staffService.remove(req.params.id, req.auth!.sub)
+  res.status(204).send()
+}

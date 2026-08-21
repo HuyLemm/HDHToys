@@ -45,6 +45,8 @@ export const salesChannelLabel: Record<string, string> = {
   TAI_CUA_HANG: 'Tại cửa hàng',
   DIEN_THOAI: 'Điện thoại',
   FACEBOOK: 'Facebook',
+  ZALO: 'Zalo',
+  TIKTOK: 'TikTok',
   KHAC: 'Khác',
 }
 
@@ -80,6 +82,35 @@ export const incomeExpenseCategoryLabel: Record<string, string> = {
 export const transactionKindLabel: Record<string, string> = {
   THU: 'Thu',
   CHI: 'Chi',
+}
+
+export const paymentReconciliationStatusLabel: Record<string, string> = {
+  KHOP: 'Đã khớp',
+  KHONG_KHOP: 'Không khớp',
+  SAI_SO_TIEN: 'Sai số tiền',
+}
+
+export const deliveryMethodLabel: Record<string, string> = {
+  KHACH_TOI_LAY: 'Khách tới lấy',
+  SHIP: 'Ship',
+}
+
+export const shippingCarrierLabel: Record<string, string> = {
+  SPX: 'SPX (Shopee Express)',
+  GRAB: 'GrabExpress',
+  KHAC: 'Khác',
+}
+
+export const loaiSanPhamLabel: Record<string, string> = {
+  CO_SAN: 'Có sẵn',
+  PRE_ORDER: 'Pre-order',
+}
+
+export const preorderStatusLabel: Record<string, string> = {
+  CHO_HANG: 'Chờ hàng',
+  SAN_SANG: 'Sẵn sàng giao',
+  DA_CHUYEN_DON: 'Đã chuyển đơn',
+  DA_HUY: 'Đã hủy',
 }
 
 export function reverseLookup(map: Record<string, string>, label: string): string | undefined {

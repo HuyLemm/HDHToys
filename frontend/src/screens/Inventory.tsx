@@ -158,11 +158,11 @@ export function StockModal({ mode, initialProduct, onClose, onDone }: {
 
       {mode === 'adjust' ? (
         <Field label="Tồn kho thực tế">
-          <Input type="number" min={0} value={tonKhoMoi} onChange={e => setTonKhoMoi(Number(e.target.value))} />
+          <Input type="number" min={0} value={tonKhoMoi === 0 ? '' : tonKhoMoi} onChange={e => setTonKhoMoi(Number(e.target.value))} />
         </Field>
       ) : (
         <Field label="Số lượng">
-          <Input type="number" min={1} value={soLuong} onChange={e => setSoLuong(Math.max(1, Number(e.target.value)))} />
+          <Input type="number" min={1} value={soLuong === 0 ? '' : soLuong} onChange={e => setSoLuong(Math.max(1, Number(e.target.value)))} />
         </Field>
       )}
       <Field label="Ghi chú (tùy chọn)"><Input value={ghiChu} onChange={e => setGhiChu(e.target.value)} /></Field>

@@ -29,3 +29,8 @@ export async function getPdf(req: Request, res: Response) {
   const invoice = await invoicesService.get(req.params.id)
   renderInvoicePdf(invoice, res)
 }
+
+export async function remove(req: Request, res: Response) {
+  await invoicesService.remove(req.params.id)
+  res.status(204).send()
+}

@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AuthProvider, useAuth } from './lib/auth'
+import { DialogProvider } from './lib/dialog'
 import { useIsMobile } from './lib/responsive'
 import { Sidebar, Header } from './components/Layout'
 import { Spinner } from './components/ui'
@@ -16,6 +17,8 @@ import { CustomersScreen } from './screens/Customers'
 import { CustomerDetailScreen } from './screens/CustomerDetail'
 import { InvoicesScreen } from './screens/Invoices'
 import { InvoiceDetailScreen } from './screens/InvoiceDetail'
+import { PreordersScreen } from './screens/Preorders'
+import { PreorderDetailScreen } from './screens/PreorderDetail'
 import { RevenueScreen } from './screens/Revenue'
 import { ThuChiScreen } from './screens/ThuChi'
 import { KeToanScreen } from './screens/KeToan'
@@ -36,6 +39,8 @@ const titles: Record<string, string> = {
   'customer-detail': 'Hồ sơ khách hàng',
   invoices: 'Quản lý hóa đơn',
   'invoice-detail': 'Chi tiết hóa đơn',
+  preorders: 'Đặt trước',
+  'preorder-detail': 'Chi tiết đặt trước',
   revenue: 'Doanh thu',
   'thu-chi': 'Quản lý thu / chi',
   'ke-toan': 'Kế toán',
@@ -45,15 +50,51 @@ const titles: Record<string, string> = {
 
 interface Nav { screen: Screen; id?: string }
 
+// Các màn hình chi tiết cần "id" mới hiển thị được — nếu URL thiếu id (gõ tay,
+// link cũ...) thì rơi về Dashboard cho an toàn thay vì crash.
+const SCREENS_REQUIRING_ID: Screen[] = ['order-detail', 'product-detail', 'customer-detail', 'invoice-detail', 'preorder-detail']
+
+function navFromLocation(): Nav {
+  const params = new URLSearchParams(window.location.search)
+  const screen = params.get('screen') as Screen | null
+  const id = params.get('id') ?? undefined
+  if (!screen) return { screen: 'dashboard' }
+  if (SCREENS_REQUIRING_ID.includes(screen) && !id) return { screen: 'dashboard' }
+  return { screen, id }
+}
+
+function navToUrl(nav: Nav): string {
+  const params = new URLSearchParams()
+  params.set('screen', nav.screen)
+  if (nav.id) params.set('id', nav.id)
+  return `?${params.toString()}`
+}
+
 function AppShell() {
   const { staff, loading } = useAuth()
-  const [nav, setNav] = useState<Nav>({ screen: 'dashboard' })
+  const [nav, setNav] = useState<Nav>(() => navFromLocation())
   const [collapsed, setCollapsed] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const isMobile = useIsMobile()
 
+  // Đồng bộ với URL trình duyệt (query string) + nút Back/Forward của
+  // trình duyệt/chuột — trước đây điều hướng chỉ là state nội bộ, nút back
+  // của trình duyệt không có tác dụng gì cả.
+  useEffect(() => {
+    window.history.replaceState(nav, '', navToUrl(nav))
+
+    function onPopState(e: PopStateEvent) {
+      setNav((e.state as Nav | null) ?? navFromLocation())
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   function go(screen: Screen, id?: string) {
-    setNav({ screen, id })
+    const next: Nav = { screen, id }
+    window.history.pushState(next, '', navToUrl(next))
+    setNav(next)
   }
 
   function toggleSidebar() {
@@ -70,7 +111,7 @@ function AppShell() {
   function renderScreen() {
     switch (nav.screen) {
       case 'dashboard': return <DashboardScreen onNav={go} />
-      case 'orders': return <OrdersScreen onDetail={id => go('order-detail', id)} onCreate={() => go('create-order')} />
+      case 'orders': return <OrdersScreen onDetail={id => go('order-detail', id)} onCreate={() => go('create-order')} onViewCustomer={id => go('customer-detail', id)} />
       case 'order-detail': return <OrderDetailScreen orderId={nav.id!} onBack={() => go('orders')} />
       case 'create-order': return <CreateOrderScreen onBack={() => go('orders')} onCreated={id => go('order-detail', id)} />
       case 'inventory': return <InventoryScreen onHistory={() => go('inventory-history')} />
@@ -81,6 +122,8 @@ function AppShell() {
       case 'customer-detail': return <CustomerDetailScreen customerId={nav.id!} onBack={() => go('customers')} onOrderDetail={id => go('order-detail', id)} />
       case 'invoices': return <InvoicesScreen onDetail={id => go('invoice-detail', id)} />
       case 'invoice-detail': return <InvoiceDetailScreen invoiceId={nav.id!} onBack={() => go('invoices')} onViewOrder={id => go('order-detail', id)} />
+      case 'preorders': return <PreordersScreen onDetail={id => go('preorder-detail', id)} />
+      case 'preorder-detail': return <PreorderDetailScreen preorderId={nav.id!} onBack={() => go('preorders')} onViewOrder={id => go('order-detail', id)} />
       case 'revenue': return <RevenueScreen />
       case 'thu-chi': return <ThuChiScreen />
       case 'ke-toan': return <KeToanScreen />
@@ -106,7 +149,9 @@ function AppShell() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppShell />
+      <DialogProvider>
+        <AppShell />
+      </DialogProvider>
     </AuthProvider>
   )
 }

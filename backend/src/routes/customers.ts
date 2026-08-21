@@ -16,3 +16,5 @@ customersRouter.get("/customers/:id/products", customersController.getProductsBo
 customersRouter.get("/customers/:id/invoices", customersController.getInvoices)
 customersRouter.get("/customers/:id/notes", customersController.getNotes)
 customersRouter.post("/customers/:id/notes", customersController.addNote)
+customersRouter.delete("/customers/:id/notes/:noteId", customersController.removeNote)
+customersRouter.delete("/customers/:id", customersController.remove)

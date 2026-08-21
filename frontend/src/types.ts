@@ -5,3 +5,4 @@ export type Screen =
   | 'customers' | 'customer-detail'
   | 'invoices' | 'invoice-detail'
   | 'revenue' | 'thu-chi' | 'ke-toan' | 'bao-cao' | 'cai-dat'
+  | 'preorders' | 'preorder-detail'

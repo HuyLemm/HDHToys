@@ -21,19 +21,34 @@ const PAYMENT_METHOD_LABEL: Record<string, string> = {
   QR_CODE: "QR Code",
 }
 
+const DELIVERY_METHOD_LABEL: Record<string, string> = {
+  KHACH_TOI_LAY: "Khách tới lấy",
+  SHIP: "Ship",
+}
+
+const SHIPPING_CARRIER_LABEL: Record<string, string> = {
+  SPX: "SPX (Shopee Express)",
+  GRAB: "GrabExpress",
+  KHAC: "Khác",
+}
+
 export interface InvoicePdfData {
   soHoaDon: string
   createdAt: Date
   order: {
     ma: string
     phuongThucThanhToan: string
+    phuongThucNhanHang: string
+    donViVanChuyen: string | null
+    maVanDon: string | null
     tamTinh: number
     giamGia: number
     vat: number
     tongCong: number
     khachHang: { hoTen: string; sdt: string }
     nhanVien: { hoTen: string }
-    items: { soLuong: number; donGia: number; thanhTien: number; product: { sku: string; ten: string } }[]
+    items: { soLuong: number; donGia: number; thanhTien: number; product: { sku: string; ten: string; loaiSanPham: string } }[]
+    preorder: { ma: string; tienCoc: number } | null
   }
 }
 
@@ -65,7 +80,8 @@ export function renderInvoicePdf(invoice: InvoicePdfData, res: Response) {
   doc.font(fontPath ? "body" : "Helvetica-Bold").text("Sản phẩm", { continued: false })
   doc.moveDown(0.5)
   for (const item of invoice.order.items) {
-    doc.text(`${item.product.ten} (${item.product.sku})`)
+    const preOrderTag = item.product.loaiSanPham === "PRE_ORDER" ? " [Pre-order]" : ""
+    doc.text(`${item.product.ten} (${item.product.sku})${preOrderTag}`)
     doc.text(`  ${item.soLuong} x ${formatMoney(item.donGia)} = ${formatMoney(item.thanhTien)}`)
   }
   doc.moveDown(1)
@@ -73,9 +89,28 @@ export function renderInvoicePdf(invoice: InvoicePdfData, res: Response) {
   doc.text(`Tạm tính: ${formatMoney(invoice.order.tamTinh)}`)
   doc.text(`Giảm giá: ${formatMoney(invoice.order.giamGia)}`)
   doc.text(`VAT: ${formatMoney(invoice.order.vat)}`)
-  doc.fontSize(12).text(`Tổng cộng: ${formatMoney(invoice.order.tongCong)}`)
+  doc.fontSize(12).text(`Tổng tiền khách phải thanh toán: ${formatMoney(invoice.order.tongCong)}`)
+
+  const tienCoc = invoice.order.preorder?.tienCoc ?? 0
+  if (tienCoc > 0) {
+    doc.fontSize(10)
+    doc.text(`Tiền đã cọc (${invoice.order.preorder!.ma}): ${formatMoney(tienCoc)}`)
+    doc.fontSize(12).text(`Thanh toán cuối cùng: ${formatMoney(invoice.order.tongCong - tienCoc)}`)
+  }
+
   doc.fontSize(10).moveDown(0.5)
   doc.text(`Phương thức thanh toán: ${PAYMENT_METHOD_LABEL[invoice.order.phuongThucThanhToan] ?? invoice.order.phuongThucThanhToan}`)
+
+  doc.moveDown(0.5)
+  doc.font(fontPath ? "body" : "Helvetica-Bold").text("Thông tin giao hàng", { continued: false })
+  doc.font(fontPath ? "body" : "Helvetica")
+  doc.text(`Hình thức nhận hàng: ${DELIVERY_METHOD_LABEL[invoice.order.phuongThucNhanHang] ?? invoice.order.phuongThucNhanHang}`)
+  if (invoice.order.phuongThucNhanHang === "SHIP") {
+    if (invoice.order.donViVanChuyen) {
+      doc.text(`Đơn vị vận chuyển: ${SHIPPING_CARRIER_LABEL[invoice.order.donViVanChuyen] ?? invoice.order.donViVanChuyen}`)
+    }
+    doc.text(`Mã vận đơn: ${invoice.order.maVanDon ?? "Chưa có"}`)
+  }
 
   doc.end()
 }

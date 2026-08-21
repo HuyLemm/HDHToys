@@ -55,6 +55,35 @@ function post<T>(path: string, body?: unknown): Promise<T> {
 function patch<T>(path: string, body?: unknown): Promise<T> {
   return request<T>(path, { method: 'PATCH', body: body !== undefined ? JSON.stringify(body) : undefined })
 }
+function del<T>(path: string): Promise<T> {
+  return request<T>(path, { method: 'DELETE' })
+}
+
+/**
+ * Multipart upload — không dùng request() vì đó luôn set Content-Type:
+ * application/json + JSON.stringify body. Với FormData, fetch tự set đúng
+ * Content-Type kèm boundary — không set tay ở đây.
+ */
+async function uploadFile<T>(path: string, fieldName: string, file: File): Promise<T> {
+  const formData = new FormData()
+  formData.append(fieldName, file)
+  const headers: Record<string, string> = {}
+  if (authToken) headers.Authorization = `Bearer ${authToken}`
+
+  const res = await fetch(`${API_BASE}${path}`, { method: 'POST', body: formData, headers })
+  if (!res.ok) {
+    let message = res.statusText
+    try {
+      const body = await res.json()
+      message = body.error ?? message
+    } catch {
+      // no JSON body
+    }
+    throw new ApiError(res.status, message)
+  }
+  if (res.status === 204) return undefined as T
+  return res.json() as Promise<T>
+}
 
 /**
  * Opening the PDF endpoint's URL directly (window.open, <a href>) sends no
@@ -97,7 +126,31 @@ async function openAuthenticatedPdf(path: string) {
   }
 }
 
-function qs(params?: Record<string, string | number | undefined>) {
+/**
+ * Fetches a protected binary endpoint (e.g. the QR payment image) as a Blob,
+ * for embedding inline (<img src={URL.createObjectURL(blob)}>) — same reason
+ * as openAuthenticatedPdf: a plain <img src="..."> sends no Authorization
+ * header, so the protected route would 401.
+ */
+async function fetchAuthenticatedBlob(path: string): Promise<Blob> {
+  const headers: Record<string, string> = {}
+  if (authToken) headers.Authorization = `Bearer ${authToken}`
+
+  const res = await fetch(`${API_BASE}${path}`, { headers })
+  if (!res.ok) {
+    let message = res.statusText
+    try {
+      const body = await res.json()
+      message = body.error ?? message
+    } catch {
+      // no JSON body
+    }
+    throw new ApiError(res.status, message)
+  }
+  return res.blob()
+}
+
+function qs(params?: Record<string, string | number | boolean | undefined>) {
   if (!params) return ''
   const s = new URLSearchParams()
   for (const [k, v] of Object.entries(params)) {
@@ -120,6 +173,7 @@ export type Staff = {
 }
 
 export type ProductStatus = 'CON_HANG' | 'SAP_HET' | 'HET_HANG' | 'NGUNG_KINH_DOANH'
+export type LoaiSanPham = 'CO_SAN' | 'PRE_ORDER'
 export type Product = {
   id: string
   sku: string
@@ -129,11 +183,15 @@ export type Product = {
   nhaCungCap: string
   anhUrl?: string | null
   giaVon: number
+  phiVanChuyen: number
   giaBan: number
   tonKho: number
   tonKhoToiThieu: number
   daBan: number
   trangThai: ProductStatus
+  loaiSanPham: LoaiSanPham
+  ngayDuKienVe?: string | null
+  nhacHang: boolean
   createdAt: string
   updatedAt: string
   coTheBan?: number
@@ -147,6 +205,10 @@ export type Customer = {
   sdt: string
   email?: string | null
   ngaySinh?: string | null
+  diaChi?: string | null
+  luuY?: string | null
+  linkFacebook?: string | null
+  nguonKhachHang: SalesChannel
   hangKhachHang: CustomerTier
   diemTichLuy: number
   createdAt: string
@@ -157,7 +219,9 @@ export type CustomerNote = { id: string; customerId: string; noiDung: string; ng
 
 export type OrderStatus = 'MOI' | 'DANG_XU_LY' | 'HOAN_THANH' | 'DA_HUY' | 'HOAN_TIEN'
 export type PaymentMethod = 'TIEN_MAT' | 'CHUYEN_KHOAN' | 'THE' | 'QR_CODE'
-export type SalesChannel = 'TAI_CUA_HANG' | 'DIEN_THOAI' | 'FACEBOOK' | 'KHAC'
+export type SalesChannel = 'TAI_CUA_HANG' | 'DIEN_THOAI' | 'FACEBOOK' | 'ZALO' | 'TIKTOK' | 'KHAC'
+export type DeliveryMethod = 'KHACH_TOI_LAY' | 'SHIP'
+export type ShippingCarrier = 'SPX' | 'GRAB' | 'KHAC'
 
 export type OrderItem = {
   id: string
@@ -167,7 +231,15 @@ export type OrderItem = {
   giaVon: number
   giamGia: number
   thanhTien: number
-  product: { id: string; sku: string; ten: string }
+  product: { id: string; sku: string; ten: string; loaiSanPham: LoaiSanPham }
+}
+
+/** Đối soát thanh toán QR ngân hàng (SRS mục 3.16 / SDS mục 5.8) — tính động, không lưu DB. */
+export type QrPaymentInfo = {
+  configured: boolean
+  payload: string | null
+  expiresAt: string | null
+  expired: boolean
 }
 
 export type Order = {
@@ -182,12 +254,30 @@ export type Order = {
   giamGia: number
   vat: number
   tongCong: number
+  daThanhToan: boolean
+  phuongThucNhanHang: DeliveryMethod
+  donViVanChuyen?: ShippingCarrier | null
+  maVanDon?: string | null
   ghiChu?: string | null
   items: OrderItem[]
   khachHang: { id: string; hoTen: string; sdt: string; email?: string | null }
   nhanVien: { id: string; hoTen: string }
+  /** Chỉ có trên GET /orders/:id (không có ở danh sách) — null nếu không áp dụng (không phải QR/đã xử lý xong). */
+  qrCode?: QrPaymentInfo | null
   createdAt: string
   updatedAt: string
+}
+
+export type PaymentReconciliationStatus = 'KHOP' | 'KHONG_KHOP' | 'SAI_SO_TIEN'
+export type PaymentTransaction = {
+  id: string
+  maGiaoDichNganHang: string
+  orderId?: string | null
+  soTienNhan: number
+  noiDungChuyenKhoan: string
+  trangThaiDoiSoat: PaymentReconciliationStatus
+  createdAt: string
+  order?: { id: string; ma: string; tongCong: number; khachHang?: { hoTen: string } } | null
 }
 
 export type InventoryTransactionType = 'NHAP' | 'XUAT' | 'DIEU_CHINH' | 'TRA_HANG'
@@ -214,7 +304,8 @@ export type Invoice = {
   nguoiTaoId: string
   createdAt: string
   nguoiTao: { id: string; hoTen: string }
-  order: Order
+  /** preorder chỉ có khi hóa đơn này được chuyển từ một đơn "Đặt trước" có tiền cọc. */
+  order: Order & { preorder?: { ma: string; tienCoc: number } | null }
 }
 
 export type DebtType = 'PHAI_THU' | 'PHAI_TRA'
@@ -254,6 +345,28 @@ export type IncomeExpense = {
   nguoiTao: { id: string; hoTen: string }
 }
 
+export type PreorderStatus = 'CHO_HANG' | 'SAN_SANG' | 'DA_CHUYEN_DON' | 'DA_HUY'
+export type Preorder = {
+  id: string
+  ma: string
+  khachHangId: string
+  nhanVienId: string
+  productId?: string | null
+  tenSanPhamMoi?: string | null
+  soLuong: number
+  donGiaDuKien: number
+  tienCoc: number
+  trangThai: PreorderStatus
+  ngayDuKienCo?: string | null
+  ghiChu?: string | null
+  orderId?: string | null
+  khachHang: { id: string; hoTen: string; sdt: string; email?: string | null }
+  nhanVien: { id: string; hoTen: string }
+  product?: { id: string; sku: string; ten: string; giaBan: number; tonKho: number } | null
+  createdAt: string
+  updatedAt: string
+}
+
 export type Paginated<T> = { items: T[]; total: number; page: number; pageSize: number }
 
 export type RangeKey = 'hom_nay' | 'hom_qua' | '7_ngay' | '30_ngay' | 'thang_nay' | 'quy_nay' | 'nam_nay' | 'tuy_chinh'
@@ -274,6 +387,8 @@ export const api = {
     update: (id: string, data: Partial<Pick<Staff, 'hoTen' | 'vaiTro' | 'trangThai'>>) =>
       patch<Staff>(`/staff/${id}`, data),
     resetPassword: (id: string, matKhauMoi: string) => post(`/staff/${id}/reset-password`, { matKhauMoi }),
+    /** Chỉ Admin — chỉ xóa được nếu tài khoản chưa tạo/xử lý dữ liệu gì. */
+    delete: (id: string) => del<void>(`/staff/${id}`),
   },
 
   products: {
@@ -282,6 +397,7 @@ export const api = {
       danhMuc?: string
       nhaCungCap?: string
       trangThai?: ProductStatus
+      loaiSanPham?: LoaiSanPham
       page?: number
       pageSize?: number
     }) => get<Paginated<Product>>(`/products${qs(params)}`),
@@ -290,10 +406,16 @@ export const api = {
     update: (id: string, data: Partial<Product>) => patch<Product>(`/products/${id}`, data),
     discontinue: (id: string) => post<Product>(`/products/${id}/discontinue`),
     reactivate: (id: string) => post<Product>(`/products/${id}/reactivate`),
+    /** Chỉ xóa được nếu SP chưa xuất hiện trong đơn hàng/kho/đặt trước nào. */
+    delete: (id: string) => del<void>(`/products/${id}`),
+    /** Ảnh sản phẩm (nếu có) — dùng với URL.createObjectURL để hiển thị; 404 nếu chưa có ảnh. */
+    imageBlob: (id: string) => fetchAuthenticatedBlob(`/products/${id}/image`),
+    uploadImage: (id: string, file: File) => uploadFile<{ ok: true }>(`/products/${id}/image`, 'image', file),
+    deleteImage: (id: string) => del<void>(`/products/${id}/image`),
   },
 
   customers: {
-    list: (params?: { q?: string; hangKhachHang?: CustomerTier; page?: number; pageSize?: number }) =>
+    list: (params?: { q?: string; hangKhachHang?: CustomerTier; nguonKhachHang?: SalesChannel; page?: number; pageSize?: number }) =>
       get<Paginated<Customer>>(`/customers${qs(params)}`),
     get: (id: string) => get<Customer>(`/customers/${id}`),
     create: (data: {
@@ -301,6 +423,10 @@ export const api = {
       sdt: string
       email?: string
       ngaySinh?: string
+      diaChi?: string
+      luuY?: string
+      linkFacebook?: string
+      nguonKhachHang?: SalesChannel
       hangKhachHang?: CustomerTier
     }) => post<Customer>('/customers', data),
     update: (id: string, data: Partial<Customer>) => patch<Customer>(`/customers/${id}`, data),
@@ -323,6 +449,9 @@ export const api = {
     invoices: (id: string) => get<{ items: Invoice[]; total: number }>(`/customers/${id}/invoices`),
     notes: (id: string) => get<CustomerNote[]>(`/customers/${id}/notes`),
     addNote: (id: string, noiDung: string) => post<CustomerNote>(`/customers/${id}/notes`, { noiDung }),
+    deleteNote: (id: string, noteId: string) => del<void>(`/customers/${id}/notes/${noteId}`),
+    /** Chỉ xóa được nếu khách chưa có đơn hàng/đặt trước nào. */
+    delete: (id: string) => del<void>(`/customers/${id}`),
   },
 
   orders: {
@@ -332,20 +461,68 @@ export const api = {
       khachHangId?: string
       nhanVienId?: string
       phuongThucThanhToan?: PaymentMethod
+      daThanhToan?: boolean
+      phuongThucNhanHang?: DeliveryMethod
+      coMaVanDon?: boolean
+      sortBy?: 'createdAt' | 'tongCong'
+      sortOrder?: 'asc' | 'desc'
       page?: number
       pageSize?: number
     }) => get<Paginated<Order>>(`/orders${qs(params)}`),
+    /** Xếp hạng khách hàng theo tổng giá trị đơn Hoàn thành — tận dụng liên kết khachHangId có sẵn trên Order. */
+    topCustomers: (limit?: number) =>
+      get<{ items: { khachHang: { id: string; hoTen: string; sdt: string }; tongChiTieu: number; soDonHoanThanh: number }[] }>(`/orders/top-customers${qs({ limit })}`),
     get: (id: string) => get<Order>(`/orders/${id}`),
     create: (data: {
       khachHangId: string
       nhanVienId?: string
       kenhBan?: SalesChannel
       phuongThucThanhToan: PaymentMethod
+      phuongThucNhanHang?: DeliveryMethod
+      donViVanChuyen?: ShippingCarrier
       vat?: number
       ghiChu?: string
       items: { productId: string; soLuong: number; giaOverride?: number; giamGia?: number }[]
     }) => post<Order>('/orders', data),
     updateStatus: (id: string, trangThai: OrderStatus) => patch<Order>(`/orders/${id}/status`, { trangThai }),
+    updatePaymentStatus: (id: string, daThanhToan: boolean) => patch<Order>(`/orders/${id}/payment-status`, { daThanhToan }),
+    updateDelivery: (id: string, phuongThucNhanHang: DeliveryMethod, donViVanChuyen?: ShippingCarrier) =>
+      patch<Order>(`/orders/${id}/delivery`, { phuongThucNhanHang, donViVanChuyen }),
+    updateTrackingCode: (id: string, maVanDon: string) => patch<Order>(`/orders/${id}/tracking-code`, { maVanDon }),
+    /** Ảnh QR VietQR (PNG) của đơn hàng — dùng với URL.createObjectURL để hiển thị inline. */
+    qrImageBlob: (id: string) => fetchAuthenticatedBlob(`/orders/${id}/qr.png`),
+    /** Chỉ Admin — chỉ xóa được đơn chưa có hóa đơn (chưa từng Hoàn thành). */
+    delete: (id: string) => del<void>(`/orders/${id}`),
+  },
+
+  payments: {
+    unmatched: (params?: { page?: number; pageSize?: number }) =>
+      get<Paginated<PaymentTransaction>>(`/payments/unmatched${qs(params)}`),
+  },
+
+  preorders: {
+    list: (params?: { q?: string; trangThai?: PreorderStatus; khachHangId?: string; productId?: string; page?: number; pageSize?: number }) =>
+      get<Paginated<Preorder>>(`/preorders${qs(params)}`),
+    summary: () =>
+      get<{ dangChoHang: number; sanSangGiao: number; tongTienCocDangGiu: number }>('/preorders/summary'),
+    get: (id: string) => get<Preorder>(`/preorders/${id}`),
+    create: (data: {
+      khachHangId: string
+      productId?: string
+      tenSanPhamMoi?: string
+      soLuong: number
+      donGiaDuKien: number
+      tienCoc?: number
+      ngayDuKienCo?: string
+      ghiChu?: string
+    }) => post<Preorder>('/preorders', data),
+    update: (id: string, data: Partial<{ soLuong: number; donGiaDuKien: number; tienCoc: number; ngayDuKienCo: string; ghiChu: string }>) =>
+      patch<Preorder>(`/preorders/${id}`, data),
+    cancel: (id: string) => post<Preorder>(`/preorders/${id}/cancel`),
+    convertToOrder: (id: string, data: { productId?: string; phuongThucThanhToan: PaymentMethod; kenhBan?: SalesChannel; vat?: number }) =>
+      post<{ preorder: Preorder; order: Order }>(`/preorders/${id}/convert-to-order`, data),
+    /** Không xóa được đơn đã DA_CHUYEN_DON (đã có Order thật liên kết). */
+    delete: (id: string) => del<void>(`/preorders/${id}`),
   },
 
   inventory: {
@@ -368,6 +545,8 @@ export const api = {
       page?: number
       pageSize?: number
     }) => get<Paginated<InventoryTransaction>>(`/inventory/history${qs(params)}`),
+    /** Chỉ Admin — chỉ xóa được giao dịch kho GẦN NHẤT của sản phẩm đó. */
+    deleteTransaction: (id: string) => del<void>(`/inventory/history/${id}`),
   },
 
   invoices: {
@@ -377,6 +556,8 @@ export const api = {
     /** @deprecated not directly openable — the route requires a bearer token. Use openPdf(id) instead. */
     pdfUrl: (id: string) => `${API_BASE}/invoices/${id}/pdf`,
     openPdf: (id: string) => openAuthenticatedPdf(`/invoices/${id}/pdf`),
+    /** Chỉ Admin. */
+    delete: (id: string) => del<void>(`/invoices/${id}`),
   },
 
   search: (q: string) =>
@@ -417,6 +598,7 @@ export const api = {
       post<IncomeExpense>('/income-expense', data),
     update: (id: string, data: Partial<{ danhMuc: IncomeExpenseCategory; noiDung: string; soTien: number }>) =>
       patch<IncomeExpense>(`/income-expense/${id}`, data),
+    delete: (id: string) => del<void>(`/income-expense/${id}`),
   },
 
   debts: {
@@ -429,6 +611,7 @@ export const api = {
     update: (id: string, data: Partial<{ doiTuong: string; ngayDenHan: string; soTien: number }>) =>
       patch<Debt>(`/debts/${id}`, data),
     payment: (id: string, soTien: number) => patch<Debt>(`/debts/${id}/payment`, { soTien }),
+    delete: (id: string) => del<void>(`/debts/${id}`),
   },
 
   accounting: {

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import { CircleCheck } from 'lucide-react'
-import { SectionHeader, Tabs, Table, Badge, Spinner, Btn, Field, Input, ErrorBox } from '../components/ui'
-import { api, type Debt, type DebtType, ApiError } from '../lib/api'
-import { debtStatusLabel, debtTypeLabel, reverseLookup } from '../lib/labels'
+import { CircleCheck, RefreshCw } from 'lucide-react'
+import { SectionHeader, Tabs, Table, Badge, Spinner, Btn, Field, Input, ErrorBox, TinyBtn } from '../components/ui'
+import { api, type Debt, type DebtType, type PaymentTransaction, ApiError } from '../lib/api'
+import { debtStatusLabel, debtTypeLabel, reverseLookup, paymentReconciliationStatusLabel } from '../lib/labels'
+import { useDialog } from '../lib/dialog'
 
 export function KeToanScreen() {
   const [tab, setTab] = useState('Tổng quan')
@@ -11,13 +12,59 @@ export function KeToanScreen() {
   return (
     <div className="p-5 space-y-4 overflow-y-auto h-full">
       <div className="bg-white rounded-lg border border-slate-200">
-        <Tabs tabs={['Tổng quan', 'Công nợ', 'Cân đối kế toán']} active={tab} onChange={setTab} />
+        <Tabs tabs={['Tổng quan', 'Công nợ', 'Cân đối kế toán', 'Đối soát QR']} active={tab} onChange={setTab} />
         <div className="p-4">
           {tab === 'Tổng quan' && <OverviewTab />}
           {tab === 'Công nợ' && <DebtsTab />}
           {tab === 'Cân đối kế toán' && <BalanceSheetTab />}
+          {tab === 'Đối soát QR' && <PaymentReconciliationTab />}
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Danh sách các giao dịch báo có từ webhook đối soát thanh toán QR mà hệ
+ * thống KHÔNG tự khớp được với đơn hàng nào (SRS FR-PAY.5) — nhân viên kế
+ * toán tra soát và xử lý tay ở đây (ví dụ: khách ghi sai nội dung chuyển
+ * khoản, chuyển thiếu/dư tiền...).
+ */
+function PaymentReconciliationTab() {
+  const [items, setItems] = useState<PaymentTransaction[]>([])
+  const [loading, setLoading] = useState(true)
+
+  function reload() {
+    setLoading(true)
+    api.payments.unmatched({ pageSize: 50 }).then(res => setItems(res.items)).finally(() => setLoading(false))
+  }
+  useEffect(reload, [])
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-slate-500 max-w-2xl">
+          Các giao dịch chuyển khoản QR ngân hàng mà hệ thống chưa tự khớp được với đơn hàng nào — do nội dung chuyển khoản không đọc được mã đơn, hoặc số tiền không khớp. Đơn hàng liên quan (nếu có) vẫn giữ nguyên trạng thái, chưa tự Hoàn thành.
+        </p>
+        <button onClick={reload} className="shrink-0 text-xs px-2.5 py-1.5 border border-slate-200 rounded-md hover:bg-slate-50 cursor-pointer flex items-center gap-1.5">
+          <RefreshCw size={12} strokeWidth={1.75} /> Làm mới
+        </button>
+      </div>
+
+      {loading ? <Spinner /> : items.length === 0 ? (
+        <div className="text-xs text-slate-400 py-8 text-center">Không có giao dịch nào cần xử lý — mọi thanh toán QR gần đây đều đã đối soát khớp.</div>
+      ) : (
+        <Table
+          cols={['Thời gian', 'Mã giao dịch NH', 'Số tiền nhận', 'Đơn hàng liên quan', 'Trạng thái']}
+          rows={items.map(p => [
+            new Date(p.createdAt).toLocaleString('vi-VN'),
+            p.maGiaoDichNganHang,
+            <span className="font-semibold">{p.soTienNhan.toLocaleString('vi-VN')} VNĐ</span>,
+            p.order ? `${p.order.ma} (${p.order.tongCong.toLocaleString('vi-VN')} VNĐ)` : <span className="text-slate-400">Không xác định</span>,
+            <Badge label={paymentReconciliationStatusLabel[p.trangThaiDoiSoat]} />,
+          ])}
+        />
+      )}
     </div>
   )
 }
@@ -58,10 +105,23 @@ function OverviewTab() {
 }
 
 function DebtsTab() {
+  const dialog = useDialog()
   const [subTab, setSubTab] = useState<'Tất cả' | 'Phải thu' | 'Phải trả'>('Tất cả')
   const [items, setItems] = useState<Debt[]>([])
   const [summary, setSummary] = useState<{ tongPhaiThu: number; quaHanPhaiThu: number; tongPhaiTra: number; quaHanPhaiTra: number } | null>(null)
   const [showCreate, setShowCreate] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  async function handleDelete(d: Debt) {
+    if (!(await dialog.confirm(`Xóa khoản công nợ "${d.doiTuong}"? Không thể hoàn tác.`))) return
+    setDeleteError(null)
+    try {
+      await api.debts.delete(d.id)
+      reload()
+    } catch (err) {
+      setDeleteError(err instanceof ApiError ? err.message : 'Không thể xóa khoản công nợ.')
+    }
+  }
 
   function reload() {
     api.debts.list({
@@ -93,6 +153,7 @@ function DebtsTab() {
         <Btn small onClick={() => setShowCreate(true)}>+ Thêm công nợ</Btn>
       </div>
 
+      <ErrorBox message={deleteError} />
       {items.length === 0 ? <div className="text-xs text-slate-400 py-8 text-center">Chưa có công nợ nào</div> : (
         <Table
           cols={['Đối tượng', 'Loại', 'Ngày phát sinh', 'Ngày đến hạn', 'Tổng tiền', 'Đã thanh toán', 'Còn lại', 'Trạng thái', 'Thao tác']}
@@ -103,7 +164,10 @@ function DebtsTab() {
             <span className="font-semibold">{d.soTien.toLocaleString('vi-VN')} VNĐ</span>,
             `${d.daThanhToan.toLocaleString('vi-VN')} VNĐ`, `${d.conLai.toLocaleString('vi-VN')} VNĐ`,
             <Badge label={debtStatusLabel[d.trangThai]} />,
-            d.conLai > 0 ? <PaymentButton debt={d} onDone={reload} /> : '—',
+            <div className="flex gap-1 items-center">
+              {d.conLai > 0 && <PaymentButton debt={d} onDone={reload} />}
+              <TinyBtn danger onClick={() => handleDelete(d)}>Xóa</TinyBtn>
+            </div>,
           ])}
         />
       )}
@@ -133,7 +197,7 @@ function PaymentButton({ debt, onDone }: { debt: Debt; onDone: () => void }) {
 
   return (
     <div className="flex items-center gap-1">
-      <input type="number" value={amount} onChange={e => setAmount(Number(e.target.value))} className="w-20 text-[10px] border border-slate-200 rounded px-1 py-0.5" />
+      <input type="number" value={amount === 0 ? '' : amount} onChange={e => setAmount(Number(e.target.value))} className="w-20 text-[10px] border border-slate-200 rounded px-1 py-0.5" />
       <button onClick={submit} className="text-[10px] px-1.5 py-0.5 rounded bg-blue-600 text-white cursor-pointer">OK</button>
       {error && <span className="text-[10px] text-red-500">{error}</span>}
     </div>
@@ -180,7 +244,7 @@ function CreateDebtModal({ onClose, onCreated }: { onClose: () => void; onCreate
             <Field label="Ngày phát sinh"><Input type="date" value={ngayPhatSinh} onChange={e => setNgayPhatSinh(e.target.value)} /></Field>
             <Field label="Ngày đến hạn"><Input type="date" value={ngayDenHan} onChange={e => setNgayDenHan(e.target.value)} /></Field>
           </div>
-          <Field label="Số tiền"><Input type="number" min={1} value={soTien} onChange={e => setSoTien(Number(e.target.value))} /></Field>
+          <Field label="Số tiền"><Input type="number" min={1} value={soTien === 0 ? '' : soTien} onChange={e => setSoTien(Number(e.target.value))} /></Field>
           <div className="flex gap-2 mt-2">
             <Btn onClick={handleSubmit} disabled={submitting}>{submitting ? 'Đang lưu...' : 'Lưu'}</Btn>
             <Btn variant="secondary" onClick={onClose}>Hủy</Btn>

@@ -65,7 +65,36 @@ export async function applyInventoryTransaction(
     },
   })
 
+  // Tồn kho vừa tăng (nhập/điều chỉnh tăng/trả hàng) — kiểm tra xem đã đủ hàng
+  // cho các đơn đặt trước (Preorder) đang chờ chưa, khớp theo thứ tự đặt
+  // trước (FIFO). Chỉ đánh dấu "sẵn sàng giao" để nhân viên xác nhận thủ
+  // công — KHÔNG giữ/trừ tồn kho hộ (hệ thống chưa có khái niệm giữ hàng),
+  // nên đây là gợi ý, không phải một chỗ đảm bảo chắc chắn còn hàng.
+  if (params.soLuongThayDoi > 0) {
+    await matchPendingPreorders(tx, params.productId, tonSau)
+  }
+
   return transaction
+}
+
+async function matchPendingPreorders(tx: Prisma.TransactionClient, productId: string, tonKhoHienTai: number) {
+  const pending = await tx.preorder.findMany({
+    where: { productId, trangThai: "CHO_HANG" },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, soLuong: true },
+  })
+
+  let remaining = tonKhoHienTai
+  const readyIds: string[] = []
+  for (const p of pending) {
+    if (remaining < p.soLuong) break // hết hàng khả dụng — không vượt qua đơn đang chờ để tôn trọng thứ tự FIFO
+    remaining -= p.soLuong
+    readyIds.push(p.id)
+  }
+
+  if (readyIds.length > 0) {
+    await tx.preorder.updateMany({ where: { id: { in: readyIds } }, data: { trangThai: "SAN_SANG" } })
+  }
 }
 
 export async function getSummary() {
@@ -76,8 +105,8 @@ export async function getSummary() {
     prisma.product.count(),
   ])
 
-  const products = await prisma.product.findMany({ select: { tonKho: true, giaVon: true } })
-  const giaTriTonKho = products.reduce((sum, p) => sum + p.tonKho * p.giaVon, 0)
+  const products = await prisma.product.findMany({ select: { tonKho: true, giaVon: true, phiVanChuyen: true } })
+  const giaTriTonKho = products.reduce((sum, p) => sum + p.tonKho * (p.giaVon + p.phiVanChuyen), 0)
 
   return {
     tongSku,
@@ -126,7 +155,7 @@ export async function list(params: {
   const items = products.map((p) => ({
     ...p,
     coTheBan: p.tonKho,
-    giaTriTon: p.tonKho * p.giaVon,
+    giaTriTon: p.tonKho * (p.giaVon + p.phiVanChuyen),
   }))
 
   return { items, total, page, pageSize }
@@ -171,6 +200,43 @@ export async function adjust(params: { productId: string; tonKhoMoi: number; ghi
       ghiChu: params.ghiChu ?? "Kiểm kho thực tế",
     }),
   )
+}
+
+/**
+ * Chỉ Admin được gọi (route-level requireRole). InventoryTransaction là sổ
+ * ghi kho — xóa một dòng ở giữa lịch sử sẽ làm sai lệch chuỗi tonTruoc/tonSau
+ * của các dòng SAU nó (cho cùng sản phẩm), nên CHỈ cho xóa nếu đây là giao
+ * dịch GẦN NHẤT của sản phẩm đó (không có giao dịch nào khác sau nó). Khi
+ * xóa, hoàn tác đúng phần tồn kho đã ghi nhận để tonKho không bị lệch.
+ */
+export async function removeTransaction(id: string) {
+  const transaction = await prisma.inventoryTransaction.findUnique({ where: { id } })
+  if (!transaction) throw notFound("Không tìm thấy giao dịch kho.")
+
+  const latest = await prisma.inventoryTransaction.findFirst({
+    where: { productId: transaction.productId },
+    orderBy: { soThuTu: "desc" },
+  })
+  if (latest?.id !== id) {
+    throw badRequest(
+      "Chỉ xóa được giao dịch kho gần nhất của sản phẩm này — xóa một giao dịch ở giữa lịch sử sẽ làm sai lệch số liệu tồn kho các giao dịch sau đó.",
+    )
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const product = await tx.product.findUnique({ where: { id: transaction.productId } })
+    if (!product) throw notFound("Không tìm thấy sản phẩm.")
+
+    const tonKhoSauKhiHoanTac = product.tonKho - transaction.soLuongThayDoi
+    await tx.product.update({
+      where: { id: transaction.productId },
+      data: {
+        tonKho: tonKhoSauKhiHoanTac,
+        trangThai: resolveStockStatus(tonKhoSauKhiHoanTac, product.tonKhoToiThieu, product.trangThai),
+      },
+    })
+    await tx.inventoryTransaction.delete({ where: { id } })
+  })
 }
 
 export async function getHistory(params: {

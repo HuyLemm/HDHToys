@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   LayoutDashboard, ClipboardList, Boxes, Package, Users,
   ReceiptText, ChartColumn, Wallet, Calculator, FileText, Settings,
-  Search, Bell, Menu, LogOut,
+  Search, Bell, Menu, LogOut, CalendarClock,
 } from 'lucide-react'
 import { HdhLogo, Badge } from './ui'
 import { api } from '../lib/api'
@@ -16,6 +16,7 @@ const navItems = [
   { key: 'inventory', Icon: Boxes, label: 'Kho hàng' },
   { key: 'products', Icon: Package, label: 'Sản phẩm' },
   { key: 'customers', Icon: Users, label: 'Khách hàng' },
+  { key: 'preorders', Icon: CalendarClock, label: 'Đặt trước' },
   { key: 'invoices', Icon: ReceiptText, label: 'Hóa đơn' },
   { key: 'revenue', Icon: ChartColumn, label: 'Doanh thu' },
   { key: 'thu-chi', Icon: Wallet, label: 'Thu / Chi' },
@@ -32,6 +33,7 @@ export function Sidebar({ active, onNav, collapsed, mobileOpen, onCloseMobile }:
     ['inventory-history'].includes(active) ? 'inventory' :
     ['product-detail'].includes(active) ? 'products' :
     ['customer-detail'].includes(active) ? 'customers' :
+    ['preorder-detail'].includes(active) ? 'preorders' :
     ['invoice-detail'].includes(active) ? 'invoices' : active)
 
   return (

@@ -8,7 +8,10 @@ export const invoiceInclude = {
     include: {
       khachHang: { select: { id: true, hoTen: true, sdt: true, email: true } },
       nhanVien: { select: { id: true, hoTen: true } },
-      items: { include: { product: { select: { id: true, sku: true, ten: true } } } },
+      items: { include: { product: { select: { id: true, sku: true, ten: true, loaiSanPham: true } } } },
+      // Đơn được chuyển từ "Đặt trước" (preorders.service.ts#convertToOrder)
+      // giữ liên kết ngược này — dùng để hiện tiền cọc/còn lại trên hóa đơn.
+      preorder: { select: { ma: true, tienCoc: true } },
     },
   },
 } satisfies Prisma.InvoiceInclude
@@ -44,7 +47,16 @@ export async function list(params: {
   }
 
   const [items, total] = await Promise.all([
-    prisma.invoice.findMany({ where, include: invoiceInclude, orderBy: { createdAt: "desc" }, skip: (page - 1) * pageSize, take: pageSize }),
+    prisma.invoice.findMany({
+      where,
+      include: invoiceInclude,
+      // order.items là quan hệ 1-nhiều lồng 2 cấp — gộp về 1 SQL JOIN thay vì
+      // nhiều round-trip riêng (xem giải thích ở orders.service.ts).
+      relationLoadStrategy: "join",
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
     prisma.invoice.count({ where }),
   ])
 
@@ -52,7 +64,20 @@ export async function list(params: {
 }
 
 export async function get(id: string) {
-  const invoice = await prisma.invoice.findUnique({ where: { id }, include: invoiceInclude })
+  const invoice = await prisma.invoice.findUnique({ where: { id }, include: invoiceInclude, relationLoadStrategy: "join" })
   if (!invoice) throw notFound("Không tìm thấy hóa đơn.")
   return invoice
+}
+
+/**
+ * Chỉ Admin được gọi (route-level requireRole). Đi ngược lại nguyên tắc
+ * "hóa đơn không được sửa/xóa sau khi phát hành" (SRS FR-INVO.2) — chấp nhận
+ * đánh đổi này theo yêu cầu, giới hạn ở vai trò Admin. Không có bảng nào FK
+ * tới Invoice nên xóa không làm vỡ ràng buộc DB; đơn hàng gốc vẫn giữ
+ * nguyên, chỉ mất liên kết hóa đơn.
+ */
+export async function remove(id: string) {
+  const invoice = await prisma.invoice.findUnique({ where: { id } })
+  if (!invoice) throw notFound("Không tìm thấy hóa đơn.")
+  await prisma.invoice.delete({ where: { id } })
 }

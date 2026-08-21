@@ -73,3 +73,8 @@ export async function getHistory(req: Request, res: Response) {
   if (!parsed.success) throw badRequest("Tham số tìm kiếm không hợp lệ.")
   res.json(await inventoryService.getHistory(parsed.data))
 }
+
+export async function removeTransaction(req: Request, res: Response) {
+  await inventoryService.removeTransaction(req.params.id)
+  res.status(204).send()
+}

@@ -50,3 +50,8 @@ export async function update(req: Request, res: Response) {
   if (!parsed.success) throw badRequest(parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ.")
   res.json(await incomeExpenseService.update(req.params.id, parsed.data))
 }
+
+export async function remove(req: Request, res: Response) {
+  await incomeExpenseService.remove(req.params.id)
+  res.status(204).send()
+}

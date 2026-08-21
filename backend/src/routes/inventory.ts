@@ -14,3 +14,4 @@ inventoryRouter.post("/inventory/stock-in", requireRole(...mutationRoles), inven
 inventoryRouter.post("/inventory/stock-out", requireRole(...mutationRoles), inventoryController.stockOut)
 inventoryRouter.post("/inventory/adjust", requireRole(...mutationRoles), inventoryController.adjust)
 inventoryRouter.get("/inventory/history", inventoryController.getHistory)
+inventoryRouter.delete("/inventory/history/:id", requireRole("ADMIN"), inventoryController.removeTransaction)

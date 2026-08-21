@@ -13,3 +13,16 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
+      # Tích hợp thanh toán QR ngân hàng (SRS mục 3.16) — để trống 3 mục
+      # sync:false thì tính năng tự vô hiệu (đơn hàng vẫn tạo/đổi trạng thái
+      # thủ công như thường, chỉ không có QR/không tự hoàn thành qua webhook).
+      - key: VIETQR_BANK_BIN
+        sync: false
+      - key: VIETQR_ACCOUNT_NO
+        sync: false
+      - key: VIETQR_ACCOUNT_NAME
+        value: "HDH TOYS"
+      - key: VIETQR_TTL_MINUTES
+        value: "15"
+      - key: VIETQR_WEBHOOK_SECRET
+        sync: false

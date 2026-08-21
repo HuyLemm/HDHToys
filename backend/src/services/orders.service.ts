@@ -1,14 +1,16 @@
-import type { OrderStatus, PaymentMethod, Prisma, SalesChannel } from "@prisma/client"
+import type { DonViVanChuyen, Order, OrderItem, OrderStatus, PaymentMethod, PhuongThucNhanHang, Prisma, SalesChannel } from "@prisma/client"
 import { prisma } from "../lib/prisma.js"
 import { canTransition, formatOrderCode } from "../lib/orderCode.js"
 import { formatInvoiceCode } from "../lib/invoiceCode.js"
 import { applyInventoryTransaction } from "./inventory.service.js"
 import { badRequest, notFound } from "../errors/HttpError.js"
+import { buildVietQrPayload } from "../lib/vietqr.js"
+import { vietQrConfig, isVietQrConfigured } from "../lib/paymentConfig.js"
 
 export const orderInclude = {
   khachHang: { select: { id: true, hoTen: true, sdt: true, email: true } },
   nhanVien: { select: { id: true, hoTen: true } },
-  items: { include: { product: { select: { id: true, sku: true, ten: true } } } },
+  items: { include: { product: { select: { id: true, sku: true, ten: true, loaiSanPham: true } } } },
 } satisfies Prisma.OrderInclude
 
 export async function list(params: {
@@ -17,18 +19,32 @@ export async function list(params: {
   khachHangId?: string
   nhanVienId?: string
   phuongThucThanhToan?: PaymentMethod
+  daThanhToan?: boolean
+  phuongThucNhanHang?: PhuongThucNhanHang
+  /** true = chỉ lấy đơn Ship đã có mã vận đơn; false = đơn Ship còn thiếu mã vận đơn (cần theo dõi). */
+  coMaVanDon?: boolean
   tuNgay?: Date
   denNgay?: Date
+  sortBy?: "createdAt" | "tongCong"
+  sortOrder?: "asc" | "desc"
   page: number
   pageSize: number
 }) {
-  const { q, trangThai, khachHangId, nhanVienId, phuongThucThanhToan, tuNgay, denNgay, page, pageSize } = params
+  const {
+    q, trangThai, khachHangId, nhanVienId, phuongThucThanhToan, daThanhToan, phuongThucNhanHang, coMaVanDon,
+    tuNgay, denNgay, sortBy = "createdAt", sortOrder = "desc", page, pageSize,
+  } = params
 
   const where: Prisma.OrderWhereInput = {
     ...(trangThai ? { trangThai } : {}),
     ...(khachHangId ? { khachHangId } : {}),
     ...(nhanVienId ? { nhanVienId } : {}),
     ...(phuongThucThanhToan ? { phuongThucThanhToan } : {}),
+    ...(daThanhToan !== undefined ? { daThanhToan } : {}),
+    ...(phuongThucNhanHang ? { phuongThucNhanHang } : {}),
+    ...(coMaVanDon !== undefined
+      ? { phuongThucNhanHang: "SHIP", maVanDon: coMaVanDon ? { not: null } : null }
+      : {}),
     ...(tuNgay || denNgay
       ? { createdAt: { ...(tuNgay ? { gte: tuNgay } : {}), ...(denNgay ? { lte: denNgay } : {}) } }
       : {}),
@@ -44,17 +60,101 @@ export async function list(params: {
   }
 
   const [items, total] = await Promise.all([
-    prisma.order.findMany({ where, include: orderInclude, orderBy: { createdAt: "desc" }, skip: (page - 1) * pageSize, take: pageSize }),
+    prisma.order.findMany({
+      where,
+      include: orderInclude,
+      // orders.items là quan hệ 1-nhiều — mặc định Prisma tách thành 1 round-trip
+      // riêng để lấy items sau khi lấy orders. relationLoadStrategy:"join" gộp
+      // lại thành 1 câu SQL JOIN duy nhất, quan trọng khi DB ở xa (Neon) và mỗi
+      // round-trip tốn ~150-300ms.
+      relationLoadStrategy: "join",
+      orderBy: { [sortBy]: sortOrder },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
     prisma.order.count({ where }),
   ])
 
   return { items, total, page, pageSize }
 }
 
+/**
+ * Xếp hạng khách hàng theo tổng giá trị đơn Hoàn thành — tận dụng liên kết
+ * Order.khachHangId có sẵn (không cần bảng thống kê riêng). Chỉ tính đơn
+ * Hoàn thành vì đó là doanh thu thật đã ghi nhận (khớp với accounting.service.ts).
+ */
+export async function getTopCustomers(limit: number) {
+  const grouped = await prisma.order.groupBy({
+    by: ["khachHangId"],
+    where: { trangThai: "HOAN_THANH" },
+    _sum: { tongCong: true },
+    _count: { id: true },
+    orderBy: { _sum: { tongCong: "desc" } },
+    take: limit,
+  })
+
+  const customers = await prisma.customer.findMany({
+    where: { id: { in: grouped.map((g) => g.khachHangId) } },
+    select: { id: true, hoTen: true, sdt: true },
+  })
+  const byId = new Map(customers.map((c) => [c.id, c]))
+
+  return grouped
+    .filter((g) => byId.has(g.khachHangId))
+    .map((g) => ({
+      khachHang: byId.get(g.khachHangId)!,
+      tongChiTieu: g._sum.tongCong ?? 0,
+      soDonHoanThanh: g._count.id,
+    }))
+}
+
 export async function get(id: string) {
-  const order = await prisma.order.findUnique({ where: { id }, include: orderInclude })
+  const order = await prisma.order.findUnique({ where: { id }, include: orderInclude, relationLoadStrategy: "join" })
   if (!order) throw notFound("Không tìm thấy đơn hàng.")
   return order
+}
+
+/**
+ * Chỉ Admin được gọi (route-level requireRole). Chỉ xóa được đơn CHƯA có
+ * Hóa đơn (nghĩa là chưa từng Hoàn thành — Hoàn thành luôn sinh Invoice, xem
+ * applyOrderCompletion) — tránh xóa mất số liệu đã tính vào doanh thu/kế
+ * toán. Cũng chặn nếu có PaymentTransaction hoặc Preorder tham chiếu tới đơn
+ * này (ràng buộc khóa ngoại sẽ chặn ở DB nếu không kiểm tra trước, nhưng
+ * kiểm tra ở đây để trả thông báo tiếng Việt rõ nghĩa).
+ */
+export async function remove(id: string) {
+  const [order, invoice, paymentCount, preorderCount] = await Promise.all([
+    prisma.order.findUnique({ where: { id }, include: { items: true } }),
+    prisma.invoice.findUnique({ where: { orderId: id } }),
+    prisma.paymentTransaction.count({ where: { orderId: id } }),
+    prisma.preorder.count({ where: { orderId: id } }),
+  ])
+  if (!order) throw notFound("Không tìm thấy đơn hàng.")
+  if (invoice) throw badRequest("Đơn hàng đã có hóa đơn (đã từng Hoàn thành) — không thể xóa, số liệu này đã tính vào doanh thu/kế toán.")
+  if (paymentCount > 0) throw badRequest("Đơn hàng có giao dịch thanh toán QR liên quan — không thể xóa.")
+  if (preorderCount > 0) throw badRequest("Đơn hàng này được tạo từ một đơn đặt trước — không thể xóa để giữ lịch sử liên kết.")
+
+  await prisma.$transaction(async (tx) => {
+    // Đơn MOI/DANG_XU_LY vẫn đang "giữ" tồn kho (trừ ngay từ lúc tạo, xem
+    // create()) — xóa thẳng đơn mà không hoàn tồn kho sẽ làm mất hàng oan.
+    // Đơn DA_HUY thì tồn kho đã được hoàn lại từ lúc hủy rồi (updateStatus),
+    // hoàn lại lần nữa ở đây sẽ bị cộng khống.
+    if (order.trangThai === "MOI" || order.trangThai === "DANG_XU_LY") {
+      for (const item of order.items) {
+        await applyInventoryTransaction(tx, {
+          productId: item.productId,
+          loai: "TRA_HANG",
+          soLuongThayDoi: item.soLuong,
+          nguoiThucHienId: order.nhanVienId,
+          thamChieu: order.ma,
+          ghiChu: "Hoàn tồn kho do xóa đơn hàng",
+        })
+      }
+    }
+
+    // OrderItem có onDelete: Cascade trong schema — tự động xóa theo đơn hàng.
+    await tx.order.delete({ where: { id } })
+  })
 }
 
 interface OrderItemInput {
@@ -64,17 +164,33 @@ interface OrderItemInput {
   giamGia: number
 }
 
+/**
+ * Ràng buộc phương thức nhận hàng: chọn Ship thì PHẢI có đơn vị vận chuyển;
+ * chọn Khách tới lấy thì bỏ qua/xóa đơn vị vận chuyển (tránh dữ liệu vô lý
+ * kiểu "khách tới lấy nhưng ship qua SPX"). Dùng chung cho create + updateDelivery.
+ */
+function resolveDelivery(phuongThucNhanHang: PhuongThucNhanHang, donViVanChuyen?: DonViVanChuyen) {
+  if (phuongThucNhanHang === "SHIP") {
+    if (!donViVanChuyen) throw badRequest("Vui lòng chọn đơn vị vận chuyển khi giao hàng qua Ship.")
+    return { phuongThucNhanHang, donViVanChuyen }
+  }
+  return { phuongThucNhanHang, donViVanChuyen: null }
+}
+
 export async function create(params: {
   khachHangId: string
   nhanVienId?: string
   kenhBan: SalesChannel
   phuongThucThanhToan: PaymentMethod
+  phuongThucNhanHang?: PhuongThucNhanHang
+  donViVanChuyen?: DonViVanChuyen
   vat: number
   ghiChu?: string
   items: OrderItemInput[]
   fallbackNhanVienId: string
 }) {
   const { khachHangId, nhanVienId, kenhBan, phuongThucThanhToan, vat, ghiChu, items, fallbackNhanVienId } = params
+  const delivery = resolveDelivery(params.phuongThucNhanHang ?? "KHACH_TOI_LAY", params.donViVanChuyen)
 
   const customer = await prisma.customer.findUnique({ where: { id: khachHangId } })
   if (!customer) throw badRequest("Khách hàng không tồn tại.")
@@ -87,26 +203,37 @@ export async function create(params: {
     const product = productMap.get(item.productId)!
     const donGia = item.giaOverride ?? product.giaBan
     const thanhTien = item.soLuong * donGia - item.giamGia
-    return { ...item, donGia, giaVon: product.giaVon, thanhTien }
+    // Chốt giá vốn tại thời điểm bán = giá nhập + phí vận chuyển, để lợi
+    // nhuận gộp tính đúng chi phí thực tế đưa hàng về (không chỉ giá nhập).
+    return { ...item, donGia, giaVon: product.giaVon + product.phiVanChuyen, thanhTien }
   })
 
   const tamTinh = lines.reduce((sum, l) => sum + l.soLuong * l.donGia, 0)
   const giamGiaTong = lines.reduce((sum, l) => sum + l.giamGia, 0)
   const tongCong = tamTinh - giamGiaTong + vat
 
+  // Đơn thanh toán qua QR Code được cấp một mốc hết hạn cho mã QR — hết hạn
+  // không tự hủy đơn, chỉ để ẩn QR khỏi giao diện (xem getQrPaymentInfo).
+  const qrExpiresAt = phuongThucThanhToan === "QR_CODE" ? new Date(Date.now() + vietQrConfig.ttlMinutes * 60_000) : null
+
+  const nguoiThucHienId = nhanVienId ?? fallbackNhanVienId
+
   return prisma.$transaction(async (tx) => {
     const created = await tx.order.create({
       data: {
         ma: `TEMP-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         khachHangId,
-        nhanVienId: nhanVienId ?? fallbackNhanVienId,
+        nhanVienId: nguoiThucHienId,
         kenhBan,
         phuongThucThanhToan,
+        phuongThucNhanHang: delivery.phuongThucNhanHang,
+        donViVanChuyen: delivery.donViVanChuyen,
         vat,
         ghiChu,
         tamTinh,
         giamGia: giamGiaTong,
         tongCong,
+        qrExpiresAt,
         items: {
           create: lines.map((l) => ({
             productId: l.productId,
@@ -120,11 +247,62 @@ export async function create(params: {
       },
     })
 
+    const ma = formatOrderCode(created.soThuTu, created.createdAt)
+
+    // Trừ tồn kho NGAY khi tạo đơn (giữ hàng cho đơn này) — không đợi tới lúc
+    // Hoàn thành, để tránh nhận nhiều đơn cộng lại vượt quá tồn kho thực tế
+    // (ví dụ 10 đơn x 1 cái trong khi chỉ còn 5, mà đơn nào cũng "chưa xong"
+    // nên tồn kho hiển thị vẫn là 5). Hủy đơn (DA_HUY) mới hoàn lại, xem
+    // updateStatus. Gộp số lượng theo productId trước khi trừ để đúng nếu
+    // đơn có nhiều dòng cùng một sản phẩm.
+    const qtyByProduct = new Map<string, number>()
+    for (const l of lines) qtyByProduct.set(l.productId, (qtyByProduct.get(l.productId) ?? 0) + l.soLuong)
+    for (const [productId, soLuong] of qtyByProduct) {
+      await applyInventoryTransaction(tx, {
+        productId,
+        loai: "XUAT",
+        soLuongThayDoi: -soLuong,
+        nguoiThucHienId,
+        thamChieu: ma,
+        ghiChu: "Trừ tồn kho khi tạo đơn hàng",
+      })
+    }
+
     return tx.order.update({
       where: { id: created.id },
-      data: { ma: formatOrderCode(created.soThuTu, created.createdAt) },
+      data: { ma },
       include: orderInclude,
     })
+  })
+}
+
+/**
+ * Side-effect chung khi một đơn hàng được hoàn thành: tăng số đã bán rồi sinh
+ * hóa đơn. Dùng chung bởi cả luồng nhân viên chuyển trạng thái thủ công
+ * (updateStatus) và luồng hệ thống tự hoàn thành khi đối soát thanh toán QR
+ * khớp (completeOrderViaPayment) — đảm bảo hai luồng không bao giờ lệch hành
+ * vi (SDS mục 5.8). KHÔNG trừ tồn kho ở đây nữa — tồn kho đã bị trừ ngay từ
+ * lúc tạo đơn (xem create()), tránh trừ hai lần.
+ */
+async function applyOrderCompletion(
+  tx: Prisma.TransactionClient,
+  order: Pick<Order, "id" | "ma"> & { items: Pick<OrderItem, "productId" | "soLuong">[] },
+  nguoiThucHienId: string,
+) {
+  for (const item of order.items) {
+    await tx.product.update({ where: { id: item.productId }, data: { daBan: { increment: item.soLuong } } })
+  }
+
+  const createdInvoice = await tx.invoice.create({
+    data: {
+      soHoaDon: `TEMP-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      orderId: order.id,
+      nguoiTaoId: nguoiThucHienId,
+    },
+  })
+  await tx.invoice.update({
+    where: { id: createdInvoice.id },
+    data: { soHoaDon: formatInvoiceCode(createdInvoice.soThuTu, createdInvoice.createdAt) },
   })
 }
 
@@ -140,29 +318,23 @@ export async function updateStatus(params: { orderId: string; trangThai: OrderSt
 
   return prisma.$transaction(async (tx) => {
     if (trangThai === "HOAN_THANH") {
+      await applyOrderCompletion(tx, current, nguoiThucHienId)
+    }
+
+    // Hủy đơn (chỉ xảy ra từ Mới/Đang xử lý, theo canTransition) — tồn kho đã
+    // bị trừ ngay lúc tạo đơn nên phải hoàn lại, không thì kho sẽ "mất" hàng
+    // của những đơn bị hủy.
+    if (trangThai === "DA_HUY") {
       for (const item of current.items) {
-        await tx.product.update({ where: { id: item.productId }, data: { daBan: { increment: item.soLuong } } })
         await applyInventoryTransaction(tx, {
           productId: item.productId,
-          loai: "XUAT",
-          soLuongThayDoi: -item.soLuong,
+          loai: "TRA_HANG",
+          soLuongThayDoi: item.soLuong,
           nguoiThucHienId,
           thamChieu: current.ma,
-          ghiChu: "Xuất theo đơn hàng",
+          ghiChu: "Hoàn tồn kho do hủy đơn hàng",
         })
       }
-
-      const createdInvoice = await tx.invoice.create({
-        data: {
-          soHoaDon: `TEMP-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          orderId: current.id,
-          nguoiTaoId: nguoiThucHienId,
-        },
-      })
-      await tx.invoice.update({
-        where: { id: createdInvoice.id },
-        data: { soHoaDon: formatInvoiceCode(createdInvoice.soThuTu, createdInvoice.createdAt) },
-      })
     }
 
     if (trangThai === "HOAN_TIEN" && current.trangThai === "HOAN_THANH") {
@@ -181,4 +353,95 @@ export async function updateStatus(params: { orderId: string; trangThai: OrderSt
 
     return tx.order.update({ where: { id: orderId }, data: { trangThai }, include: orderInclude })
   })
+}
+
+/**
+ * Đánh dấu đơn hàng đã/chưa thanh toán — hoàn toàn độc lập với trangThai xử
+ * lý đơn (Mới/Đang xử lý/Hoàn thành...); nhân viên tự bấm theo thực tế đã
+ * thu tiền hay chưa, không có ràng buộc/gating gì với các trạng thái khác.
+ */
+export async function updatePaymentStatus(orderId: string, daThanhToan: boolean) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } })
+  if (!order) throw notFound("Không tìm thấy đơn hàng.")
+  return prisma.order.update({ where: { id: orderId }, data: { daThanhToan }, include: orderInclude })
+}
+
+/** Đổi phương thức nhận hàng (Khách tới lấy/Ship) và đơn vị vận chuyển — độc lập với trangThai xử lý đơn, sửa được bất kỳ lúc nào. */
+export async function updateDelivery(orderId: string, phuongThucNhanHang: PhuongThucNhanHang, donViVanChuyen?: DonViVanChuyen) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } })
+  if (!order) throw notFound("Không tìm thấy đơn hàng.")
+  const delivery = resolveDelivery(phuongThucNhanHang, donViVanChuyen)
+  return prisma.order.update({ where: { id: orderId }, data: delivery, include: orderInclude })
+}
+
+/**
+ * Ghi mã vận đơn (chỉ áp dụng cho đơn Ship, thường điền sau khi đã gửi hàng
+ * và/hoặc khách đã chuyển khoản xong) — dùng để tra cứu/gửi lại cho khách.
+ * Cho phép xóa (truyền chuỗi rỗng/undefined) để sửa lại nếu nhập nhầm.
+ */
+export async function updateTrackingCode(orderId: string, maVanDon?: string) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } })
+  if (!order) throw notFound("Không tìm thấy đơn hàng.")
+  const trimmed = maVanDon?.trim()
+  if (trimmed && order.phuongThucNhanHang !== "SHIP") {
+    throw badRequest("Chỉ đơn hàng nhận qua Ship mới cần mã vận đơn.")
+  }
+  return prisma.order.update({ where: { id: orderId }, data: { maVanDon: trimmed || null }, include: orderInclude })
+}
+
+/**
+ * Kích hoạt bởi payments.service khi đối soát thanh toán QR khớp (webhook
+ * ngân hàng). Cho phép nhảy thẳng MOI/DANG_XU_LY -> HOAN_THANH — một ngoại
+ * lệ có chủ đích của máy trạng thái ở canTransition (SRS FR-ORD.4, FR-PAY.4).
+ */
+export async function completeOrderViaPayment(orderId: string, systemStaffId: string) {
+  const current = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } })
+  if (!current) throw notFound("Không tìm thấy đơn hàng.")
+
+  if (current.trangThai !== "MOI" && current.trangThai !== "DANG_XU_LY") {
+    throw badRequest(`Đơn hàng đang ở trạng thái ${current.trangThai}, không thể tự hoàn thành qua thanh toán QR.`)
+  }
+  if (current.phuongThucThanhToan !== "QR_CODE") {
+    throw badRequest("Đơn hàng không sử dụng phương thức thanh toán QR Code.")
+  }
+
+  return prisma.$transaction(async (tx) => {
+    await applyOrderCompletion(tx, current, systemStaffId)
+    // Tiền thật đã được ngân hàng xác nhận qua đối soát — đánh dấu luôn đã
+    // thanh toán, khác với luồng nhân viên tự hoàn thành đơn tay (không tự
+    // đổi trạng thái thanh toán, xem updatePaymentStatus).
+    return tx.order.update({ where: { id: orderId }, data: { trangThai: "HOAN_THANH", daThanhToan: true }, include: orderInclude })
+  })
+}
+
+export interface QrPaymentInfo {
+  configured: boolean
+  payload: string | null
+  expiresAt: Date | null
+  expired: boolean
+}
+
+/**
+ * Tính (không truy vấn DB) thông tin QR thanh toán hiển thị cho một đơn hàng,
+ * nếu còn áp dụng được (phương thức QR Code, đơn chưa hoàn thành/hủy).
+ */
+export function getQrPaymentInfo(order: Pick<Order, "ma" | "tongCong" | "phuongThucThanhToan" | "trangThai" | "qrExpiresAt">): QrPaymentInfo | null {
+  if (order.phuongThucThanhToan !== "QR_CODE") return null
+  if (order.trangThai !== "MOI" && order.trangThai !== "DANG_XU_LY") return null
+
+  const expired = order.qrExpiresAt ? order.qrExpiresAt.getTime() < Date.now() : false
+
+  if (!isVietQrConfigured()) {
+    return { configured: false, payload: null, expiresAt: order.qrExpiresAt, expired }
+  }
+
+  const payload = buildVietQrPayload({
+    bankBin: vietQrConfig.bankBin,
+    accountNo: vietQrConfig.accountNo,
+    accountName: vietQrConfig.accountName,
+    amount: order.tongCong,
+    addInfo: order.ma,
+  })
+
+  return { configured: true, payload, expiresAt: order.qrExpiresAt, expired }
 }

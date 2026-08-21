@@ -59,3 +59,8 @@ export async function pay(req: Request, res: Response) {
   if (!parsed.success) throw badRequest("Số tiền thanh toán không hợp lệ.")
   res.json(await debtsService.pay(req.params.id, parsed.data.soTien))
 }
+
+export async function remove(req: Request, res: Response) {
+  await debtsService.remove(req.params.id)
+  res.status(204).send()
+}

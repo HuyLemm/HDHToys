@@ -1,14 +1,21 @@
-import type { CustomerTier, OrderStatus, Prisma } from "@prisma/client"
+import type { CustomerTier, OrderStatus, Prisma, SalesChannel } from "@prisma/client"
 import { prisma } from "../lib/prisma.js"
-import { conflict, notFound } from "../errors/HttpError.js"
+import { badRequest, conflict, notFound } from "../errors/HttpError.js"
 
 const ACTIVE_STATUSES: OrderStatus[] = ["MOI", "DANG_XU_LY"]
 
-export async function list(params: { q?: string; hangKhachHang?: CustomerTier; page: number; pageSize: number }) {
-  const { q, hangKhachHang, page, pageSize } = params
+export async function list(params: {
+  q?: string
+  hangKhachHang?: CustomerTier
+  nguonKhachHang?: SalesChannel
+  page: number
+  pageSize: number
+}) {
+  const { q, hangKhachHang, nguonKhachHang, page, pageSize } = params
 
   const where: Prisma.CustomerWhereInput = {
     ...(hangKhachHang ? { hangKhachHang } : {}),
+    ...(nguonKhachHang ? { nguonKhachHang } : {}),
     ...(q
       ? {
           OR: [
@@ -39,6 +46,10 @@ export async function create(data: {
   sdt: string
   email?: string
   ngaySinh?: Date
+  diaChi?: string
+  luuY?: string
+  linkFacebook?: string
+  nguonKhachHang: SalesChannel
   hangKhachHang: CustomerTier
 }) {
   const existing = await prisma.customer.findUnique({ where: { sdt: data.sdt } })
@@ -48,9 +59,41 @@ export async function create(data: {
 
 export function update(
   id: string,
-  data: Partial<{ hoTen: string; email: string; ngaySinh: Date; hangKhachHang: CustomerTier; diemTichLuy: number }>,
+  data: Partial<{
+    hoTen: string
+    email: string
+    ngaySinh: Date
+    diaChi: string
+    luuY: string
+    linkFacebook: string
+    nguonKhachHang: SalesChannel
+    hangKhachHang: CustomerTier
+    diemTichLuy: number
+  }>,
 ) {
   return prisma.customer.update({ where: { id }, data })
+}
+
+export async function remove(id: string) {
+  await get(id)
+
+  const [orderCount, preorderCount] = await Promise.all([
+    prisma.order.count({ where: { khachHangId: id } }),
+    prisma.preorder.count({ where: { khachHangId: id } }),
+  ])
+
+  if (orderCount > 0 || preorderCount > 0) {
+    throw badRequest("Không thể xóa khách hàng đã có đơn hàng hoặc đơn đặt trước — đây là lịch sử giao dịch cần giữ lại.")
+  }
+
+  // CustomerNote có onDelete: Cascade trong schema — tự động xóa theo khách hàng.
+  await prisma.customer.delete({ where: { id } })
+}
+
+export async function removeNote(customerId: string, noteId: string) {
+  const note = await prisma.customerNote.findUnique({ where: { id: noteId } })
+  if (!note || note.customerId !== customerId) throw notFound("Không tìm thấy ghi chú.")
+  await prisma.customerNote.delete({ where: { id: noteId } })
 }
 
 export async function getOverview(customerId: string) {
@@ -61,6 +104,7 @@ export async function getOverview(customerId: string) {
     prisma.order.findMany({
       where: { khachHangId: customerId, trangThai: { in: ACTIVE_STATUSES } },
       include: { items: { include: { product: { select: { id: true, sku: true, ten: true } } } } },
+      relationLoadStrategy: "join",
       orderBy: { createdAt: "desc" },
     }),
     prisma.orderItem.findMany({
@@ -138,6 +182,7 @@ export async function getOrders(params: {
     prisma.order.findMany({
       where,
       include: { items: { include: { product: { select: { id: true, sku: true, ten: true } } } } },
+      relationLoadStrategy: "join",
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * pageSize,
       take: pageSize,

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Search } from 'lucide-react'
 import { BackBtn, Btn, Table, TinyBtn, Badge, Modal, Field, Input, ErrorBox } from '../components/ui'
-import { api, ApiError, type Customer, type Product, type PaymentMethod, type SalesChannel } from '../lib/api'
-import { customerTierLabel, paymentMethodLabel, salesChannelLabel } from '../lib/labels'
+import { api, ApiError, type Customer, type Product, type PaymentMethod, type SalesChannel, type DeliveryMethod, type ShippingCarrier } from '../lib/api'
+import { customerTierLabel, paymentMethodLabel, salesChannelLabel, deliveryMethodLabel, shippingCarrierLabel } from '../lib/labels'
 
 interface CartLine { product: Product; soLuong: number; giamGia: number }
 
@@ -18,6 +18,8 @@ export function CreateOrderScreen({ onBack, onCreated }: { onBack: () => void; o
 
   const [kenhBan, setKenhBan] = useState<SalesChannel>('TAI_CUA_HANG')
   const [phuongThuc, setPhuongThuc] = useState<PaymentMethod>('TIEN_MAT')
+  const [phuongThucNhanHang, setPhuongThucNhanHang] = useState<DeliveryMethod>('KHACH_TOI_LAY')
+  const [donViVanChuyen, setDonViVanChuyen] = useState<ShippingCarrier>('SPX')
   const [ghiChu, setGhiChu] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -70,6 +72,8 @@ export function CreateOrderScreen({ onBack, onCreated }: { onBack: () => void; o
         khachHangId: customer.id,
         kenhBan,
         phuongThucThanhToan: phuongThuc,
+        phuongThucNhanHang,
+        donViVanChuyen: phuongThucNhanHang === 'SHIP' ? donViVanChuyen : undefined,
         ghiChu: ghiChu || undefined,
         items: cart.map(l => ({ productId: l.product.id, soLuong: l.soLuong, giamGia: l.giamGia })),
       })
@@ -156,10 +160,10 @@ export function CreateOrderScreen({ onBack, onCreated }: { onBack: () => void; o
                 rows={cart.map(l => [
                   <span className="font-medium text-slate-800">{l.product.ten}</span>,
                   <span className="font-mono text-[10px] text-slate-500">{l.product.sku}</span>,
-                  <input type="number" min={1} value={l.soLuong} onChange={e => updateLine(l.product.id, { soLuong: Math.max(1, Number(e.target.value)) })}
+                  <input type="number" min={1} value={l.soLuong === 0 ? '' : l.soLuong} onChange={e => updateLine(l.product.id, { soLuong: Math.max(1, Number(e.target.value)) })}
                     className="w-14 text-center text-xs border border-slate-200 rounded px-1 py-0.5" />,
                   <span>{l.product.giaBan.toLocaleString('vi-VN')} VNĐ</span>,
-                  <input type="number" min={0} value={l.giamGia} onChange={e => updateLine(l.product.id, { giamGia: Math.max(0, Number(e.target.value)) })}
+                  <input type="number" min={0} value={l.giamGia === 0 ? '' : l.giamGia} onChange={e => updateLine(l.product.id, { giamGia: Math.max(0, Number(e.target.value)) })}
                     className="w-20 text-center text-xs border border-slate-200 rounded px-1 py-0.5" />,
                   <span className="font-semibold">{(l.soLuong * l.product.giaBan - l.giamGia).toLocaleString('vi-VN')} VNĐ</span>,
                   <TinyBtn danger onClick={() => removeLine(l.product.id)}>✕</TinyBtn>,
@@ -185,6 +189,22 @@ export function CreateOrderScreen({ onBack, onCreated }: { onBack: () => void; o
                   {Object.entries(paymentMethodLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
               </div>
+              <div>
+                <label className="block text-slate-500 mb-1">Phương thức nhận hàng</label>
+                <select value={phuongThucNhanHang} onChange={e => setPhuongThucNhanHang(e.target.value as DeliveryMethod)}
+                  className="w-full text-xs px-2.5 py-2 border border-slate-200 rounded-md bg-white focus:outline-none focus:border-blue-400">
+                  {Object.entries(deliveryMethodLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                </select>
+              </div>
+              {phuongThucNhanHang === 'SHIP' && (
+                <div>
+                  <label className="block text-slate-500 mb-1">Đơn vị vận chuyển</label>
+                  <select value={donViVanChuyen} onChange={e => setDonViVanChuyen(e.target.value as ShippingCarrier)}
+                    className="w-full text-xs px-2.5 py-2 border border-slate-200 rounded-md bg-white focus:outline-none focus:border-blue-400">
+                    {Object.entries(shippingCarrierLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </div>
+              )}
               <div className="col-span-2">
                 <label className="block text-slate-500 mb-1">Ghi chú</label>
                 <input value={ghiChu} onChange={e => setGhiChu(e.target.value)} className="w-full text-xs px-2.5 py-2 border border-slate-200 rounded-md focus:outline-none focus:border-blue-400" placeholder="Ghi chú nội bộ..." />
@@ -222,6 +242,10 @@ export function NewCustomerModal({ onClose, onCreated }: { onClose: () => void; 
   const [hoTen, setHoTen] = useState('')
   const [sdt, setSdt] = useState('')
   const [email, setEmail] = useState('')
+  const [diaChi, setDiaChi] = useState('')
+  const [linkFacebook, setLinkFacebook] = useState('')
+  const [luuY, setLuuY] = useState('')
+  const [nguonKhachHang, setNguonKhachHang] = useState<SalesChannel>('KHAC')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
@@ -230,7 +254,14 @@ export function NewCustomerModal({ onClose, onCreated }: { onClose: () => void; 
     setError(null)
     setSubmitting(true)
     try {
-      const customer = await api.customers.create({ hoTen, sdt, email: email || undefined })
+      const customer = await api.customers.create({
+        hoTen, sdt,
+        email: email || undefined,
+        diaChi: diaChi || undefined,
+        linkFacebook: linkFacebook || undefined,
+        luuY: luuY || undefined,
+        nguonKhachHang,
+      })
       onCreated(customer)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Không thể tạo khách hàng.')
@@ -242,9 +273,18 @@ export function NewCustomerModal({ onClose, onCreated }: { onClose: () => void; 
   return (
     <Modal title="Thêm khách hàng mới" onClose={onClose}>
       <ErrorBox message={error} />
-      <Field label="Họ tên"><Input value={hoTen} onChange={e => setHoTen(e.target.value)} placeholder="Nguyễn Văn A" /></Field>
-      <Field label="Số điện thoại"><Input value={sdt} onChange={e => setSdt(e.target.value)} placeholder="09xxxxxxxx" /></Field>
+      <Field label="Họ tên" required><Input value={hoTen} onChange={e => setHoTen(e.target.value)} placeholder="Nguyễn Văn A" /></Field>
+      <Field label="Số điện thoại" required><Input value={sdt} onChange={e => setSdt(e.target.value)} placeholder="09xxxxxxxx" /></Field>
       <Field label="Email (tùy chọn)"><Input value={email} onChange={e => setEmail(e.target.value)} placeholder="email@example.com" /></Field>
+      <Field label="Địa chỉ (tùy chọn)"><Input value={diaChi} onChange={e => setDiaChi(e.target.value)} placeholder="Số nhà, đường, quận/huyện, tỉnh/TP" /></Field>
+      <Field label="Link Facebook (tùy chọn)"><Input value={linkFacebook} onChange={e => setLinkFacebook(e.target.value)} placeholder="facebook.com/..." /></Field>
+      <Field label="Nguồn khách hàng" required>
+        <select value={nguonKhachHang} onChange={e => setNguonKhachHang(e.target.value as SalesChannel)}
+          className="w-full text-xs px-2.5 py-1.5 border border-slate-200 rounded-md bg-white">
+          {Object.entries(salesChannelLabel).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+      </Field>
+      <Field label="Lưu ý (tùy chọn)"><Input value={luuY} onChange={e => setLuuY(e.target.value)} placeholder="Ghi chú nhanh về khách hàng..." /></Field>
       <div className="flex gap-2 mt-4">
         <Btn onClick={handleSubmit} disabled={submitting}>{submitting ? 'Đang lưu...' : 'Lưu khách hàng'}</Btn>
         <Btn variant="secondary" onClick={onClose}>Hủy</Btn>

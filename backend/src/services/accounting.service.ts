@@ -16,8 +16,8 @@ async function getDebtTotals() {
 }
 
 async function getInventoryValue() {
-  const products = await prisma.product.findMany({ select: { tonKho: true, giaVon: true } })
-  return products.reduce((sum, p) => sum + p.tonKho * p.giaVon, 0)
+  const products = await prisma.product.findMany({ select: { tonKho: true, giaVon: true, phiVanChuyen: true } })
+  return products.reduce((sum, p) => sum + p.tonKho * (p.giaVon + p.phiVanChuyen), 0)
 }
 
 async function getGrossProfitForRange(tuNgay: Date, denNgay: Date) {
@@ -29,24 +29,41 @@ async function getGrossProfitForRange(tuNgay: Date, denNgay: Date) {
 }
 
 export async function getOverview() {
-  const [balance, debtTotals, giaTriTonKho] = await Promise.all([getOrCreateBalance(), getDebtTotals(), getInventoryValue()])
-
   const { tuNgay: thangTuNgay, denNgay: thangDenNgay } = resolveDateRange("thang_nay")
-  const loiNhuanThang = await getGrossProfitForRange(thangTuNgay, thangDenNgay)
 
   const now = new Date()
-  const tinhHinhTaiChinh: { thang: string; thu: number; chi: number; loiNhuan: number }[] = []
-  for (let i = 2; i >= 0; i--) {
+  // 3 tháng độc lập với nhau — trước đây chạy tuần tự trong for-loop (mỗi vòng
+  // chờ round-trip DB xong mới sang vòng sau); gộp cả 3 tháng + các số liệu
+  // khác vào một Promise.all duy nhất để chỉ tốn 1 "vòng" độ trễ round-trip
+  // (quan trọng khi DB ở xa như Neon, mỗi round-trip ~150-300ms).
+  const months = Array.from({ length: 3 }, (_, idx) => {
+    const i = 2 - idx
     const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1)
     const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59, 999)
-    const [thu, chi] = await Promise.all([
-      prisma.incomeExpense.aggregate({ where: { loai: "THU", createdAt: { gte: monthStart, lte: monthEnd } }, _sum: { soTien: true } }),
-      prisma.incomeExpense.aggregate({ where: { loai: "CHI", createdAt: { gte: monthStart, lte: monthEnd } }, _sum: { soTien: true } }),
-    ])
+    return { label: `T${monthStart.getMonth() + 1}`, monthStart, monthEnd }
+  })
+
+  const [balance, debtTotals, giaTriTonKho, loiNhuanThang, monthlyAggregates] = await Promise.all([
+    getOrCreateBalance(),
+    getDebtTotals(),
+    getInventoryValue(),
+    getGrossProfitForRange(thangTuNgay, thangDenNgay),
+    Promise.all(
+      months.map(({ monthStart, monthEnd }) =>
+        Promise.all([
+          prisma.incomeExpense.aggregate({ where: { loai: "THU", createdAt: { gte: monthStart, lte: monthEnd } }, _sum: { soTien: true } }),
+          prisma.incomeExpense.aggregate({ where: { loai: "CHI", createdAt: { gte: monthStart, lte: monthEnd } }, _sum: { soTien: true } }),
+        ]),
+      ),
+    ),
+  ])
+
+  const tinhHinhTaiChinh = months.map(({ label }, idx) => {
+    const [thu, chi] = monthlyAggregates[idx]
     const thuVal = thu._sum.soTien ?? 0
     const chiVal = chi._sum.soTien ?? 0
-    tinhHinhTaiChinh.push({ thang: `T${monthStart.getMonth() + 1}`, thu: thuVal, chi: chiVal, loiNhuan: thuVal - chiVal })
-  }
+    return { thang: label, thu: thuVal, chi: chiVal, loiNhuan: thuVal - chiVal }
+  })
 
   return {
     tienMat: balance.tienMat,

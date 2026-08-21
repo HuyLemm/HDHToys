@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Btn, FilterBar, SearchInput, Select, Table, Pagination, Spinner, Modal, Field, Input, ErrorBox } from '../components/ui'
+import { Btn, FilterBar, SearchInput, Select, Table, Pagination, Spinner, Modal, Field, Input, ErrorBox, TinyBtn } from '../components/ui'
 import { api, ApiError, type IncomeExpense, type RangeKey, type TransactionKind, type IncomeExpenseCategory } from '../lib/api'
 import { incomeExpenseCategoryLabel, transactionKindLabel, reverseLookup } from '../lib/labels'
+import { useDialog } from '../lib/dialog'
 
 const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
   { key: 'hom_nay', label: 'Hôm nay' },
@@ -11,6 +12,7 @@ const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
 ]
 
 export function ThuChiScreen() {
+  const dialog = useDialog()
   const [range, setRange] = useState<RangeKey>('30_ngay')
   const [items, setItems] = useState<IncomeExpense[]>([])
   const [total, setTotal] = useState(0)
@@ -21,7 +23,19 @@ export function ThuChiScreen() {
   const [loading, setLoading] = useState(true)
   const [summary, setSummary] = useState<{ tongThu: number; tongChi: number; dongTienRong: number } | null>(null)
   const [modal, setModal] = useState<TransactionKind | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const pageSize = 10
+
+  async function handleDelete(t: IncomeExpense) {
+    if (!(await dialog.confirm(`Xóa phiếu "${t.maPhieu}"? Không thể hoàn tác.`))) return
+    setDeleteError(null)
+    try {
+      await api.incomeExpense.delete(t.id)
+      reload()
+    } catch (err) {
+      setDeleteError(err instanceof ApiError ? err.message : 'Không thể xóa phiếu.')
+    }
+  }
 
   function reload() {
     setLoading(true)
@@ -68,6 +82,7 @@ export function ThuChiScreen() {
       )}
 
       <div className="bg-white rounded-lg border border-slate-200 p-4">
+        <ErrorBox message={deleteError} />
         <FilterBar>
           <Select placeholder="Loại" options={Object.values(transactionKindLabel)} value={loai} onChange={v => { setLoai(v); setPage(1) }} />
           <Select placeholder="Danh mục" options={Object.values(incomeExpenseCategoryLabel)} value={danhMuc} onChange={v => { setDanhMuc(v); setPage(1) }} />
@@ -77,7 +92,7 @@ export function ThuChiScreen() {
           <div className="text-xs text-slate-400 py-12 text-center">Chưa có phiếu thu/chi nào</div>
         ) : (
           <Table
-            cols={['Ngày', 'Mã phiếu', 'Loại', 'Danh mục', 'Nội dung', 'Số tiền', 'Người tạo']}
+            cols={['Ngày', 'Mã phiếu', 'Loại', 'Danh mục', 'Nội dung', 'Số tiền', 'Người tạo', 'Thao tác']}
             rows={items.map(t => [
               new Date(t.createdAt).toLocaleDateString('vi-VN'),
               <span className="font-mono text-[10px] font-semibold text-slate-700">{t.maPhieu}</span>,
@@ -85,6 +100,7 @@ export function ThuChiScreen() {
               incomeExpenseCategoryLabel[t.danhMuc], t.noiDung,
               <span className={`font-bold text-xs ${t.loai === 'THU' ? 'text-emerald-600' : 'text-red-500'}`}>{t.loai === 'THU' ? '+' : '-'}{t.soTien.toLocaleString('vi-VN')} VNĐ</span>,
               t.nguoiTao.hoTen,
+              <TinyBtn danger onClick={() => handleDelete(t)}>Xóa</TinyBtn>,
             ])}
           />
         )}
@@ -126,7 +142,7 @@ function CreateTransactionModal({ loai, onClose, onCreated }: { loai: Transactio
         </select>
       </Field>
       <Field label="Nội dung"><Input value={noiDung} onChange={e => setNoiDung(e.target.value)} /></Field>
-      <Field label="Số tiền"><Input type="number" min={1} value={soTien} onChange={e => setSoTien(Number(e.target.value))} /></Field>
+      <Field label="Số tiền"><Input type="number" min={1} value={soTien === 0 ? '' : soTien} onChange={e => setSoTien(Number(e.target.value))} /></Field>
       <div className="flex gap-2 mt-2">
         <Btn onClick={handleSubmit} disabled={submitting}>{submitting ? 'Đang lưu...' : 'Lưu phiếu'}</Btn>
         <Btn variant="secondary" onClick={onClose}>Hủy</Btn>

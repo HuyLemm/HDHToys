@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {
@@ -31,6 +32,7 @@ model Staff {
   inventoryTransactions InventoryTransaction[]
   invoicesCreated Invoice[]
   incomeExpenses  IncomeExpense[]
+  preorders    Preorder[]
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -44,6 +46,11 @@ enum ProductStatus {
   NGUNG_KINH_DOANH
 }
 
+enum LoaiSanPham {
+  CO_SAN
+  PRE_ORDER
+}
+
 model Product {
   id             String        @id @default(cuid())
   sku            String        @unique
@@ -53,17 +60,46 @@ model Product {
   nhaCungCap     String
   anhUrl         String?
   giaVon         Int
+  phiVanChuyen   Int           @default(0)
   giaBan         Int
   tonKho         Int           @default(0)
   tonKhoToiThieu Int           @default(0)
   daBan          Int           @default(0)
   trangThai      ProductStatus @default(CON_HANG)
+  // Phân loại "hàng có sẵn" vs "pre-order" (hàng phải chờ về, ví dụ order từ
+  // nước ngoài) — độc lập với sổ Đặt trước (Preorder), chỉ là nhãn + ngày dự
+  // kiến/nhắc nhở để theo dõi, không ảnh hưởng luồng bán hàng bình thường.
+  loaiSanPham    LoaiSanPham   @default(CO_SAN)
+  ngayDuKienVe   DateTime?
+  nhacHang       Boolean       @default(false)
   orderItems     OrderItem[]
   inventoryTransactions InventoryTransaction[]
+  preorders      Preorder[]
+  image          ProductImage?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
+  @@index([trangThai])
+  @@index([danhMuc])
+  @@index([nhaCungCap])
+  @@index([createdAt])
+  @@index([loaiSanPham])
   @@map("products")
+}
+
+// Ảnh sản phẩm nằm ở bảng riêng (không phải cột trên Product) để các API
+// danh sách/chi tiết sản phẩm hiện có (Products.tsx, đơn hàng, kho...) không
+// vô tình kéo theo dữ liệu ảnh nặng — Prisma chỉ join bảng này khi include
+// tường minh. Lưu trực tiếp trong Postgres (bytea) thay vì ổ đĩa server vì
+// Render free tier có filesystem tạm — file sẽ mất khi service restart/deploy.
+model ProductImage {
+  productId String   @id
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  data      Bytes
+  mimeType  String
+  updatedAt DateTime @updatedAt
+
+  @@map("product_images")
 }
 
 enum CustomerTier {
@@ -78,13 +114,21 @@ model Customer {
   sdt           String         @unique
   email         String?
   ngaySinh      DateTime?
+  diaChi        String?
+  luuY          String?
+  linkFacebook  String?
+  nguonKhachHang SalesChannel  @default(KHAC)
   hangKhachHang CustomerTier   @default(NEW)
   diemTichLuy   Int            @default(0)
   ghiChu        CustomerNote[]
   orders        Order[]
+  preorders     Preorder[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
+  @@index([hangKhachHang])
+  @@index([nguonKhachHang])
+  @@index([createdAt])
   @@map("customers")
 }
 
@@ -96,6 +140,7 @@ model CustomerNote {
   nguoiTaoId String
   createdAt  DateTime @default(now())
 
+  @@index([customerId])
   @@map("customer_notes")
 }
 
@@ -118,6 +163,19 @@ enum SalesChannel {
   TAI_CUA_HANG
   DIEN_THOAI
   FACEBOOK
+  ZALO
+  TIKTOK
+  KHAC
+}
+
+enum PhuongThucNhanHang {
+  KHACH_TOI_LAY
+  SHIP
+}
+
+enum DonViVanChuyen {
+  SPX
+  GRAB
   KHAC
 }
 
@@ -132,16 +190,29 @@ model Order {
   kenhBan             SalesChannel  @default(TAI_CUA_HANG)
   phuongThucThanhToan PaymentMethod
   trangThai           OrderStatus   @default(MOI)
+  daThanhToan         Boolean       @default(false)
+  phuongThucNhanHang  PhuongThucNhanHang @default(KHACH_TOI_LAY)
+  donViVanChuyen      DonViVanChuyen?
+  maVanDon            String?
   tamTinh             Int
   giamGia             Int           @default(0)
   vat                 Int           @default(0)
   tongCong            Int
   ghiChu              String?
+  qrExpiresAt         DateTime?
   items               OrderItem[]
   invoice             Invoice?
+  paymentTransactions PaymentTransaction[]
+  preorder            Preorder?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 
+  @@index([khachHangId])
+  @@index([nhanVienId])
+  @@index([createdAt])
+  @@index([trangThai, createdAt])
+  @@index([daThanhToan])
+  @@index([phuongThucNhanHang])
   @@map("orders")
 }
 
@@ -155,6 +226,8 @@ model Invoice {
   nguoiTaoId String
   createdAt  DateTime @default(now())
 
+  @@index([nguoiTaoId])
+  @@index([createdAt])
   @@map("invoices")
 }
 
@@ -170,6 +243,8 @@ model OrderItem {
   giamGia   Int     @default(0)
   thanhTien Int
 
+  @@index([orderId])
+  @@index([productId])
   @@map("order_items")
 }
 
@@ -184,7 +259,10 @@ model InventoryTransaction {
   id              String                    @id @default(cuid())
   soThuTu         Int                       @unique @default(autoincrement())
   maGiaoDich      String                    @unique
-  product         Product                   @relation(fields: [productId], references: [id])
+  // onDelete: Cascade — khi xóa hẳn một sản phẩm (không phải Ngừng kinh
+  // doanh), lịch sử kho của riêng SP đó không còn ý nghĩa độc lập (SP không
+  // còn tồn tại để tra cứu), nên xóa theo luôn thay vì chặn xóa sản phẩm.
+  product         Product                   @relation(fields: [productId], references: [id], onDelete: Cascade)
   productId       String
   loai            InventoryTransactionType
   soLuongThayDoi  Int
@@ -196,6 +274,10 @@ model InventoryTransaction {
   ghiChu          String?
   createdAt       DateTime                  @default(now())
 
+  @@index([productId])
+  @@index([nguoiThucHienId])
+  @@index([createdAt])
+  @@index([loai])
   @@map("inventory_transactions")
 }
 
@@ -226,6 +308,10 @@ model IncomeExpense {
   nguoiTaoId String
   createdAt  DateTime              @default(now())
 
+  @@index([nguoiTaoId])
+  @@index([createdAt])
+  @@index([loai])
+  @@index([danhMuc])
   @@map("income_expenses")
 }
 
@@ -245,7 +331,78 @@ model Debt {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  @@index([loai])
+  @@index([ngayDenHan])
   @@map("debts")
+}
+
+enum PaymentReconciliationStatus {
+  KHOP
+  KHONG_KHOP
+  SAI_SO_TIEN
+}
+
+// Ghi nhận mỗi lượt báo có nhận qua webhook từ dịch vụ đối soát VietQR.
+// orderId nullable vì có thể không xác định được đơn hàng nào khớp
+// (nội dung chuyển khoản không đọc được mã đơn, hoặc đơn không còn hợp lệ).
+model PaymentTransaction {
+  id                 String                      @id @default(cuid())
+  soThuTu            Int                         @unique @default(autoincrement())
+  maGiaoDichNganHang String                      @unique
+  order              Order?                      @relation(fields: [orderId], references: [id])
+  orderId            String?
+  soTienNhan         Int
+  noiDungChuyenKhoan String
+  trangThaiDoiSoat   PaymentReconciliationStatus
+  rawPayload         Json?
+  createdAt          DateTime                    @default(now())
+
+  @@index([orderId])
+  @@index([trangThaiDoiSoat])
+  @@index([createdAt])
+  @@map("payment_transactions")
+}
+
+enum PreorderStatus {
+  CHO_HANG
+  SAN_SANG
+  DA_CHUYEN_DON
+  DA_HUY
+}
+
+// Sổ đặt trước (preorder), tách biệt khỏi Order — cùng cách tổ chức với Debt:
+// không đụng vào state machine Order đang chạy ổn định. Khi hàng về đủ và
+// nhân viên xác nhận, một Order thật được tạo (dùng chung orders.service.ts)
+// và Preorder chỉ còn giữ vai trò tham chiếu lịch sử (orderId).
+model Preorder {
+  id            String         @id @default(cuid())
+  soThuTu       Int            @unique @default(autoincrement())
+  ma            String         @unique
+  khachHang     Customer       @relation(fields: [khachHangId], references: [id])
+  khachHangId   String
+  nhanVien      Staff          @relation(fields: [nhanVienId], references: [id])
+  nhanVienId    String
+  // Một trong hai PHẢI có giá trị: product (SP đã có trong catalog nhưng hết
+  // hàng) hoặc tenSanPhamMoi (SP hoàn toàn mới, chưa có SKU/Product thật).
+  product       Product?       @relation(fields: [productId], references: [id])
+  productId     String?
+  tenSanPhamMoi String?
+  soLuong       Int
+  donGiaDuKien  Int
+  tienCoc       Int            @default(0)
+  trangThai     PreorderStatus @default(CHO_HANG)
+  ngayDuKienCo  DateTime?
+  ghiChu        String?
+  order         Order?         @relation(fields: [orderId], references: [id])
+  orderId       String?        @unique
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([khachHangId])
+  @@index([productId])
+  @@index([trangThai])
+  @@index([createdAt])
+  @@map("preorders")
 }
 
 model AccountingBalance {

@@ -70,3 +70,9 @@ export async function pay(id: string, soTien: number) {
   const debt = await prisma.debt.update({ where: { id }, data: { daThanhToan: daThanhToanMoi } })
   return serializeDebt(debt)
 }
+
+export async function remove(id: string) {
+  const current = await prisma.debt.findUnique({ where: { id } })
+  if (!current) throw notFound("Không tìm thấy khoản công nợ.")
+  await prisma.debt.delete({ where: { id } })
+}
