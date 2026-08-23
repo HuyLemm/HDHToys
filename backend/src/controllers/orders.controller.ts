@@ -63,7 +63,10 @@ export async function qrImage(req: Request, res: Response) {
 const itemSchema = z.object({
   productId: z.string().min(1),
   soLuong: z.number().int().min(1),
-  giaOverride: z.number().int().min(0).optional(),
+  // min(1) không phải min(0): giá 0 nghĩa là "cho không" một cách vô hình,
+  // khác với giảm giá (giamGia) — cách hợp lệ để tặng/giảm hẳn 100% là dùng
+  // giamGia = soLuong * đơn giá, có ghi rõ số tiền giảm trên đơn/hóa đơn.
+  giaOverride: z.number().int().min(1, "Đơn giá ghi đè phải lớn hơn 0.").optional(),
   giamGia: z.number().int().min(0).default(0),
 })
 
@@ -74,7 +77,7 @@ const createSchema = z.object({
   phuongThucThanhToan: z.enum(["TIEN_MAT", "CHUYEN_KHOAN", "THE", "QR_CODE"]),
   phuongThucNhanHang: z.enum(["KHACH_TOI_LAY", "SHIP"]).optional(),
   donViVanChuyen: z.enum(["SPX", "GRAB", "KHAC"]).optional(),
-  vat: z.number().int().min(0).default(0),
+  tienCoc: z.number().int().min(0).default(0),
   ghiChu: z.string().optional(),
   items: z.array(itemSchema).min(1),
 })

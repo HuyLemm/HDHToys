@@ -17,6 +17,8 @@ const JWT_SECRET: string = (() => {
 export interface AuthTokenPayload {
   sub: string
   vaiTro: StaffRole
+  /** Phải khớp Staff.tokenVersion tại thời điểm xác thực (requireAuth) — cách thu hồi token khi Admin reset mật khẩu/khóa tài khoản. */
+  tokenVersion: number
 }
 
 export function hashPassword(plain: string) {
@@ -32,5 +34,8 @@ export function signToken(payload: AuthTokenPayload) {
 }
 
 export function verifyToken(token: string): AuthTokenPayload {
-  return jwt.verify(token, JWT_SECRET) as AuthTokenPayload
+  // Ép cứng algorithms: ["HS256"] — không dựa hoàn toàn vào default của thư
+  // viện để chặn tấn công algorithm confusion (đổi alg sang "none" hoặc RS*
+  // rồi lợi dụng việc verify tự suy luận sai loại khóa).
+  return jwt.verify(token, JWT_SECRET, { algorithms: ["HS256"] }) as AuthTokenPayload
 }

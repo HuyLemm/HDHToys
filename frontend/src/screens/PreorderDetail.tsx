@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Search } from 'lucide-react'
-import { BackBtn, Badge, Btn, Spinner, ErrorBox, Modal, Field, Input } from '../components/ui'
+import { BackBtn, Badge, Btn, Spinner, ErrorBox, Modal, Field } from '../components/ui'
 import { api, ApiError, type Preorder, type PaymentMethod, type SalesChannel, type Product } from '../lib/api'
 import { preorderStatusLabel, paymentMethodLabel, salesChannelLabel } from '../lib/labels'
 import { useDialog } from '../lib/dialog'
@@ -154,7 +154,6 @@ function ConvertToOrderModal({ preorder, onClose, onConverted }: {
 }) {
   const [phuongThuc, setPhuongThuc] = useState<PaymentMethod>('TIEN_MAT')
   const [kenhBan, setKenhBan] = useState<SalesChannel>('TAI_CUA_HANG')
-  const [vat, setVat] = useState(0)
 
   const needsProduct = !preorder.productId
   const [productQuery, setProductQuery] = useState('')
@@ -179,7 +178,6 @@ function ConvertToOrderModal({ preorder, onClose, onConverted }: {
         productId: needsProduct ? product!.id : undefined,
         phuongThucThanhToan: phuongThuc,
         kenhBan,
-        vat: vat || undefined,
       })
       onConverted(result.order.id)
     } catch (err) {
@@ -242,8 +240,6 @@ function ConvertToOrderModal({ preorder, onClose, onConverted }: {
           </select>
         </Field>
       </div>
-      <Field label="VAT (VNĐ, tùy chọn)"><Input type="number" min={0} value={vat === 0 ? '' : vat} onChange={e => setVat(Math.max(0, Number(e.target.value)))} /></Field>
-
       <div className="flex gap-2 mt-2">
         <Btn onClick={handleSubmit} disabled={submitting}>{submitting ? 'Đang chuyển...' : 'Xác nhận chuyển thành đơn hàng'}</Btn>
         <Btn variant="secondary" onClick={onClose}>Hủy</Btn>

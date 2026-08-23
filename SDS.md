@@ -1,7 +1,7 @@
 # HDH Toys — Software Design Specification (SDS)
 
-**Phiên bản**: 1.0 (tài liệu hóa hiện trạng hệ thống — reverse-engineered từ mã nguồn)
-**Ngày**: 2026-08-21
+**Phiên bản**: 1.1 (tài liệu hóa hiện trạng hệ thống — reverse-engineered từ mã nguồn; cập nhật đồng bộ với SRS mục 3.19–3.22)
+**Ngày**: 2026-08-22
 **Tài liệu liên quan**: [SRS.md](./SRS.md) — yêu cầu chức năng/phi chức năng.
 
 ---
@@ -105,6 +105,7 @@ erDiagram
     Order ||--o{ PaymentTransaction : "nhan_qr"
     Product ||--o{ OrderItem : "ban"
     Product ||--o{ InventoryTransaction : "bien_dong"
+    Product ||--o| ProductImage : "co_anh"
     Customer ||--o{ Preorder : "dat_truoc"
     Product ||--o{ Preorder : "het_hang"
     Order ||--o| Preorder : "duoc_tao_tu"
@@ -124,12 +125,21 @@ erDiagram
         string barcode
         string danhMuc
         string nhaCungCap
-        int giaVon
-        int giaBan
+        int giaVon "phai > 0 (sua 2026-08-22)"
+        int phiVanChuyen "moi — cong vao gia von thuc"
+        int giaBan "phai > 0 (sua 2026-08-22)"
         int tonKho
         int tonKhoToiThieu
         int daBan
         enum trangThai
+        enum loaiSanPham "moi — CO_SAN | PRE_ORDER"
+        datetime ngayDuKienVe "moi — bat buoc neu PRE_ORDER"
+        bool nhacHang "moi — mac dinh false"
+    }
+    ProductImage {
+        string productId PK_FK "1-1 voi Product, onDelete Cascade"
+        bytes data
+        string mimeType
     }
     Customer {
         string id PK
@@ -137,6 +147,10 @@ erDiagram
         string sdt UK
         string email
         date ngaySinh
+        string diaChi "moi"
+        string luuY "moi"
+        string linkFacebook "moi"
+        enum nguonKhachHang "moi — SalesChannel, bat buoc khi tao (sua 2026-08-22)"
         enum hangKhachHang
         int diemTichLuy
     }
@@ -155,6 +169,10 @@ erDiagram
         enum kenhBan
         enum phuongThucThanhToan
         enum trangThai
+        bool daThanhToan "moi — doc lap voi trangThai"
+        enum phuongThucNhanHang "moi — KHACH_TOI_LAY | SHIP"
+        enum donViVanChuyen "moi — bat buoc neu SHIP"
+        string maVanDon "moi — chi SHIP"
         int tamTinh
         int giamGia
         int vat
@@ -181,7 +199,7 @@ erDiagram
         string id PK
         int soThuTu UK
         string maGiaoDich UK
-        string productId FK
+        string productId FK "onDelete Cascade tu Product (moi 2026-08-22)"
         enum loai
         int soLuongThayDoi
         int tonTruoc
@@ -248,10 +266,13 @@ erDiagram
 | `StaffRole` | `ADMIN`, `MANAGER`, `ACCOUNTANT`, `INVENTORY_STAFF` |
 | `StaffStatus` | `ACTIVE`, `LOCKED` |
 | `ProductStatus` | `CON_HANG`, `SAP_HET`, `HET_HANG`, `NGUNG_KINH_DOANH` |
+| `LoaiSanPham` (mới — mục 5.13) | `CO_SAN`, `PRE_ORDER` |
 | `CustomerTier` | `NEW`, `MEMBER`, `VIP` |
 | `OrderStatus` | `MOI`, `DANG_XU_LY`, `HOAN_THANH`, `DA_HUY`, `HOAN_TIEN` |
 | `PaymentMethod` | `TIEN_MAT`, `CHUYEN_KHOAN`, `THE`, `QR_CODE` |
-| `SalesChannel` | `TAI_CUA_HANG`, `DIEN_THOAI`, `FACEBOOK`, `KHAC` |
+| `SalesChannel` | `TAI_CUA_HANG`, `DIEN_THOAI`, `FACEBOOK`, `ZALO`, `TIKTOK`, `KHAC` (mở rộng 2026-08-22 — dùng chung cho `Order.kenhBan` VÀ `Customer.nguonKhachHang`) |
+| `PhuongThucNhanHang` (mới) | `KHACH_TOI_LAY`, `SHIP` |
+| `DonViVanChuyen` (mới) | `SPX`, `GRAB`, `KHAC` |
 | `InventoryTransactionType` | `NHAP`, `XUAT`, `DIEU_CHINH`, `TRA_HANG` |
 | `TransactionKind` | `THU`, `CHI` |
 | `IncomeExpenseCategory` | `BAN_HANG`, `NHAP_HANG`, `VAN_CHUYEN`, `LUONG`, `DIEN_NUOC`, `MARKETING`, `KHAC` |
@@ -298,21 +319,26 @@ Base path: `/api`. Tất cả endpoint (trừ `/health`, `/auth/login`) yêu c�
 
 | Method & Path | Request | Response |
 |---|---|---|
-| `GET /products` | `q?,danhMuc?,nhaCungCap?,trangThai?,page,pageSize≤100` | `{items,total,page,pageSize}` |
+| `GET /products` | `q?,danhMuc?,nhaCungCap?,trangThai?,loaiSanPham?,page,pageSize≤100` | `{items,total,page,pageSize}` |
 | `GET /products/:id` | | `Product` (404 nếu không có) |
-| `POST /products` | `sku,ten,barcode?,danhMuc,nhaCungCap,anhUrl?,giaVon≥0,giaBan≥0,tonKho≥0,tonKhoToiThieu≥0` | `201 Product` (409 SKU trùng) |
-| `PATCH /products/:id` | `Partial<{ten,barcode,danhMuc,nhaCungCap,anhUrl,giaVon,giaBan,tonKhoToiThieu}>` | `Product` — `tonKho` **không** sửa ở đây |
+| `POST /products` | `sku,ten,barcode?,danhMuc,nhaCungCap,anhUrl?,giaVon≥1,phiVanChuyen≥0,giaBan≥1,tonKho≥0,tonKhoToiThieu≥0,loaiSanPham?("CO_SAN"\|"PRE_ORDER", default CO_SAN),ngayDuKienVe?(bắt buộc nếu PRE_ORDER),nhacHang?` | `201 Product` (409 SKU trùng; 400 nếu `giaVon`/`giaBan` = 0 hoặc PRE_ORDER thiếu `ngayDuKienVe`) |
+| `PATCH /products/:id` | `Partial<{ten,barcode,danhMuc,nhaCungCap,anhUrl,giaVon≥1,phiVanChuyen,giaBan≥1,tonKhoToiThieu,loaiSanPham,ngayDuKienVe,nhacHang}>` | `Product` — `tonKho` **không** sửa ở đây; đổi `loaiSanPham→CO_SAN` tự xóa `ngayDuKienVe`/`nhacHang` |
 | `POST /products/:id/discontinue` | | set `trangThai=NGUNG_KINH_DOANH` |
 | `POST /products/:id/reactivate` | | suy lại `trangThai` từ tồn kho hiện tại |
+| `GET /products/:id/image` | | `image/{jpeg\|png\|webp\|gif}` (404 nếu chưa có ảnh) |
+| `POST /products/:id/image` | `multipart/form-data`, field `image` (≤3MB, jpeg/png/webp/gif) | `201 {ok:true}` |
+| `DELETE /products/:id/image` | | `204` |
+| `DELETE /products/:id` | | `204`; `400` nếu còn OrderItem/Preorder tham chiếu (mục 4.16) — lịch sử kho tự xóa theo (cascade) |
 
 ### 4.4 Customers — chỉ cần đăng nhập
 
 | Method & Path | Request | Response |
 |---|---|---|
-| `GET /customers` | `q?,hangKhachHang?,page,pageSize` | `{items,total,page,pageSize}` |
+| `GET /customers` | `q?,hangKhachHang?,nguonKhachHang?,page,pageSize` | `{items,total,page,pageSize}` |
 | `GET /customers/:id` | | `Customer` |
-| `POST /customers` | `hoTen,sdt,email?,ngaySinh?,hangKhachHang?` | `201` (409 SĐT trùng) |
-| `PATCH /customers/:id` | `Partial<{hoTen,email,ngaySinh,hangKhachHang,diemTichLuy}>` | `Customer` |
+| `POST /customers` | `hoTen,sdt,nguonKhachHang(bắt buộc — SalesChannel),email?,ngaySinh?,diaChi?,luuY?,linkFacebook?,hangKhachHang?(default NEW)` | `201` (409 SĐT trùng; 400 nếu thiếu `nguonKhachHang`) |
+| `PATCH /customers/:id` | `Partial<{hoTen,email,ngaySinh,diaChi,luuY,linkFacebook,nguonKhachHang,hangKhachHang,diemTichLuy}>` | `Customer` |
+| `DELETE /customers/:id/notes/:noteId` | | `204` |
 | `GET /customers/:id/overview` | | `{customer,kpi,danhMucThuongMua,sanPhamMuaNhieuNhat,lanMuaGanNhat,donDangXuLyHienTai}` |
 | `GET /customers/:id/orders` | `trangThai?("active"\|enum),page,pageSize` | `{items,total,page,pageSize}` |
 | `GET /customers/:id/products` | | `{items:[{productId,ten,sku,tongSoLuong,soLanMua,lanMuaGanNhat,tongChiTieu}],total}` |
@@ -324,10 +350,15 @@ Base path: `/api`. Tất cả endpoint (trừ `/health`, `/auth/login`) yêu c�
 
 | Method & Path | Request | Response |
 |---|---|---|
-| `GET /orders` | `q?,trangThai?,khachHangId?,nhanVienId?,phuongThucThanhToan?,tuNgay?,denNgay?,page,pageSize` | paginated, kèm `khachHang,nhanVien,items+product` |
-| `GET /orders/:id` | | `Order` chi tiết |
-| `POST /orders` | `khachHangId,nhanVienId?,kenhBan?,phuongThucThanhToan,vat?,ghiChu?,items:[{productId,soLuong,giaOverride?,giamGia?}]` | `201 Order` |
-| `PATCH /orders/:id/status` | `{trangThai}` | `Order` — xem máy trạng thái mục 5.1 |
+| `GET /orders` | `q?,trangThai?,khachHangId?,nhanVienId?,phuongThucThanhToan?,daThanhToan?,phuongThucNhanHang?,coMaVanDon?,tuNgay?,denNgay?,sortBy?("createdAt"\|"tongCong", default createdAt),sortOrder?("asc"\|"desc", default desc),page,pageSize` | paginated, kèm `khachHang,nhanVien,items+product(+loaiSanPham)` |
+| `GET /orders/top-customers` | `limit?(default 5,≤50)` | `{items:[{khachHang:{id,hoTen,sdt},tongChiTieu,soDonHoanThanh}]}` — chỉ tính đơn `HOAN_THANH`, `groupBy khachHangId` sắp theo tổng giảm dần |
+| `GET /orders/:id` | | `Order` chi tiết (kèm `qrCode`) |
+| `POST /orders` | `khachHangId,nhanVienId?,kenhBan?,phuongThucThanhToan,phuongThucNhanHang?(default KHACH_TOI_LAY),donViVanChuyen?(bắt buộc nếu SHIP),vat?,ghiChu?,items:[{productId,soLuong,giaOverride?,giamGia?}]` | `201 Order` — **trừ tồn kho ngay trong transaction tạo đơn** (mục 5.12); `400` nếu tồn kho không đủ |
+| `PATCH /orders/:id/status` | `{trangThai}` | `Order` — xem máy trạng thái mục 5.1; chuyển `DA_HUY` tự hoàn tồn kho (mục 5.12) |
+| `PATCH /orders/:id/payment-status` | `{daThanhToan:boolean}` | `Order` |
+| `PATCH /orders/:id/delivery` | `{phuongThucNhanHang,donViVanChuyen?}` | `Order` — validate như lúc tạo |
+| `PATCH /orders/:id/tracking-code` | `{maVanDon?}` | `Order` — `400` nếu đơn không phải SHIP; truyền rỗng/`undefined` để xóa mã |
+| `DELETE /orders/:id` | | `204`; hoàn tồn kho nếu đơn đang Mới/Đang xử lý trước khi xóa (mục 4.16/5.12) |
 
 ### 4.6 Inventory — mutation `requireRole("ADMIN","MANAGER","INVENTORY_STAFF")`; đọc chỉ cần đăng nhập
 
@@ -344,9 +375,10 @@ Base path: `/api`. Tất cả endpoint (trừ `/health`, `/auth/login`) yêu c�
 
 | Method & Path | Request | Response |
 |---|---|---|
-| `GET /invoices` | `q?,khachHangId?,phuongThucThanhToan?,nguoiTaoId?,tuNgay?,denNgay?,page,pageSize` | paginated |
-| `GET /invoices/:id` | | `Invoice` chi tiết |
-| `GET /invoices/:id/pdf` | | `application/pdf` (inline) |
+| `GET /invoices` | `q?,khachHangId?,phuongThucThanhToan?,nguoiTaoId?,tuNgay?,denNgay?,page,pageSize` | paginated; `order` kèm `phuongThucNhanHang/donViVanChuyen/maVanDon/preorder{ma,tienCoc}` |
+| `GET /invoices/:id` | | `Invoice` chi tiết (đầy đủ như trên) |
+| `GET /invoices/:id/pdf` | | `application/pdf` (inline) — nội dung xem mục 5.6 (đã cập nhật: badge Pre-order theo dòng, khối thông tin giao hàng, dòng cọc/còn lại nếu có) |
+| `DELETE /invoices/:id` | `ADMIN` | `204`; đơn hàng gốc giữ nguyên |
 
 ### 4.8 Search — chỉ cần đăng nhập
 
@@ -442,11 +474,11 @@ Xem yêu cầu tại **SRS.md mục 3.18 (FR-DEL.1–9)**. Đây là thay đổi
 |---|---|---|
 | `DELETE /customers/:id` | — | Có Order hoặc Preorder tham chiếu |
 | `DELETE /customers/:id/notes/:noteId` | — | Không có |
-| `DELETE /products/:id` | `ADMIN,MANAGER,INVENTORY_STAFF` | Có OrderItem, InventoryTransaction, hoặc Preorder tham chiếu |
+| `DELETE /products/:id` | `ADMIN,MANAGER,INVENTORY_STAFF` | *(Sửa 2026-08-22)* Có OrderItem hoặc Preorder **còn tồn tại** tham chiếu — InventoryTransaction **không còn chặn**, tự xóa theo (cascade, mục 5.13) |
 | `DELETE /income-expense/:id` | — | Không có |
 | `DELETE /debts/:id` | — | Không có |
-| `DELETE /preorders/:id` | — | `trangThai = DA_CHUYEN_DON` |
-| `DELETE /orders/:id` | `ADMIN` | Có Invoice, PaymentTransaction, hoặc Preorder tham chiếu |
+| `DELETE /preorders/:id` | — | *(Sửa 2026-08-22 — nới lỏng)* Không có điều kiện chặn nào nữa — xóa được ở mọi `trangThai`, kể cả `DA_CHUYEN_DON` |
+| `DELETE /orders/:id` | `ADMIN` | Có Invoice, PaymentTransaction, hoặc Preorder tham chiếu. *(Mới 2026-08-22)* Nếu `trangThai ∈ {MOI, DANG_XU_LY}`, hoàn tồn kho đã giữ trước khi xóa (mục 5.12) |
 | `DELETE /invoices/:id` | `ADMIN` | Không có (order gốc giữ nguyên) |
 | `DELETE /inventory/history/:id` | `ADMIN` | Không phải giao dịch **gần nhất** của sản phẩm đó (theo `soThuTu`) |
 | `DELETE /staff/:id` | `ADMIN` | Tự xóa chính mình; là tài khoản hệ thống (`system@hdhtoys.internal`); hoặc có Order/Invoice/InventoryTransaction/IncomeExpense/Preorder tham chiếu |
@@ -478,9 +510,9 @@ stateDiagram-v2
 
 - Cạnh `MOI/DANG_XU_LY --> HOAN_THANH` gắn nhãn "tự động" (mục 5.8, `orders.service.ts#completeOrderViaPayment`) do hệ thống kích hoạt khi đối soát thanh toán QR khớp, không phải nhân viên chuyển tay; đây là ngoại lệ có chủ đích so với 4 cạnh còn lại (do nhân viên điều khiển qua `PATCH /orders/:id/status`).
 - Chuyển sai cạnh → `400 "Không thể chuyển trạng thái từ X sang Y."`.
-- **Side-effect khi → `HOAN_THANH`** (trong 1 `$transaction`): với mỗi `OrderItem` → tăng `product.daBan`, gọi `applyInventoryTransaction(XUAT, -soLuong, thamChieu=order.ma)`; tự tạo `Invoice` mới (mã `HDH-INV-...`, `nguoiTaoId` = người thực hiện chuyển trạng thái). Nếu tồn kho không đủ → toàn bộ transaction rollback (kể cả việc đổi trạng thái).
+- **Side-effect khi → `HOAN_THANH`** (trong 1 `$transaction`): *(Sửa 2026-08-22 — xem mục 5.12 để biết lý do đổi thiết kế)* với mỗi `OrderItem` → chỉ tăng `product.daBan`; tự tạo `Invoice` mới (mã `HDH-INV-...`, `nguoiTaoId` = người thực hiện chuyển trạng thái). **Không còn gọi `applyInventoryTransaction(XUAT, ...)` ở bước này** — tồn kho đã bị trừ từ lúc `POST /orders` tạo đơn (mục 5.12), tránh trừ hai lần.
 - **Side-effect khi `HOAN_THANH → HOAN_TIEN`**: với mỗi `OrderItem` → giảm `product.daBan`, gọi `applyInventoryTransaction(TRA_HANG, +soLuong, ghiChu="Hoàn kho do hoàn tiền đơn hàng")` — hoàn tồn kho; **không** sinh hóa đơn điều chỉnh/credit-note.
-- Chuyển sang `DA_HUY` (từ `MOI`/`DANG_XU_LY`) không có side-effect kho (vì kho chưa từng bị trừ ở các trạng thái này).
+- **Side-effect khi → `DA_HUY`** (từ `MOI`/`DANG_XU_LY`): *(Sửa 2026-08-22 — trước đây "không có side-effect kho", nay ngược lại)* với mỗi `OrderItem` → gọi `applyInventoryTransaction(TRA_HANG, +soLuong, ghiChu="Hoàn tồn kho do hủy đơn hàng")` — hoàn lại đúng phần tồn kho đã giữ từ lúc tạo đơn (mục 5.12).
 
 ### 5.2 Cỗ máy giao dịch kho (`applyInventoryTransaction`)
 
@@ -599,6 +631,91 @@ Hệ quả: chỉ có thể "undo" tuần tự từ giao dịch mới nhất tr�
 
 ---
 
+### 5.12 Giữ tồn kho ngay khi tạo đơn hàng (Stock Reservation) — **Đã triển khai** (2026-08-22)
+
+Tương ứng FR-ORD.11–14, FR-INV.6/8 (SRS mục 3.20). Đây là thay đổi thiết kế lớn nhất trong bản cập nhật này — phát hiện từ phản hồi thực tế: với thiết kế cũ (chỉ trừ kho lúc Hoàn thành), tạo 10 đơn × 1 sản phẩm trong khi tồn kho chỉ còn 5 vẫn được chấp nhận hết vì không đơn nào "đã xong" — chỉ vỡ trận khi cố hoàn thành đơn thứ 6 trở đi, và tồn kho hiển thị suốt thời gian đó vẫn là 5, gây hiểu sai là còn bán được.
+
+1. **Trừ kho tại `orders.service.ts#create`**: ngay trong `$transaction` tạo `Order` + `OrderItem[]`, sau khi đã có mã đơn cuối cùng (`ma`), gộp số lượng theo `productId` (đề phòng một đơn có nhiều dòng cùng sản phẩm) rồi gọi `applyInventoryTransaction(tx, {loai:"XUAT", soLuongThayDoi:-soLuong, thamChieu: ma, ghiChu:"Trừ tồn kho khi tạo đơn hàng"})` cho từng sản phẩm. Hàm này tự throw `400` nếu tồn kho không đủ (mục 5.2) — toàn bộ transaction (kể cả việc tạo `Order`) bị rollback, không tạo đơn một phần.
+2. **`applyOrderCompletion` không còn trừ kho**: tách hoàn toàn khỏi bước Hoàn thành — chỉ còn tăng `daBan` + sinh `Invoice`. Dùng chung bởi cả `updateStatus` (nhân viên) và `completeOrderViaPayment` (webhook QR, mục 5.8) — hai luồng vẫn không lệch hành vi với nhau, chỉ khác so với *trước đây*.
+3. **Hoàn lại khi hủy (`updateStatus` → `DA_HUY`)**: chỉ xảy ra từ `MOI`/`DANG_XU_LY` (theo `canTransition`) — tại các trạng thái này tồn kho chắc chắn vẫn đang bị giữ (chưa từng được giải phóng), nên hoàn lại bằng `applyInventoryTransaction(TRA_HANG, +soLuong, ghiChu="Hoàn tồn kho do hủy đơn hàng")` cho mỗi `OrderItem` là an toàn, không cần kiểm tra thêm điều kiện.
+4. **Hoàn lại khi xóa hẳn đơn (`orders.service.ts#remove`)**: đây là điểm dễ bỏ sót nhất — xóa thẳng một đơn đang `MOI`/`DANG_XU_LY` (không đi qua bước hủy trước) vẫn phải hoàn lại tồn kho, nếu không tồn kho đã trừ lúc tạo sẽ "biến mất" vĩnh viễn. Ngược lại, nếu đơn đã ở `DA_HUY` (tồn kho đã hoàn lại từ bước hủy) thì xóa tiếp theo **không** được hoàn lại lần hai. `remove()` kiểm tra `order.trangThai` trước khi quyết định có chạy vòng hoàn kho hay không:
+   ```
+   remove(id):
+     order = findUnique(id, include items)
+     nếu có Invoice/PaymentTransaction/Preorder tham chiếu → 400 (như cũ, mục 4.16)
+     trong 1 $transaction:
+       nếu order.trangThai ∈ {MOI, DANG_XU_LY}:
+         với mỗi item → applyInventoryTransaction(TRA_HANG, +soLuong, ghiChu="Hoàn tồn kho do xóa đơn hàng")
+       // DA_HUY: không làm gì thêm — đã hoàn ở bước hủy trước đó
+       order.delete()
+   ```
+5. **Đơn hoàn thành/hoàn tiền không đi qua nhánh này** — `remove()` đã bị chặn hoàn toàn bởi điều kiện "có Invoice" trước khi tới đoạn kiểm tra `trangThai`, nên không có nguy cơ hoàn kho sai cho các đơn đã Hoàn thành.
+6. **Không có row-lock chống race condition** (xem SRS 6.13) — kiểm tra + trừ tồn kho nằm trong một transaction Postgres ở mức isolation mặc định, không dùng `SELECT ... FOR UPDATE`; hai request tạo đơn cho cùng sản phẩm gửi lên gần như đồng thời về lý thuyết vẫn có thể cả hai đọc cùng một số tồn trước khi commit. Rủi ro này vốn đã tồn tại ở mọi thao tác kho khác dùng chung `applyInventoryTransaction`, không phải vấn đề riêng của tính năng này — chấp nhận được ở quy mô 1 cửa hàng/vài terminal.
+7. **Đã kiểm thử qua HTTP thực tế**: tạo 5 đơn × 1 sản phẩm trên tồn kho 5 → tồn kho giảm dần đúng theo từng đơn → đơn thứ 6 bị chặn "Tồn kho không đủ"; hủy 1 đơn → tồn kho tăng lại đúng 1; hoàn thành 1 đơn → tồn kho không đổi thêm; hoàn tiền đơn đó → tồn kho tăng lại lần nữa; xóa thẳng 1 đơn đang Mới (chưa hủy) → tồn kho hoàn lại đúng; xóa 1 đơn đã hủy trước → tồn kho không bị cộng thêm lần hai. Sổ lịch sử kho ghi đúng từng bước, không có dòng trùng.
+
+### 5.13 Ảnh sản phẩm & xóa cascade lịch sử kho khi xóa sản phẩm — **Đã triển khai** (2026-08-22)
+
+1. **Lưu trữ ảnh**: bảng `ProductImage` riêng (1-1 với `Product` qua `productId` là PK luôn luôn), cột `data: Bytes` (Postgres `bytea`) + `mimeType`. Tách bảng riêng — không phải cột trên `Product` — để các API danh sách/chi tiết sản phẩm hiện có (không `include` quan hệ này) không vô tình kéo theo dữ liệu ảnh nặng vào mọi response. Lưu trực tiếp trong Postgres (không lưu ổ đĩa server) vì Render free tier có filesystem tạm, mất dữ liệu mỗi lần redeploy/restart.
+2. **Upload**: `multer` với `memoryStorage()` (không viết file tạm ra đĩa), giới hạn 3MB, validate MIME type ở cả middleware (tên file) và service (nội dung buffer) trước khi `upsert` vào `ProductImage`.
+3. **Cạm bẫy đã gặp khi triển khai**: Prisma trả cột `Bytes` dạng `Uint8Array` thường, không phải Node `Buffer` — truyền trực tiếp vào `res.send()` khiến Express tưởng là object JSON thường và serialize từng byte thành `{"0":137,"1":80,...}` thay vì gửi nhị phân thật. Khắc phục bằng bọc `res.send(Buffer.from(image.data))`.
+4. **Xóa cascade lịch sử kho (FR-INV.9, FR-DEL.2 sửa)**: đổi quan hệ `InventoryTransaction.product` thành `onDelete: Cascade` trong schema (trước đó là `RESTRICT` mặc định của Prisma cho FK bắt buộc — migration gốc `20260819041627_add_inventory_transaction` sinh ra `ON DELETE RESTRICT`). Lý do đổi: người dùng phát hiện xóa một Đơn hàng không xóa theo `InventoryTransaction` gốc mà đơn đó đã tạo ra lúc tạo đơn (mục 5.12) — nên dù đơn đã bị xóa, sản phẩm vẫn còn ít nhất 1 dòng lịch sử kho tham chiếu, khiến `products.service.ts#remove` (kiểm tra `inventoryTransactionCount > 0`) chặn xóa sản phẩm **vĩnh viễn**, ngay cả khi không còn Đơn hàng/Đặt trước nào tham chiếu. Sau khi đổi: `remove()` chỉ còn kiểm tra `orderItemCount`/`preorderCount`; nếu cả hai bằng 0, `prisma.product.delete()` tự cascade xóa hết `ProductImage` (đã cascade từ trước) và `InventoryTransaction` liên quan.
+5. **Vì sao chấp nhận mất lịch sử kho khi xóa sản phẩm**: một khi sản phẩm không còn Đơn hàng/Đặt trước nào tham chiếu và người dùng chọn "xóa hẳn" (không phải "Ngừng kinh doanh"), lịch sử nhập/xuất riêng của SKU đó không còn đối tượng để tra cứu — khác với việc xóa 1 dòng lịch sử kho lẻ (`removeTransaction`, mục 5.11) vốn phải giữ tính liên tục `tonTruoc/tonSau` cho các dòng **sau** nó của một sản phẩm **vẫn còn tồn tại**. Ở đây sản phẩm biến mất hoàn toàn nên không có "các dòng sau" cần bảo toàn.
+
+### 5.14 Phân loại sản phẩm Pre-order/Có sẵn, phí vận chuyển & hiển thị trên đơn/hóa đơn — **Đã triển khai** (2026-08-22)
+
+Tương ứng FR-PROD.7–9 (SRS mục 3.19).
+
+1. **`Product.loaiSanPham`/`ngayDuKienVe`/`nhacHang`** — độc lập hoàn toàn với sổ `Preorder` (mục 5.9): không tạo record `Preorder` nào, chỉ là nhãn + ngày dự kiến + cờ nhắc trên chính `Product`. Hàm `resolveProductType(loaiSanPham, ngayDuKienVe, nhacHang)` trong `products.service.ts` áp dụng cho cả `create`/`update`: nếu `CO_SAN` → luôn set `ngayDuKienVe=null, nhacHang=false`; nếu `PRE_ORDER` mà thiếu `ngayDuKienVe` → throw `400` (FR-VAL.2).
+2. **Banner nhắc hàng**: tính **client-side**, không lưu cờ "đã tới hạn" trong DB — `ProductDetail.tsx` và `Dashboard.tsx` tự so `ngayDuKienVe <= new Date()` mỗi lần render khi `nhacHang=true`. Dashboard gọi `GET /products?loaiSanPham=PRE_ORDER&pageSize=100` rồi lọc/sắp xếp phía client (chấp nhận được ở quy mô nhỏ; nếu số SKU Pre-order tăng lớn, nên chuyển lọc theo ngày lên server).
+3. **Một đơn hàng dùng chung một flow dù sản phẩm khác loại nhau**: xác nhận lại rằng `orders.service.ts#create`/`CreateOrder.tsx` chưa từng phân biệt `loaiSanPham` khi thêm sản phẩm vào đơn — không cần sửa gì ở luồng tạo đơn. Phần thực sự thiếu là **hiển thị**: `orderInclude`/`invoiceInclude` được bổ sung `product.loaiSanPham` vào `select`, và `OrderDetail.tsx`/`InvoiceDetail.tsx`/`invoicePdf.ts` render badge "Pre-order" cạnh tên sản phẩm cho đúng dòng nếu `product.loaiSanPham === "PRE_ORDER"`.
+4. **`Product.phiVanChuyen`**: cộng vào `giaVon` khi snapshot giá vốn trên `OrderItem` lúc tạo đơn (`giaVon: product.giaVon + product.phiVanChuyen`) và khi tính giá trị tồn kho (`tonKho × (giaVon + phiVanChuyen)`) — phản ánh đúng chi phí thực tế đưa hàng về, không chỉ giá nhập.
+
+### 5.15 Vận chuyển, trạng thái thanh toán & mã vận đơn trên đơn hàng — **Đã triển khai** (2026-08-22)
+
+Tương ứng FR-ORD.7–9 (SRS mục 3.19).
+
+1. **`daThanhToan`**: cột boolean độc lập, sửa qua `PATCH /orders/:id/payment-status` bất kỳ lúc nào, không gate theo `trangThai`. `completeOrderViaPayment` (webhook QR khớp, mục 5.8) tự set `daThanhToan=true` cùng lúc đổi `HOAN_THANH` vì tiền thật đã được ngân hàng xác nhận — khác với luồng nhân viên tự hoàn thành tay (không tự đổi cờ này).
+2. **`phuongThucNhanHang`/`donViVanChuyen`**: hàm `resolveDelivery(phuongThucNhanHang, donViVanChuyen)` dùng chung cho `create` và `updateDelivery` — `SHIP` mà thiếu `donViVanChuyen` → `400`; `KHACH_TOI_LAY` → luôn set `donViVanChuyen=null` (tránh dữ liệu vô lý "khách tới lấy nhưng ship qua SPX").
+3. **`maVanDon`**: `updateTrackingCode(orderId, maVanDon?)` — `400` nếu đơn không phải `SHIP`; truyền chuỗi rỗng/`undefined` để xóa mã đã nhập nhầm. Hiển thị kèm nút "Chép mã" (dùng `navigator.clipboard.writeText`) ở cả chi tiết đơn hàng và danh sách Hóa đơn (mục 4.7/4.16) — cân nhắc đưa vào `/revenue/detail` (báo cáo tổng hợp theo ngày) nhưng quyết định **không** đưa vào vì 1 dòng ở đó gộp nhiều đơn/ngày, một mã vận đơn không có vị trí tự nhiên để hiển thị ở mức đó; Đơn hàng + Hóa đơn (cả 2 đều ở mức 1-dòng-1-đơn) đã đủ phủ yêu cầu "hiển thị ở báo cáo/tổng hợp để gửi khách".
+
+### 5.16 Sắp xếp & xếp hạng khách hàng ở danh sách đơn hàng — **Đã triển khai** (2026-08-22)
+
+Tương ứng FR-ORD.5/10 (SRS mục 3.19).
+
+1. **Sắp xếp**: `orders.service.ts#list` nhận thêm `sortBy` (`createdAt`|`tongCong`) + `sortOrder` (`asc`|`desc`), truyền trực tiếp vào `orderBy: {[sortBy]: sortOrder}` của Prisma — không cần thay đổi gì ở tầng DB (không index mới, vì đã có sẵn `@@index([createdAt])`/PK cho các cột này, và danh sách vẫn phân trang bình thường).
+2. **Xếp hạng khách hàng (`getTopCustomers`)**: `prisma.order.groupBy({by:["khachHangId"], where:{trangThai:"HOAN_THANH"}, _sum:{tongCong:true}, _count:{id:true}, orderBy:{_sum:{tongCong:"desc"}}, take: limit})`, sau đó fetch tên/SĐT khách hàng theo danh sách ID kết quả (1 round-trip tổng hợp thay vì N+1). Chỉ tính đơn `HOAN_THANH` — khớp với triết lý "chỉ đơn Hoàn thành là doanh thu thật" đã áp dụng xuyên suốt ở `/revenue/*` (mục 5.4). Route `GET /orders/top-customers` PHẢI mount **trước** `GET /orders/:id` trong `orders.ts` để Express không hiểu nhầm `"top-customers"` là một `:id` (cùng cạm bẫy thứ tự route đã ghi nhận ở mục 5.8 điểm 7, nhưng lần này là giữa hai route trong cùng router, không phải giữa hai router).
+
+### 5.17 Tiền cọc/thanh toán cuối cùng trên hóa đơn (nguồn từ Đặt trước) — **Đã triển khai** (2026-08-22)
+
+Tương ứng FR-INVO.6 (SRS mục 3.7), quyết định phạm vi đã chốt khi triển khai: **chỉ** áp dụng cho hóa đơn của đơn hàng được chuyển đổi từ một `Preorder` có `tienCoc > 0` — không mở rộng thành một trường "tiền cọc" độc lập trên `Order`/`Invoice`.
+
+1. `invoiceInclude`/`invoicePdf.ts` được bổ sung `order.preorder: {select:{ma,tienCoc}}` — tận dụng quan hệ 1-1 `Order.preorder` **đã có sẵn** từ mục 5.9 (không cần cột/quan hệ mới).
+2. Khi `order.preorder && order.preorder.tienCoc > 0`: hóa đơn (web + PDF) đổi nhãn dòng tổng từ "Tổng cộng" thành "**Tổng tiền khách phải thanh toán**", thêm dòng "**Tiền đã cọc** ({mã đặt trước})" trừ đi, và dòng "**Thanh toán cuối cùng**" = `tongCong - tienCoc`. Đơn hàng không xuất phát từ Đặt trước (hoặc Đặt trước không cọc) hiển thị "Tổng cộng" như trước, không đổi gì.
+3. **Vì sao không tách "tiền cọc" thành trường riêng trên `Order`**: `Preorder.tienCoc` đã là nguồn sự thật duy nhất cho số tiền cọc kể từ mục 5.9; nhân bản thêm một cột trên `Order` sẽ tạo hai nguồn dữ liệu cho cùng một số tiền, rủi ro lệch nhau nếu sau này sửa 1 trong 2 chỗ mà quên chỗ còn lại — quan hệ `Order.preorder` 1-1 đã đủ để join lấy số liệu tại thời điểm hiển thị.
+
+### 5.18 Xác thực dữ liệu bắt buộc bổ sung — **Đã triển khai** (2026-08-22)
+
+Tương ứng FR-VAL.1–4 (SRS mục 3.21). Mọi ràng buộc dưới đây được thực thi ở **cả hai lớp**: zod schema tại controller (nguồn xác thực chính, không thể bỏ qua bằng cách gọi API trực tiếp) và kiểm tra tương đương ở form React trước khi gửi request (trải nghiệm nhanh, không cần round-trip server để báo lỗi cơ bản).
+
+| Ràng buộc | Lớp server | Lớp client |
+|---|---|---|
+| `Product.giaVon`/`giaBan` > 0 | `z.number().int().min(1, "...")` ở `products.controller.ts` | Kiểm tra `giaVon<=0 \|\| giaBan<=0` trước khi submit ở `CreateProductModal`/`EditProductModal` |
+| `Product` Pre-order phải có `ngayDuKienVe` | `resolveProductType()` throw `400` ở service (mục 5.14) — không đặt ở zod vì cần biết giá trị **đã merge** với dữ liệu hiện tại khi `update` (partial) | Kiểm tra trước khi submit nếu `loaiSanPham==='PRE_ORDER' && !ngayDuKienVe` |
+| `Customer.nguonKhachHang` bắt buộc khi tạo | Bỏ `.optional()` khỏi `createSchema` (`customers.controller.ts`) | Dropdown luôn có giá trị mặc định được chọn sẵn (không có option rỗng) — không cần thêm check riêng vì UI không cho phép trạng thái "chưa chọn" |
+
+Component `Field` (UI kit chung, `components/ui.tsx`) được bổ sung prop `required?: boolean` — hiển thị dấu `*` màu đỏ cạnh tên trường khi `true`, áp dụng cho toàn bộ các trường bắt buộc kể trên và các trường bắt buộc đã có từ trước (SKU/tên/danh mục/nhà cung cấp, họ tên/SĐT khách hàng).
+
+### 5.19 Hộp thoại xác nhận/thông báo trong ứng dụng (thay `window.confirm`/`alert`) — **Đã triển khai** (2026-08-22)
+
+Tương ứng FR-UI.1–2 (SRS mục 3.22).
+
+1. **`lib/dialog.tsx`** — một React Context (`DialogProvider`) mount ở gốc `App.tsx` (bọc quanh `AppShell`, bên trong `AuthProvider`), cung cấp hook `useDialog()` trả về `{confirm(message, options?): Promise<boolean>, alert(message, options?): Promise<void>}`. Cả hai render qua component `Modal` sẵn có (`components/ui.tsx`) — không tạo hệ UI kit riêng.
+2. **Cơ chế**: gọi `confirm()`/`alert()` lưu một record `pending` vào state kèm hàm `resolve` của Promise; modal hiển thị dựa trên `pending`; bấm nút xác nhận/đóng gọi `resolve(...)` rồi xóa `pending` — cho phép viết `if (!(await dialog.confirm(msg))) return` gọn như cách dùng `window.confirm` cũ, nhưng chạy trong React tree thay vì popup trình duyệt.
+3. **Áp dụng toàn bộ 27 lượt gọi cũ** (20 `confirm()` + 7 `alert()`) trải trên 13 file màn hình (Products, ProductDetail, Customers, CustomerDetail, Orders/OrderDetail, Invoices/InvoiceDetail, Preorders/PreorderDetail, InventoryHistory, KeToan, ThuChi, CaiDat) — mỗi component gọi `useDialog()` ở đầu hàm và thay trực tiếp lời gọi gốc; các hàm xử lý sự kiện vốn đã `async` (đang `await` API call ngay sau) nên không cần đổi chữ ký hàm, chỉ thêm `await` trước lệnh gọi dialog.
+4. **Nút xác nhận mặc định màu đỏ (`variant="danger"`)** trừ khi truyền `danger:false` — vì tuyệt đại đa số lời gọi là hành động xóa/hủy không thể hoàn tác; nhãn nút mặc định "Xóa", override bằng `confirmLabel` cho các trường hợp khác nghĩa (ví dụ "Hủy đơn" khi hủy đặt trước).
+
+---
+
 ## 6. Thiết kế bảo mật
 
 - **Hash mật khẩu**: `bcryptjs`, cost factor 10.
@@ -618,14 +735,16 @@ Hệ quả: chỉ có thể "undo" tuần tự từ giao dịch mới nhất tr�
 
 ```mermaid
 flowchart TD
-    Main["main.tsx"] --> App["App.tsx (AuthProvider + AppShell)"]
+    Main["main.tsx"] --> App["App.tsx (AuthProvider + DialogProvider + AppShell)"]
     App -->|"chưa đăng nhập"| Login["Login.tsx"]
     App -->|"đã đăng nhập"| Shell["Layout: Sidebar + Header"]
     Shell --> Screen["18 screens (theo state 'Screen')"]
-    Screen --> UIKit["components/ui.tsx (Badge, Table, Modal, KpiCard, Pagination...)"]
+    Screen --> UIKit["components/ui.tsx (Badge, Table, Modal, KpiCard, Pagination, Field...)"]
     Screen --> APIClient["lib/api.ts"]
+    Screen --> DialogHook["useDialog() — confirm/alert dạng modal (mục 5.19)"]
     Shell --> Search["GlobalSearchDropdown → api.search"]
     App --> AuthCtx["lib/auth.tsx (AuthContext)"]
+    App --> DialogCtx["lib/dialog.tsx (DialogProvider — mới 2026-08-22)"]
 ```
 
 ### 7.2 Điều hướng
@@ -645,7 +764,7 @@ Không dùng React Router. `App.tsx` giữ state `{screen: Screen, id?: string}`
 
 ### 7.5 UI kit dùng chung (`components/ui.tsx`)
 
-`Badge` (màu theo trạng thái, tra bảng `statusColor`), `KpiCard`, `Table`, `FilterBar`, `SearchInput`, `Select`, `Pagination` (cửa sổ ±2 trang), `Tabs`, `Modal` (div đơn giản, click-outside-to-close, không dùng portal), `Field/Input`, `ErrorBox`, `Spinner`, cùng formatter `formatMoney`/`formatDate`/`formatDateTime` (locale `vi-VN`, tiền tệ hậu tố "VNĐ").
+`Badge` (màu theo trạng thái, tra bảng `statusColor`), `KpiCard`, `Table`, `FilterBar`, `SearchInput`, `Select`, `Pagination` (cửa sổ ±2 trang), `Tabs`, `Modal` (div đơn giản, click-outside-to-close, không dùng portal — tái sử dụng làm nền cho `lib/dialog.tsx`, mục 5.19), `Field/Input` (`Field` có thêm prop `required?: boolean` — mới 2026-08-22, hiện dấu `*` đỏ, mục 5.18), `ErrorBox`, `Spinner`, cùng formatter `formatMoney`/`formatDate`/`formatDateTime` (locale `vi-VN`, tiền tệ hậu tố "VNĐ").
 
 ### 7.6 Danh sách 18 màn hình
 
@@ -669,7 +788,7 @@ Không dùng React Router. `App.tsx` giữ state `{screen: Screen, id?: string}`
 
 ## 8. Luồng nghiệp vụ chính (Sequence Diagrams)
 
-### 8.1 Tạo đơn hàng → Hoàn thành (tự động xuất kho + sinh hóa đơn)
+### 8.1 Tạo đơn hàng (giữ tồn kho ngay) → Hoàn thành (chỉ sinh hóa đơn) — **sửa 2026-08-22, xem mục 5.12**
 
 ```mermaid
 sequenceDiagram
@@ -681,25 +800,32 @@ sequenceDiagram
     NV->>FE: Tạo đơn (chọn KH, SP, SL, PTTT)
     FE->>API: POST /orders
     API->>DB: Validate KH/SP tồn tại; tính tamTinh/giamGia/tongCong
-    API->>DB: Insert Order(MOI) + OrderItem[] (transaction, sinh mã HDH-...)
-    API-->>FE: 201 Order
+    API->>DB: BEGIN transaction
+    API->>DB: Insert Order(MOI) + OrderItem[] (sinh mã HDH-...)
+    loop mỗi sản phẩm (gộp số lượng nếu trùng dòng)
+        API->>DB: applyInventoryTransaction(XUAT, -soLuong, ghiChu="Trừ tồn kho khi tạo đơn hàng")
+        alt tồn kho không đủ
+            API->>DB: ROLLBACK toàn bộ (không tạo đơn)
+            API-->>FE: 400 lỗi tồn kho
+        end
+    end
+    API->>DB: COMMIT
+    API-->>FE: 201 Order (tồn kho đã bị giữ ngay từ đây)
 
     NV->>FE: Chuyển trạng thái → DANG_XU_LY → HOAN_THANH
     FE->>API: PATCH /orders/:id/status {HOAN_THANH}
     API->>DB: BEGIN transaction
     loop mỗi OrderItem
         API->>DB: product.daBan += soLuong
-        API->>DB: applyInventoryTransaction(XUAT, -soLuong)
-        alt tồn kho không đủ
-            API->>DB: ROLLBACK
-            API-->>FE: 400 lỗi tồn kho
-        end
+        Note over API,DB: KHÔNG trừ kho ở đây nữa — đã trừ lúc tạo đơn ở trên
     end
     API->>DB: Insert Invoice (mã HDH-INV-...)
     API->>DB: Update Order.trangThai = HOAN_THANH
     API->>DB: COMMIT
     API-->>FE: 200 Order (HOAN_THANH)
     FE->>API: GET /invoices?q=<ma đơn> (để bật nút Xuất PDF)
+
+    Note over NV,DB: Nếu NV Hủy đơn (Mới/Đang xử lý) hoặc Xóa hẳn đơn đang ở 2 trạng thái này<br/>thay vì Hoàn thành → applyInventoryTransaction(TRA_HANG, +soLuong) hoàn lại tồn kho đã giữ (mục 5.12)
 ```
 
 ### 8.2 Hoàn tiền đơn đã hoàn thành
@@ -816,4 +942,8 @@ Tổng hợp lại các điểm kỹ thuật đã nêu ở SRS mục 6, dưới 
 8. **Mục 5.8/4.14 (tích hợp QR ngân hàng) đã triển khai và kiểm thử qua HTTP thực tế** (2026-08-21) — 4 điểm từng cần quyết định đã chốt: (a) hợp đồng webhook tự định nghĩa dạng generic `{referenceCode, transferAmount, content}`, tương thích trực tiếp hoặc cần adapter nhỏ tùy provider thật (Casso/SePay/khác) chọn sau; (b) TTL mã QR mặc định 15 phút, cấu hình qua `VIETQR_TTL_MINUTES`; (c) tài khoản `Staff` đại diện hệ thống (`system@hdhtoys.internal`, LOCKED) đã seed sẵn; (d) giao dịch "Không khớp"/"Sai số tiền" hiển thị ở Kế toán → tab "Đối soát QR" (`GET /payments/unmatched`) để nhân viên xử lý tay — SLA xử lý cụ thể (bao lâu) vẫn là quy trình vận hành cần thống nhất với đội kế toán, không phải vấn đề kỹ thuật.
 9. **Trước khi dùng với tiền thật**: thay `VIETQR_BANK_BIN`/`VIETQR_ACCOUNT_NO`/`VIETQR_WEBHOOK_SECRET` (hiện là placeholder ở môi trường dev) bằng tài khoản ngân hàng thật của cửa hàng và secret do dịch vụ đối soát trung gian thật cấp.
 10. Phát hiện tự hoàn thành ở frontend hiện dựa vào polling 4 giây/lần (`OrderDetail.tsx`), không phải push — đủ dùng cho quy mô nhỏ, nên nâng cấp WebSocket/SSE nếu cần realtime chặt hơn hoặc số đơn đồng thời tăng cao.
-11. **Preorder không giữ hàng thật** (mục 5.9 điểm 3) — trạng thái `SAN_SANG` là gợi ý dựa trên tồn kho tại thời điểm nhập, có thể bị bán mất cho khách vãng lai trước khi nhân viên xác nhận chuyển đổi. Nếu cần chặt hơn, phải thêm khái niệm "tồn kho khả dụng vs giữ chỗ" — ảnh hưởng rộng tới Inventory/Orders, nên cân nhắc kỹ trước khi làm (rủi ro/độ phức tạp cao hơn hẳn tính năng hiện tại).
+11. **Preorder không giữ hàng thật** (mục 5.9 điểm 3) — trạng thái `SAN_SANG` là gợi ý dựa trên tồn kho tại thời điểm nhập, có thể bị bán mất cho khách vãng lai trước khi nhân viên xác nhận chuyển đổi. Nếu cần chặt hơn, phải thêm khái niệm "tồn kho khả dụng vs giữ chỗ" — ảnh hưởng rộng tới Inventory/Orders, nên cân nhắc kỹ trước khi làm (rủi ro/độ phức tạp cao hơn hẳn tính năng hiện tại). **Lưu ý 2026-08-22**: Đơn hàng thường (mục 5.12) đã có giữ hàng thật từ lúc tạo — điểm còn thiếu này giờ chỉ áp dụng riêng cho Đặt trước.
+12. **[Mới 2026-08-22] Giữ tồn kho lúc tạo đơn (mục 5.12) chưa có row-lock**: rủi ro race condition hiếm gặp khi nhiều terminal tạo đơn gần như đồng thời cho cùng một sản phẩm ở mức isolation mặc định của Postgres — nên bổ sung `SELECT ... FOR UPDATE` (hoặc nâng isolation level) nếu số lượng nhân viên/terminal thao tác song song tăng lên.
+13. **[Mới 2026-08-22] Xóa Đặt trước đã chuyển đơn làm mất liên kết điều hướng 2 chiều**: sau khi nới lỏng `DELETE /preorders/:id` (mục 4.16), xóa một Preorder đã `DA_CHUYEN_DON` khiến nút "Xem đơn đặt trước" ở Order không còn dữ liệu để trỏ tới — số tiền cọc/mã đặt trước vẫn còn dưới dạng text trong `Order.ghiChu` (không mất thông tin nghiệp vụ), chỉ mất khả năng điều hướng ngược qua UI.
+14. **[Mới 2026-08-22] Ảnh sản phẩm lưu trong Postgres (`bytea`)** — phù hợp quy mô nhỏ (giới hạn 3MB/ảnh, 1 ảnh/sản phẩm, tránh phụ thuộc dịch vụ ngoài khi Render free tier không có ổ đĩa bền) nhưng sẽ làm phình kích thước DB nếu số SKU có ảnh tăng lớn — nên chuyển sang object storage (S3-compatible) nếu cần scale.
+15. **[Mới 2026-08-22] Sản phẩm Pre-order không có nhắc hàng thật (email/SMS/push)** — banner nhắc chỉ hiển thị trong ứng dụng (Dashboard + chi tiết sản phẩm) khi nhân viên đang mở app, tính lại mỗi lần render, không có cơ chế đẩy thông báo chủ động ra ngoài nếu không ai mở app đúng lúc.

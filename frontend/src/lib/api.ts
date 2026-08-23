@@ -252,8 +252,8 @@ export type Order = {
   trangThai: OrderStatus
   tamTinh: number
   giamGia: number
-  vat: number
   tongCong: number
+  tienCoc: number
   daThanhToan: boolean
   phuongThucNhanHang: DeliveryMethod
   donViVanChuyen?: ShippingCarrier | null
@@ -304,8 +304,8 @@ export type Invoice = {
   nguoiTaoId: string
   createdAt: string
   nguoiTao: { id: string; hoTen: string }
-  /** preorder chỉ có khi hóa đơn này được chuyển từ một đơn "Đặt trước" có tiền cọc. */
-  order: Order & { preorder?: { ma: string; tienCoc: number } | null }
+  /** preorder chỉ có khi hóa đơn này được chuyển từ một đơn "Đặt trước" (dùng để hiện mã PO tham chiếu) — số tiền cọc lấy từ order.tienCoc, không phụ thuộc preorder còn tồn tại hay không. */
+  order: Order & { preorder?: { ma: string } | null }
 }
 
 export type DebtType = 'PHAI_THU' | 'PHAI_TRA'
@@ -480,7 +480,7 @@ export const api = {
       phuongThucThanhToan: PaymentMethod
       phuongThucNhanHang?: DeliveryMethod
       donViVanChuyen?: ShippingCarrier
-      vat?: number
+      tienCoc?: number
       ghiChu?: string
       items: { productId: string; soLuong: number; giaOverride?: number; giamGia?: number }[]
     }) => post<Order>('/orders', data),
@@ -519,7 +519,7 @@ export const api = {
     update: (id: string, data: Partial<{ soLuong: number; donGiaDuKien: number; tienCoc: number; ngayDuKienCo: string; ghiChu: string }>) =>
       patch<Preorder>(`/preorders/${id}`, data),
     cancel: (id: string) => post<Preorder>(`/preorders/${id}/cancel`),
-    convertToOrder: (id: string, data: { productId?: string; phuongThucThanhToan: PaymentMethod; kenhBan?: SalesChannel; vat?: number }) =>
+    convertToOrder: (id: string, data: { productId?: string; phuongThucThanhToan: PaymentMethod; kenhBan?: SalesChannel }) =>
       post<{ preorder: Preorder; order: Order }>(`/preorders/${id}/convert-to-order`, data),
     /** Không xóa được đơn đã DA_CHUYEN_DON (đã có Order thật liên kết). */
     delete: (id: string) => del<void>(`/preorders/${id}`),

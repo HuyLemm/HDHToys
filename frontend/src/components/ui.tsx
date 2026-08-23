@@ -3,6 +3,7 @@
 // independently once each screen moves to its own module.
 
 import { Search, X } from 'lucide-react'
+import logoUrl from '../assets/logo.jpg'
 
 export const statusColor: Record<string, string> = {
   'Hoàn thành': 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -51,13 +52,7 @@ export function Badge({ label }: { label: string }) {
 export function HdhLogo({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`flex items-center gap-2.5 ${compact ? 'justify-center' : ''}`}>
-      <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
-        <rect width="32" height="32" rx="7" fill="#f97316" />
-        <rect x="7" y="8" width="4" height="16" rx="1" fill="white" />
-        <rect x="14" y="13" width="4" height="6" rx="1" fill="white" />
-        <rect x="21" y="8" width="4" height="16" rx="1" fill="white" />
-        <circle cx="16" cy="26" r="1.5" fill="white" fillOpacity="0.5" />
-      </svg>
+      <img src={logoUrl} alt="HDH Toys" width={32} height={32} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
       {!compact && (
         <div>
           <div className="text-white font-bold text-sm leading-tight tracking-wide">HDH Toys</div>

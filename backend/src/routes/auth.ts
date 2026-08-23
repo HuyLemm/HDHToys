@@ -1,8 +1,9 @@
 import { Router } from "express"
 import { requireAuth } from "../middleware/requireAuth.js"
+import { loginLimiter } from "../middleware/rateLimit.js"
 import * as authController from "../controllers/auth.controller.js"
 
 export const authRouter = Router()
 
-authRouter.post("/auth/login", authController.login)
+authRouter.post("/auth/login", loginLimiter, authController.login)
 authRouter.get("/auth/me", requireAuth, authController.me)

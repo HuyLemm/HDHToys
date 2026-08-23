@@ -175,16 +175,29 @@ export function stockIn(params: { productId: string; soLuong: number; thamChieu?
 }
 
 export function stockOut(params: { productId: string; soLuong: number; thamChieu?: string; ghiChu?: string; nguoiThucHienId: string }) {
-  return prisma.$transaction((tx) =>
-    applyInventoryTransaction(tx, {
+  return prisma.$transaction(async (tx) => {
+    const transaction = await applyInventoryTransaction(tx, {
       productId: params.productId,
       loai: "XUAT",
       soLuongThayDoi: -params.soLuong,
       nguoiThucHienId: params.nguoiThucHienId,
       thamChieu: params.thamChieu,
       ghiChu: params.ghiChu,
-    }),
-  )
+    })
+
+    // Sản phẩm Pre-order thường được giao thẳng cho khách ngay khi Xuất kho
+    // thủ công ở đây (không tạo Đơn hàng riêng cho lần giao đó) — khác với
+    // sản phẩm Có sẵn, vốn đã tự cộng "đã bán" khi Đơn hàng chuyển Hoàn
+    // thành (xem orders.service.ts#applyOrderCompletion). Không áp dụng cho
+    // Có sẵn vì Xuất kho thủ công của loại đó thường là hư hỏng/thất thoát,
+    // không phải một lượt bán.
+    const product = await tx.product.findUnique({ where: { id: params.productId }, select: { loaiSanPham: true } })
+    if (product?.loaiSanPham === "PRE_ORDER") {
+      await tx.product.update({ where: { id: params.productId }, data: { daBan: { increment: params.soLuong } } })
+    }
+
+    return transaction
+  })
 }
 
 export async function adjust(params: { productId: string; tonKhoMoi: number; ghiChu?: string; nguoiThucHienId: string }) {

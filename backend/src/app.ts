@@ -1,6 +1,8 @@
 import "express-async-errors"
 import express from "express"
 import cors from "cors"
+import helmet from "helmet"
+import { apiLimiter } from "./middleware/rateLimit.js"
 import { healthRouter } from "./routes/health.js"
 import { authRouter } from "./routes/auth.js"
 import { staffRouter } from "./routes/staff.js"
@@ -18,10 +20,48 @@ import { paymentsRouter } from "./routes/payments.js"
 import { preordersRouter } from "./routes/preorders.js"
 import { errorHandler } from "./middleware/errorHandler.js"
 
+// Danh sách origin frontend được phép gọi API — KHÔNG dùng cors() mặc định
+// (phản xạ mọi origin) vì token JWT lưu ở localStorage của SPA: nếu CORS mở
+// toàn bộ, một trang bất kỳ có được token (rò rỉ qua XSS/kênh khác) có thể
+// đọc thẳng response API bằng fetch() từ chính trang đó. Cấu hình qua env
+// CORS_ORIGINS (phân tách bằng dấu phẩy); mặc định chỉ mở cho dev local.
+const corsOrigins = (process.env.CORS_ORIGINS ?? "http://localhost:8443")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean)
+
 export const app = express()
 
-app.use(cors())
-app.use(express.json())
+// Render (và các PaaS tương tự) đặt app sau 1 lớp reverse proxy — không set
+// dòng này thì req.ip/express-rate-limit đều thấy IP của proxy nội bộ (giống
+// nhau cho MỌI request), làm rate limit theo IP (rateLimit.ts) và IP
+// allowlist webhook (paymentConfig.ts) đều vô nghĩa. `1` = chỉ tin đúng 1
+// lớp proxy (khớp hạ tầng Render), không tin toàn bộ chuỗi X-Forwarded-For
+// (tránh giả mạo IP nếu deploy ở môi trường không có proxy tin cậy).
+app.set("trust proxy", 1)
+
+// contentSecurityPolicy: đây là API JSON/PDF/ảnh thuần, không phục vụ HTML
+// nên CSP không có tác dụng — tắt để tránh header thừa gây nhiễu. Ngược lại
+// crossOriginResourcePolicy PHẢI đổi từ default "same-origin" của helmet
+// sang "cross-origin" — nếu không, browser sẽ tự chặn chính các request ảnh
+// sản phẩm/PDF hóa đơn mà frontend (domain khác) đang fetch hợp lệ.
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  }),
+)
+app.use(
+  cors({
+    origin: corsOrigins,
+    credentials: true,
+  }),
+)
+// Giới hạn tường minh (mặc định express.json() cũng có giới hạn nhưng khá
+// rộng) — 1MB đủ dư cho payload lớn nhất hiện có (đơn hàng nhiều dòng); ảnh
+// sản phẩm đi qua multipart (multer, giới hạn riêng 3MB), không qua đây.
+app.use(express.json({ limit: "1mb" }))
+app.use("/api", apiLimiter)
 
 app.use("/api", healthRouter)
 app.use("/api", authRouter)

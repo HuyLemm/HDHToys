@@ -16,3 +16,12 @@ export function isVietQrConfigured(): boolean {
 }
 
 export const webhookSecret = process.env.VIETQR_WEBHOOK_SECRET ?? ""
+
+// Lớp phòng thủ thứ 2 cho webhook (bên cạnh shared secret) — để trống thì bỏ
+// qua kiểm tra IP (mặc định, vì chưa chắc biết dải IP cố định của dịch vụ đối
+// soát thật sẽ dùng). Điền vào khi đã chọn được provider thật và họ công bố
+// dải IP cố định, phân tách bằng dấu phẩy.
+export const webhookAllowedIps = (process.env.VIETQR_WEBHOOK_ALLOWED_IPS ?? "")
+  .split(",")
+  .map((ip) => ip.trim())
+  .filter(Boolean)

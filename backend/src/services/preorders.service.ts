@@ -190,7 +190,6 @@ export async function convertToOrder(params: {
   productId?: string
   phuongThucThanhToan: PaymentMethod
   kenhBan?: SalesChannel
-  vat?: number
   nguoiThucHienId: string
 }) {
   const current = await prisma.preorder.findUnique({ where: { id: params.id } })
@@ -215,7 +214,13 @@ export async function convertToOrder(params: {
     nhanVienId: params.nguoiThucHienId,
     kenhBan: params.kenhBan ?? "TAI_CUA_HANG",
     phuongThucThanhToan: params.phuongThucThanhToan,
-    vat: params.vat ?? 0,
+    // Sao chép tiền cọc sang chính Order (không chỉ tham chiếu qua quan hệ
+    // Preorder) để hóa đơn vẫn hiển thị đúng số cọc dù sau này Preorder gốc
+    // bị xóa (xem preorders.service.ts#remove — nay xóa được ở mọi trạng thái).
+    tienCoc: current.tienCoc,
+    // Tiền cọc này đã được ghi Thu/Chi từ lúc tạo đơn đặt trước (create() ở
+    // trên) — không ghi lại lần nữa khi chuyển đổi, tránh tính trùng dòng tiền.
+    recordDepositIncome: false,
     ghiChu,
     items: [{ productId, soLuong: current.soLuong, giaOverride: current.donGiaDuKien, giamGia: 0 }],
     fallbackNhanVienId: params.nguoiThucHienId,

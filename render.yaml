@@ -13,6 +13,28 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
+      # Danh sách origin frontend được phép gọi API (CORS) — bắt buộc set đúng
+      # domain frontend thật trên production, KHÔNG để trống.
+      - key: CORS_ORIGINS
+        sync: false
+      # Để trống SEED_ADMIN_PASSWORD thì hệ thống tự sinh mật khẩu ngẫu nhiên
+      # và in ra log deploy đúng một lần — xem log ngay sau lần deploy đầu.
+      - key: SEED_ADMIN_EMAIL
+        sync: false
+      - key: SEED_ADMIN_PASSWORD
+        sync: false
+      # Thông tin liên hệ in trên hóa đơn PDF — để trống thì hóa đơn không in
+      # dòng đó (không bịa hotline/địa chỉ giả).
+      - key: STORE_HOTLINE
+        sync: false
+      - key: STORE_ADDRESS
+        sync: false
+      - key: STORE_WEBSITE
+        sync: false
+      - key: STORE_FACEBOOK_URL
+        sync: false
+      - key: STORE_ZALO_URL
+        sync: false
       # Tích hợp thanh toán QR ngân hàng (SRS mục 3.16) — để trống 3 mục
       # sync:false thì tính năng tự vô hiệu (đơn hàng vẫn tạo/đổi trạng thái
       # thủ công như thường, chỉ không có QR/không tự hoàn thành qua webhook).

@@ -20,6 +20,7 @@ export function CreateOrderScreen({ onBack, onCreated }: { onBack: () => void; o
   const [phuongThuc, setPhuongThuc] = useState<PaymentMethod>('TIEN_MAT')
   const [phuongThucNhanHang, setPhuongThucNhanHang] = useState<DeliveryMethod>('KHACH_TOI_LAY')
   const [donViVanChuyen, setDonViVanChuyen] = useState<ShippingCarrier>('SPX')
+  const [tienCoc, setTienCoc] = useState(0)
   const [ghiChu, setGhiChu] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -65,6 +66,7 @@ export function CreateOrderScreen({ onBack, onCreated }: { onBack: () => void; o
   async function handleSubmit() {
     if (!customer) { setError('Vui lòng chọn khách hàng.'); return }
     if (cart.length === 0) { setError('Vui lòng thêm ít nhất một sản phẩm.'); return }
+    if (tienCoc > tongCong) { setError('Tiền cọc không được vượt quá tổng tiền đơn hàng.'); return }
     setError(null)
     setSubmitting(true)
     try {
@@ -74,6 +76,7 @@ export function CreateOrderScreen({ onBack, onCreated }: { onBack: () => void; o
         phuongThucThanhToan: phuongThuc,
         phuongThucNhanHang,
         donViVanChuyen: phuongThucNhanHang === 'SHIP' ? donViVanChuyen : undefined,
+        tienCoc: tienCoc || undefined,
         ghiChu: ghiChu || undefined,
         items: cart.map(l => ({ productId: l.product.id, soLuong: l.soLuong, giamGia: l.giamGia })),
       })
@@ -163,7 +166,8 @@ export function CreateOrderScreen({ onBack, onCreated }: { onBack: () => void; o
                   <input type="number" min={1} value={l.soLuong === 0 ? '' : l.soLuong} onChange={e => updateLine(l.product.id, { soLuong: Math.max(1, Number(e.target.value)) })}
                     className="w-14 text-center text-xs border border-slate-200 rounded px-1 py-0.5" />,
                   <span>{l.product.giaBan.toLocaleString('vi-VN')} VNĐ</span>,
-                  <input type="number" min={0} value={l.giamGia === 0 ? '' : l.giamGia} onChange={e => updateLine(l.product.id, { giamGia: Math.max(0, Number(e.target.value)) })}
+                  <input type="number" min={0} max={l.soLuong * l.product.giaBan} value={l.giamGia === 0 ? '' : l.giamGia}
+                    onChange={e => updateLine(l.product.id, { giamGia: Math.min(l.soLuong * l.product.giaBan, Math.max(0, Number(e.target.value))) })}
                     className="w-20 text-center text-xs border border-slate-200 rounded px-1 py-0.5" />,
                   <span className="font-semibold">{(l.soLuong * l.product.giaBan - l.giamGia).toLocaleString('vi-VN')} VNĐ</span>,
                   <TinyBtn danger onClick={() => removeLine(l.product.id)}>✕</TinyBtn>,
@@ -205,6 +209,12 @@ export function CreateOrderScreen({ onBack, onCreated }: { onBack: () => void; o
                   </select>
                 </div>
               )}
+              <div>
+                <label className="block text-slate-500 mb-1">Tiền cọc (tùy chọn)</label>
+                <input type="number" min={0} value={tienCoc === 0 ? '' : tienCoc}
+                  onChange={e => setTienCoc(Math.max(0, Number(e.target.value)))}
+                  className="w-full text-xs px-2.5 py-2 border border-slate-200 rounded-md focus:outline-none focus:border-blue-400" placeholder="0" />
+              </div>
               <div className="col-span-2">
                 <label className="block text-slate-500 mb-1">Ghi chú</label>
                 <input value={ghiChu} onChange={e => setGhiChu(e.target.value)} className="w-full text-xs px-2.5 py-2 border border-slate-200 rounded-md focus:outline-none focus:border-blue-400" placeholder="Ghi chú nội bộ..." />
@@ -217,10 +227,10 @@ export function CreateOrderScreen({ onBack, onCreated }: { onBack: () => void; o
           <div className="bg-white rounded-lg border border-slate-200 p-4">
             <h3 className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wide">Tổng kết</h3>
             <div className="space-y-2 text-xs">
-              <div className="flex justify-between text-slate-600"><span>Tạm tính</span><span>{tamTinh.toLocaleString('vi-VN')} VNĐ</span></div>
-              <div className="flex justify-between text-slate-600"><span>Giảm giá</span><span>{giamGiaTong.toLocaleString('vi-VN')} VNĐ</span></div>
+              <div className="flex justify-between text-slate-600"><span>Tổng tiền hàng</span><span>{tongCong.toLocaleString('vi-VN')} VNĐ</span></div>
+              <div className="flex justify-between text-emerald-600"><span>Tiền khách đã thanh toán</span><span>{tienCoc > 0 ? `-${tienCoc.toLocaleString('vi-VN')}` : '0'} VNĐ</span></div>
               <div className="flex justify-between font-bold text-base text-slate-900 pt-2 border-t border-slate-200">
-                <span className="text-sm">Tổng cộng</span><span className="text-sm" style={{ color: '#1a56db' }}>{tongCong.toLocaleString('vi-VN')} VNĐ</span>
+                <span className="text-sm">Thanh toán cuối cùng</span><span className="text-sm" style={{ color: '#1a56db' }}>{(tongCong - tienCoc).toLocaleString('vi-VN')} VNĐ</span>
               </div>
             </div>
             <div className="mt-4 space-y-2">

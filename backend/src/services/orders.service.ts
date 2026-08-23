@@ -184,12 +184,16 @@ export async function create(params: {
   phuongThucThanhToan: PaymentMethod
   phuongThucNhanHang?: PhuongThucNhanHang
   donViVanChuyen?: DonViVanChuyen
-  vat: number
+  tienCoc?: number
   ghiChu?: string
   items: OrderItemInput[]
   fallbackNhanVienId: string
+  /** false khi được gọi từ preorders.service.ts#convertToOrder — tiền cọc đó đã được ghi Thu/Chi lúc tạo đơn đặt trước, không ghi lại lần nữa. */
+  recordDepositIncome?: boolean
 }) {
-  const { khachHangId, nhanVienId, kenhBan, phuongThucThanhToan, vat, ghiChu, items, fallbackNhanVienId } = params
+  const { khachHangId, nhanVienId, kenhBan, phuongThucThanhToan, ghiChu, items, fallbackNhanVienId } = params
+  const tienCoc = params.tienCoc ?? 0
+  const recordDepositIncome = params.recordDepositIncome ?? true
   const delivery = resolveDelivery(params.phuongThucNhanHang ?? "KHACH_TOI_LAY", params.donViVanChuyen)
 
   const customer = await prisma.customer.findUnique({ where: { id: khachHangId } })
@@ -202,7 +206,14 @@ export async function create(params: {
   const lines = items.map((item) => {
     const product = productMap.get(item.productId)!
     const donGia = item.giaOverride ?? product.giaBan
-    const thanhTien = item.soLuong * donGia - item.giamGia
+    const lineTotal = item.soLuong * donGia
+    // Giảm giá một dòng không được vượt quá giá trị dòng đó — nếu không,
+    // thanhTien/tongCong có thể âm, một cách lách qua luồng Hoàn tiền có
+    // kiểm soát để tạo "doanh thu âm" không có dấu hiệu bất thường nào.
+    if (item.giamGia > lineTotal) {
+      throw badRequest(`Giảm giá cho sản phẩm ${product.ten} không được vượt quá giá trị dòng hàng (${lineTotal.toLocaleString("vi-VN")} VNĐ).`)
+    }
+    const thanhTien = lineTotal - item.giamGia
     // Chốt giá vốn tại thời điểm bán = giá nhập + phí vận chuyển, để lợi
     // nhuận gộp tính đúng chi phí thực tế đưa hàng về (không chỉ giá nhập).
     return { ...item, donGia, giaVon: product.giaVon + product.phiVanChuyen, thanhTien }
@@ -210,7 +221,9 @@ export async function create(params: {
 
   const tamTinh = lines.reduce((sum, l) => sum + l.soLuong * l.donGia, 0)
   const giamGiaTong = lines.reduce((sum, l) => sum + l.giamGia, 0)
-  const tongCong = tamTinh - giamGiaTong + vat
+  const tongCong = tamTinh - giamGiaTong
+
+  if (tienCoc > tongCong) throw badRequest("Tiền cọc không được vượt quá tổng tiền đơn hàng.")
 
   // Đơn thanh toán qua QR Code được cấp một mốc hết hạn cho mã QR — hết hạn
   // không tự hủy đơn, chỉ để ẩn QR khỏi giao diện (xem getQrPaymentInfo).
@@ -228,7 +241,7 @@ export async function create(params: {
         phuongThucThanhToan,
         phuongThucNhanHang: delivery.phuongThucNhanHang,
         donViVanChuyen: delivery.donViVanChuyen,
-        vat,
+        tienCoc,
         ghiChu,
         tamTinh,
         giamGia: giamGiaTong,
@@ -265,6 +278,27 @@ export async function create(params: {
         nguoiThucHienId,
         thamChieu: ma,
         ghiChu: "Trừ tồn kho khi tạo đơn hàng",
+      })
+    }
+
+    // Tiền cọc là tiền thật đã thu ngay lúc tạo đơn — ghi nhận vào sổ Thu/Chi
+    // để phản ánh đúng dòng tiền (giống cách Preorder ghi cọc — xem
+    // preorders.service.ts#create). Bỏ qua nếu đơn này vừa được tạo ra từ
+    // convertToOrder (tiền đó đã lên sổ Thu/Chi từ lúc tạo đơn đặt trước rồi).
+    if (tienCoc > 0 && recordDepositIncome) {
+      const receipt = await tx.incomeExpense.create({
+        data: {
+          maPhieu: `TEMP-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          loai: "THU",
+          danhMuc: "BAN_HANG",
+          noiDung: `Đặt cọc đơn hàng ${ma}`,
+          soTien: tienCoc,
+          nguoiTaoId: nguoiThucHienId,
+        },
+      })
+      await tx.incomeExpense.update({
+        where: { id: receipt.id },
+        data: { maPhieu: `PT-${String(receipt.soThuTu).padStart(5, "0")}` },
       })
     }
 

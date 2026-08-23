@@ -2,6 +2,7 @@ import type { Request, Response } from "express"
 import { z } from "zod"
 import { badRequest, unauthorized } from "../errors/HttpError.js"
 import { verifyWebhookSecret } from "../lib/webhookAuth.js"
+import { webhookAllowedIps } from "../lib/paymentConfig.js"
 import * as paymentsService from "../services/payments.service.js"
 
 const webhookSchema = z.object({
@@ -14,8 +15,21 @@ const webhookSchema = z.object({
   description: z.string().optional(),
 })
 
+/** SePay (chế độ "API Key") gửi header `Authorization: Apikey <API_KEY_CUA_BAN>` — không phải Bearer JWT. */
+function extractSePayApiKey(authHeader: string | undefined): string | undefined {
+  const match = authHeader?.match(/^Apikey\s+(.+)$/i)
+  return match?.[1]
+}
+
 export async function webhook(req: Request, res: Response) {
-  const provided = req.header("X-Webhook-Secret")
+  // Lớp phòng thủ thứ 2, tùy chọn (VIETQR_WEBHOOK_ALLOWED_IPS) — bỏ qua nếu
+  // chưa cấu hình. Dùng cùng thông báo lỗi với secret sai để không lộ cho
+  // bên ngoài biết đã chặn ở lớp nào (IP hay secret).
+  if (webhookAllowedIps.length > 0 && !webhookAllowedIps.includes(req.ip ?? "")) {
+    throw unauthorized("Webhook secret không hợp lệ.")
+  }
+
+  const provided = extractSePayApiKey(req.header("Authorization"))
   if (!verifyWebhookSecret(provided)) {
     throw unauthorized("Webhook secret không hợp lệ.")
   }

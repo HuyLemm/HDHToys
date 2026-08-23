@@ -232,13 +232,21 @@ export function OrderDetailScreen({ orderId, onBack }: { orderId: string; onBack
             <div className="mt-4 flex justify-end">
               <div className="w-56 text-xs space-y-1.5">
                 {[
-                  ['Tạm tính', order.tamTinh], ['Giảm giá', order.giamGia], ['VAT', order.vat],
+                  ['Tạm tính', order.tamTinh], ['Giảm giá', order.giamGia],
                 ].map(([k, v]) => (
                   <div key={k as string} className="flex justify-between text-slate-600"><span>{k}</span><span>{(v as number).toLocaleString('vi-VN')} VNĐ</span></div>
                 ))}
                 <div className="flex justify-between font-bold text-slate-900 pt-1.5 border-t border-slate-200">
-                  <span>Tổng cộng</span><span>{order.tongCong.toLocaleString('vi-VN')} VNĐ</span>
+                  <span>{order.tienCoc > 0 ? 'Tổng tiền khách phải thanh toán' : 'Tổng cộng'}</span><span>{order.tongCong.toLocaleString('vi-VN')} VNĐ</span>
                 </div>
+                {order.tienCoc > 0 && (
+                  <>
+                    <div className="flex justify-between text-emerald-600"><span>Tiền đã cọc</span><span>-{order.tienCoc.toLocaleString('vi-VN')} VNĐ</span></div>
+                    <div className="flex justify-between font-bold text-slate-900 pt-1.5 border-t border-slate-200">
+                      <span>Thanh toán cuối cùng</span><span>{(order.tongCong - order.tienCoc).toLocaleString('vi-VN')} VNĐ</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </div>

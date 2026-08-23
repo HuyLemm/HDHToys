@@ -10,25 +10,34 @@ const require = createRequire(import.meta.url)
  * same on Windows, Linux containers, etc. because it goes through Node's own
  * module resolution.
  */
-function resolveBundledFontPath(): string | null {
+function resolveBundledFontPath(filename: string): string | null {
   try {
     const packageJsonPath = require.resolve("dejavu-fonts-ttf/package.json")
-    return path.join(path.dirname(packageJsonPath), "ttf", "DejaVuSans.ttf")
+    return path.join(path.dirname(packageJsonPath), "ttf", filename)
   } catch {
     return null
   }
 }
 
-const CANDIDATES = [
+const REGULAR_CANDIDATES = [
   process.env.INVOICE_FONT_PATH,
-  resolveBundledFontPath(),
+  resolveBundledFontPath("DejaVuSans.ttf"),
   // OS-specific fallbacks in case the bundled font is ever unavailable.
   "C:/Windows/Fonts/arial.ttf",
   "C:/Windows/Fonts/segoeui.ttf",
   "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 ].filter((p): p is string => Boolean(p))
 
-let cached: string | null | undefined
+const BOLD_CANDIDATES = [
+  process.env.INVOICE_FONT_BOLD_PATH,
+  resolveBundledFontPath("DejaVuSans-Bold.ttf"),
+  "C:/Windows/Fonts/arialbd.ttf",
+  "C:/Windows/Fonts/segoeuib.ttf",
+  "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+].filter((p): p is string => Boolean(p))
+
+let cachedRegular: string | null | undefined
+let cachedBold: string | null | undefined
 
 /**
  * pdfkit's built-in standard fonts (Helvetica, Times) have no Vietnamese glyphs.
@@ -37,7 +46,18 @@ let cached: string | null | undefined
  * resolve, PDFs fall back to Helvetica and Vietnamese diacritics render as tofu.
  */
 export function resolveUnicodeFontPath(): string | null {
-  if (cached !== undefined) return cached
-  cached = CANDIDATES.find((p) => existsSync(p)) ?? null
-  return cached
+  if (cachedRegular !== undefined) return cachedRegular
+  cachedRegular = REGULAR_CANDIDATES.find((p) => existsSync(p)) ?? null
+  return cachedRegular
+}
+
+/**
+ * Same rationale as resolveUnicodeFontPath — Helvetica-Bold has no Vietnamese
+ * glyphs either, so headings/emphasis need the DejaVu bold weight specifically
+ * rather than just faking bold with the regular font.
+ */
+export function resolveUnicodeBoldFontPath(): string | null {
+  if (cachedBold !== undefined) return cachedBold
+  cachedBold = BOLD_CANDIDATES.find((p) => existsSync(p)) ?? null
+  return cachedBold
 }

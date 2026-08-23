@@ -28,6 +28,11 @@ model Staff {
   matKhauHash  String
   vaiTro       StaffRole
   trangThai    StaffStatus @default(ACTIVE)
+  // Tăng lên mỗi khi mật khẩu bị Admin reset — nhúng vào payload JWT lúc
+  // đăng nhập (lib/auth.ts) và so lại ở requireAuth mỗi request. Đây là cách
+  // "thu hồi" token đang tồn tại mà không cần một bảng session/blacklist
+  // riêng: đổi mật khẩu xong, mọi token cũ (dù còn hạn 8h) lập tức vô hiệu.
+  tokenVersion Int         @default(0)
   orders       Order[]
   inventoryTransactions InventoryTransaction[]
   invoicesCreated Invoice[]
@@ -196,8 +201,12 @@ model Order {
   maVanDon            String?
   tamTinh             Int
   giamGia             Int           @default(0)
-  vat                 Int           @default(0)
   tongCong            Int
+  // Tiền cọc khách đã đặt trước khi tạo đơn (0 = không cọc). Lưu trực tiếp
+  // trên Order (không chỉ tham chiếu qua Preorder.tienCoc) để đơn tạo trực
+  // tiếp (không qua sổ Đặt trước) cũng cọc được, và để hóa đơn vẫn hiển thị
+  // đúng số cọc dù sau này Preorder gốc có bị xóa.
+  tienCoc             Int           @default(0)
   ghiChu              String?
   qrExpiresAt         DateTime?
   items               OrderItem[]

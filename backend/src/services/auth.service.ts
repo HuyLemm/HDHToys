@@ -9,7 +9,7 @@ export async function login(email: string, matKhau: string) {
   const ok = await verifyPassword(matKhau, staff.matKhauHash)
   if (!ok) throw unauthorized("Email hoặc mật khẩu không chính xác.")
 
-  const token = signToken({ sub: staff.id, vaiTro: staff.vaiTro })
+  const token = signToken({ sub: staff.id, vaiTro: staff.vaiTro, tokenVersion: staff.tokenVersion })
   return { token, staff: { id: staff.id, hoTen: staff.hoTen, email: staff.email, vaiTro: staff.vaiTro } }
 }
 

@@ -1,4 +1,5 @@
 import type { LoaiSanPham, Prisma, ProductStatus } from "@prisma/client"
+import { fileTypeFromBuffer } from "file-type"
 import { prisma } from "../lib/prisma.js"
 import { resolveStockStatus } from "../lib/productStatus.js"
 import { badRequest, conflict, notFound } from "../errors/HttpError.js"
@@ -172,15 +173,22 @@ export async function getImage(productId: string) {
   return image
 }
 
-export async function uploadImage(productId: string, data: Buffer, mimeType: string) {
+/** Tham số mimeType không còn dùng để lưu — giữ lại chữ ký để controller không đổi, nhưng KHÔNG tin giá trị client khai; xem bên trong. */
+export async function uploadImage(productId: string, data: Buffer, _declaredMimeType: string) {
   await get(productId)
 
-  if (!ALLOWED_IMAGE_MIME_TYPES.includes(mimeType)) {
-    throw badRequest("Chỉ hỗ trợ ảnh JPEG, PNG, WEBP hoặc GIF.")
-  }
   if (data.length > MAX_IMAGE_BYTES) {
     throw badRequest("Ảnh vượt quá 3MB, vui lòng chọn ảnh nhỏ hơn.")
   }
+
+  // Dò trực tiếp magic bytes của nội dung file thật, để chặn file giả dạng
+  // ảnh (ví dụ đổi tên .html/.svg rồi khai Content-Type: image/png trong
+  // header multipart). Dùng luôn mimeType đã dò được để lưu/serve lại.
+  const detected = await fileTypeFromBuffer(data)
+  if (!detected || !ALLOWED_IMAGE_MIME_TYPES.includes(detected.mime)) {
+    throw badRequest("Chỉ hỗ trợ ảnh JPEG, PNG, WEBP hoặc GIF (nội dung file không khớp định dạng ảnh hợp lệ).")
+  }
+  const mimeType = detected.mime
 
   // Buffer (Node) là Uint8Array<ArrayBufferLike> — Prisma's Bytes field kiểu
   // Uint8Array<ArrayBuffer> chặt hơn (loại trừ SharedArrayBuffer). Copy sang

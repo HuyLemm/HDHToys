@@ -105,22 +105,22 @@ export function InvoiceDetailScreen({ invoiceId, onBack, onViewOrder }: {
 
           <div className="flex justify-end mb-5">
             <div className="w-60 text-xs space-y-1.5">
-              {[['Tạm tính', order.tamTinh], ['Giảm giá', order.giamGia], ['VAT', order.vat]].map(([k, v]) => (
+              {[['Tạm tính', order.tamTinh], ['Giảm giá', order.giamGia]].map(([k, v]) => (
                 <div key={k as string} className="flex justify-between text-slate-600"><span>{k}</span><span>{(v as number).toLocaleString('vi-VN')} VNĐ</span></div>
               ))}
               <div className="flex justify-between font-bold text-base pt-2 border-t-2 border-slate-300">
-                <span>{order.preorder ? 'Tổng tiền khách phải thanh toán' : 'Tổng cộng'}</span>
+                <span>{order.tienCoc > 0 ? 'Tổng tiền khách phải thanh toán' : 'Tổng cộng'}</span>
                 <span style={{ color: '#1a56db' }}>{order.tongCong.toLocaleString('vi-VN')} VNĐ</span>
               </div>
-              {order.preorder && order.preorder.tienCoc > 0 && (
+              {order.tienCoc > 0 && (
                 <>
                   <div className="flex justify-between text-slate-600 pt-1">
-                    <span>Tiền đã cọc ({order.preorder.ma})</span>
-                    <span>-{order.preorder.tienCoc.toLocaleString('vi-VN')} VNĐ</span>
+                    <span>Tiền đã cọc{order.preorder ? ` (${order.preorder.ma})` : ''}</span>
+                    <span>-{order.tienCoc.toLocaleString('vi-VN')} VNĐ</span>
                   </div>
                   <div className="flex justify-between font-bold text-base pt-2 border-t-2 border-slate-300">
                     <span>Thanh toán cuối cùng</span>
-                    <span style={{ color: '#1a56db' }}>{(order.tongCong - order.preorder.tienCoc).toLocaleString('vi-VN')} VNĐ</span>
+                    <span style={{ color: '#1a56db' }}>{(order.tongCong - order.tienCoc).toLocaleString('vi-VN')} VNĐ</span>
                   </div>
                 </>
               )}

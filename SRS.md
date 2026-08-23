@@ -1,7 +1,7 @@
 # HDH Toys — Software Requirements Specification (SRS)
 
-**Phiên bản**: 1.0 (tài liệu hóa hiện trạng hệ thống — reverse-engineered từ mã nguồn)
-**Ngày**: 2026-08-21
+**Phiên bản**: 1.1 (tài liệu hóa hiện trạng hệ thống — reverse-engineered từ mã nguồn; cập nhật đồng bộ với các mục 3.19–3.22 mới)
+**Ngày**: 2026-08-22
 **Nguồn**: `backend/` (Node.js/Express/Prisma/PostgreSQL) + `frontend/` (React/Vite/TypeScript), tham chiếu `BACKEND_FEATURES.md`, `BIZFLOW_DEMO.md`.
 **Tài liệu liên quan**: [SDS.md](./SDS.md) — thiết kế kỹ thuật chi tiết (data model, API, luồng nghiệp vụ).
 
@@ -90,6 +90,7 @@ erDiagram
 - *Giao dịch thanh toán* (`PaymentTransaction`) ghi nhận các lượt báo có từ ngân hàng qua QR, phục vụ đối soát tự động (mục 3.16 — đã triển khai).
 - *Nhà cung cấp* không phải một entity riêng — chỉ là một trường text tự do trên *Sản phẩm* (xem 2.4).
 - *Đặt trước* (mục 3.17) là một sổ riêng, tách biệt khỏi *Đơn hàng* — chỉ "chuyển thành" một Đơn hàng thật khi nhân viên xác nhận đã có hàng, tương tự cách *Công nợ* độc lập với *Đơn hàng*/*Hóa đơn*.
+- *Sản phẩm* có thêm một nhãn phân loại **độc lập** với *Đặt trước*: "Pre-order/Có sẵn" (mục 3.19) — đây là thuộc tính trên chính Sản phẩm (loại hàng cần chờ về vs có ngay), không phải một entity/quan hệ riêng, và không thay thế sổ *Đặt trước*. Một Đơn hàng vẫn dùng chung một luồng xử lý duy nhất dù chứa sản phẩm loại nào.
 
 ---
 
@@ -115,12 +116,12 @@ Ký hiệu: **FR-<module>.<số>**. Mỗi yêu cầu có Input/Output/Quy tắc 
 
 ### 3.3 Quản lý sản phẩm (Products)
 
-- **FR-PROD.1** Hệ thống PHẢI cho phép xem danh sách sản phẩm, lọc theo danh mục/nhà cung cấp/trạng thái, tìm theo tên/SKU/barcode, có phân trang.
-- **FR-PROD.2** Chỉ Admin/Manager/Nhân viên kho được tạo sản phẩm mới (SKU duy nhất, tên, danh mục, nhà cung cấp, giá vốn ≥ 0, giá bán ≥ 0, tồn kho ban đầu, ngưỡng tồn tối thiểu).
+- **FR-PROD.1** Hệ thống PHẢI cho phép xem danh sách sản phẩm, lọc theo danh mục/nhà cung cấp/trạng thái/**loại sản phẩm (Có sẵn/Pre-order — mục 3.19)**, tìm theo tên/SKU/barcode, có phân trang.
+- **FR-PROD.2** Chỉ Admin/Manager/Nhân viên kho được tạo sản phẩm mới, với các trường bắt buộc: SKU duy nhất, tên, danh mục, nhà cung cấp, **giá vốn > 0**, **giá bán > 0** *(sửa 2026-08-22 — trước đây chỉ yêu cầu ≥ 0, cho phép lưu giá 0 do quên điền; nay bắt buộc phải nhập giá thật)*; cùng các trường tùy chọn: tồn kho ban đầu (≥0), ngưỡng tồn tối thiểu (≥0), **phí vận chuyển** (≥0, mục 3.19), loại sản phẩm (Có sẵn/Pre-order, mục 3.19).
 - **FR-PROD.3** Trạng thái tồn kho của sản phẩm (Còn hàng/Sắp hết/Hết hàng) PHẢI được **tự động suy ra** từ tồn kho hiện tại so với ngưỡng tối thiểu — không được set tay, trừ trạng thái Ngừng kinh doanh (thiết lập rõ ràng qua hành động riêng và được giữ nguyên cho tới khi mở bán lại).
 - **FR-PROD.4** Chỉ Admin/Manager/Nhân viên kho được sửa thông tin sản phẩm (không sửa trực tiếp số lượng tồn kho tại đây — phải qua nghiệp vụ Kho hàng).
 - **FR-PROD.5** Chỉ Admin/Manager được ngừng kinh doanh hoặc mở bán lại một sản phẩm.
-- **FR-PROD.6** Hệ thống PHẢI hiển thị chi tiết một sản phẩm gồm thông tin chung và lịch sử giao dịch kho liên quan.
+- **FR-PROD.6** Hệ thống PHẢI hiển thị chi tiết một sản phẩm gồm thông tin chung, ảnh sản phẩm (mục 3.19), và lịch sử giao dịch kho liên quan.
 
 ### 3.4 Quản lý kho hàng (Inventory)
 
@@ -129,25 +130,26 @@ Ký hiệu: **FR-<module>.<số>**. Mỗi yêu cầu có Input/Output/Quy tắc 
 - **FR-INV.3** Mọi thay đổi tồn kho (thủ công hoặc tự động từ đơn hàng) PHẢI được ghi lại thành một **giao dịch kho** có mã riêng, ghi nhận tồn trước/tồn sau/người thực hiện/tham chiếu/ghi chú, không thể sửa/xóa sau khi tạo (chỉ đọc — ledger bất biến).
 - **FR-INV.4** Hệ thống PHẢI từ chối giao dịch xuất/điều chỉnh khiến tồn kho âm, kèm thông báo rõ số hiện có và số cần.
 - **FR-INV.5** Hệ thống PHẢI cho phép xem lịch sử giao dịch kho, lọc theo sản phẩm/loại giao dịch/người thực hiện/khoảng ngày.
-- **FR-INV.6** Khi đơn hàng chuyển trạng thái **Hoàn thành**, hệ thống PHẢI tự động xuất kho đúng số lượng từng sản phẩm trong đơn (ghi nhận giao dịch loại Xuất, tham chiếu = mã đơn) và tăng số lượng "đã bán" của sản phẩm.
+- **FR-INV.6** *(Sửa 2026-08-22 — xem 3.20 để biết lý do và chi tiết đầy đủ)* Khi **tạo đơn hàng mới**, hệ thống PHẢI xuất kho ngay đúng số lượng từng sản phẩm trong đơn (giữ hàng cho đơn đó) — không đợi tới lúc đơn chuyển Hoàn thành. Nếu tồn kho không đủ cho tổng số lượng đang đặt, việc tạo đơn PHẢI bị từ chối ngay. Khi đơn chuyển sang **Hoàn thành**, hệ thống chỉ tăng số lượng "đã bán" của sản phẩm và sinh hóa đơn — KHÔNG xuất kho lần thứ hai (đã xuất từ lúc tạo).
 - **FR-INV.7** Khi đơn hàng đã Hoàn thành chuyển sang **Hoàn tiền**, hệ thống PHẢI tự động hoàn lại tồn kho đúng số lượng đã xuất (ghi nhận giao dịch loại Trả hàng) và giảm số lượng "đã bán" tương ứng.
-- **FR-INV.8** Việc tạo mới hoặc hủy đơn hàng (ở trạng thái Mới/Đang xử lý) KHÔNG được làm thay đổi tồn kho.
+- **FR-INV.8** *(Sửa 2026-08-22 — thay thế hoàn toàn yêu cầu cũ "tạo/hủy đơn không đổi tồn kho", nay là ngược lại)* **Hủy đơn hàng** (chuyển sang Đã hủy, chỉ xảy ra từ Mới/Đang xử lý) PHẢI tự động hoàn lại đúng số lượng tồn kho đã giữ từ lúc tạo đơn (ghi nhận giao dịch loại Trả hàng). **Xóa hẳn đơn hàng** (FR-DEL.5) khi đơn còn ở Mới/Đang xử lý PHẢI hoàn lại tồn kho tương tự trước khi xóa; nếu đơn đã bị hủy trước đó (tồn kho đã hoàn lại ở bước hủy) thì xóa tiếp theo KHÔNG được hoàn lại lần thứ hai.
+- **FR-INV.9** *(Mới 2026-08-22)* Xóa hẳn một sản phẩm (không phải Ngừng kinh doanh) PHẢI tự động xóa theo toàn bộ lịch sử giao dịch kho của riêng sản phẩm đó — lịch sử kho **không còn** là điều kiện chặn xóa sản phẩm (khác FR-DEL.2 phiên bản cũ); chỉ Đơn hàng/Đặt trước **còn tồn tại** tham chiếu tới sản phẩm mới chặn xóa.
 
 ### 3.5 Quản lý khách hàng & Customer 360 (Customers)
 
-- **FR-CUST.1** Hệ thống PHẢI cho phép mọi nhân viên đã đăng nhập xem/tạo/sửa hồ sơ khách hàng (họ tên, số điện thoại duy nhất, email, ngày sinh, hạng: New/Member/VIP, điểm tích lũy).
-- **FR-CUST.2** Hệ thống PHẢI cho phép tìm kiếm khách hàng theo tên/SĐT/email, lọc theo hạng, có phân trang.
+- **FR-CUST.1** Hệ thống PHẢI cho phép mọi nhân viên đã đăng nhập xem/tạo/sửa hồ sơ khách hàng, gồm các trường bắt buộc: họ tên, số điện thoại duy nhất, **nguồn khách hàng** *(mới 2026-08-22 — bắt buộc chọn, không còn để trống/ngầm định "Khác" như trước, để không mất dữ liệu phân tích kênh mua)*; và các trường tùy chọn: email, ngày sinh, hạng (New/Member/VIP, mặc định New), điểm tích lũy, **địa chỉ**, **lưu ý** (ghi chú nhanh hiển thị nổi bật ở hồ sơ), **link Facebook** (hiển thị dạng link bấm mở được).
+- **FR-CUST.2** Hệ thống PHẢI cho phép tìm kiếm khách hàng theo tên/SĐT/email, lọc theo hạng và theo **nguồn khách hàng** (Tại cửa hàng/Điện thoại/Facebook/Zalo/TikTok/Khác), có phân trang.
 - **FR-CUST.3** Hồ sơ 360 của một khách hàng PHẢI tổng hợp: tổng chi tiêu (chỉ tính đơn Hoàn thành), tổng số đơn (mọi trạng thái), giá trị đơn trung bình, tổng sản phẩm đã mua, số đơn đang xử lý, danh mục thường mua (top 3), sản phẩm mua nhiều nhất, lần mua gần nhất.
 - **FR-CUST.4** Hệ thống PHẢI cho phép xem: lịch sử đơn hàng (lọc theo trạng thái/đang xử lý), danh sách sản phẩm đã mua (tổng số lượng, số lần mua, chi tiêu), danh sách hóa đơn liên quan.
 - **FR-CUST.5** Hệ thống PHẢI cho phép nhân viên thêm ghi chú nội bộ (không giới hạn số lượng) vào hồ sơ khách hàng, ghi nhận người tạo và thời gian.
 
 ### 3.6 Quản lý đơn hàng (Orders)
 
-- **FR-ORD.1** Hệ thống PHẢI cho phép tạo đơn hàng mới với: khách hàng (bắt buộc, phải tồn tại), nhân viên xử lý (mặc định là người tạo), kênh bán (Tại cửa hàng/Điện thoại/Facebook/Khác), phương thức thanh toán, danh sách sản phẩm (≥1 dòng, mỗi dòng gồm sản phẩm, số lượng ≥1, đơn giá có thể override giá bán mặc định, giảm giá theo dòng), VAT (số tiền cộng thêm cố định), ghi chú.
-- **FR-ORD.2** Hệ thống PHẢI tính: tạm tính = Σ(số lượng × đơn giá), giảm giá tổng = Σ(giảm giá từng dòng), tổng cộng = tạm tính − giảm giá + VAT. Giá vốn từng dòng PHẢI được lưu lại (snapshot) tại thời điểm tạo đơn để không bị ảnh hưởng nếu giá vốn sản phẩm thay đổi sau này.
-- **FR-ORD.3** Đơn hàng mới PHẢI KHÔNG kiểm tra tồn kho khả dụng tại thời điểm tạo (chỉ kiểm tra khi Hoàn thành).
+- **FR-ORD.1** Hệ thống PHẢI cho phép tạo đơn hàng mới với: khách hàng (bắt buộc, phải tồn tại), nhân viên xử lý (mặc định là người tạo), kênh bán (Tại cửa hàng/Điện thoại/Facebook/Zalo/TikTok/Khác), phương thức thanh toán, **hình thức nhận hàng** (Khách tới lấy — mặc định, hoặc Ship kèm bắt buộc chọn đơn vị vận chuyển SPX/GrabExpress/Khác — mục 3.19), danh sách sản phẩm (≥1 dòng, mỗi dòng gồm sản phẩm, số lượng ≥1, đơn giá có thể override giá bán mặc định, giảm giá theo dòng — sản phẩm dòng có thể thuộc loại Có sẵn hoặc Pre-order tự do trong cùng một đơn, dùng chung một luồng xử lý duy nhất, mục 3.19), VAT (số tiền cộng thêm cố định), ghi chú.
+- **FR-ORD.2** Hệ thống PHẢI tính: tạm tính = Σ(số lượng × đơn giá), giảm giá tổng = Σ(giảm giá từng dòng), tổng cộng = tạm tính − giảm giá + VAT. Giá vốn từng dòng PHẢI được lưu lại (snapshot = giá vốn sản phẩm + phí vận chuyển sản phẩm) tại thời điểm tạo đơn để không bị ảnh hưởng nếu giá vốn/phí vận chuyển sản phẩm thay đổi sau này.
+- **FR-ORD.3** *(Sửa 2026-08-22 — đảo ngược hoàn toàn yêu cầu cũ, xem mục 3.20)* Đơn hàng mới PHẢI kiểm tra và **giữ (trừ) tồn kho khả dụng ngay tại thời điểm tạo** cho mọi dòng sản phẩm; nếu tổng số lượng đang giữ trước đó cộng với đơn mới vượt quá tồn kho thực tế, việc tạo đơn PHẢI bị từ chối với thông báo rõ số hiện có/số cần — không còn đợi tới lúc Hoàn thành mới kiểm tra như thiết kế trước đây.
 - **FR-ORD.4** Trạng thái đơn hàng PHẢI tuân theo máy trạng thái: Mới → {Đang xử lý, Đã hủy}; Đang xử lý → {Hoàn thành, Đã hủy}; Hoàn thành → {Hoàn tiền}. Đã hủy và Hoàn tiền là trạng thái kết thúc (không chuyển tiếp được nữa). Mọi lượt chuyển trạng thái sai quy tắc PHẢI bị từ chối. Việc chuyển trạng thái có thể do **nhân viên** thực hiện thủ công, hoặc do **hệ thống** thực hiện tự động khi nhận xác nhận thanh toán QR ngân hàng hợp lệ (xem FR-PAY.4, mục 3.16) — trường hợp tự động này được phép chuyển thẳng từ Mới **hoặc** Đang xử lý sang Hoàn thành, là một ngoại lệ có chủ đích của máy trạng thái nói trên.
-- **FR-ORD.5** Hệ thống PHẢI cho phép tìm/lọc đơn hàng theo mã đơn/tên-SĐT khách hàng, trạng thái, khách hàng, nhân viên, phương thức thanh toán, khoảng ngày tạo.
+- **FR-ORD.5** Hệ thống PHẢI cho phép tìm/lọc đơn hàng theo mã đơn/tên-SĐT khách hàng, trạng thái, khách hàng, nhân viên, phương thức thanh toán, **trạng thái thanh toán, hình thức nhận hàng, đã/chưa có mã vận đơn** (mục 3.19), khoảng ngày tạo; và PHẢI cho phép **sắp xếp** theo ngày tạo (mới nhất/cũ nhất) hoặc theo giá trị đơn (cao nhất/thấp nhất) *(mới 2026-08-22, mục 3.19)*.
 - **FR-ORD.6** Mỗi đơn hàng PHẢI có mã hiển thị định dạng `HDH-{năm}-{số thứ tự 5 chữ số}`, duy nhất, sinh tự động.
 
 ### 3.7 Hóa đơn (Invoices)
@@ -155,8 +157,10 @@ Ký hiệu: **FR-<module>.<số>**. Mỗi yêu cầu có Input/Output/Quy tắc 
 - **FR-INVO.1** Hệ thống PHẢI tự động sinh hóa đơn (mã `HDH-INV-{năm}-{số thứ tự 5 chữ số}`) ngay khi đơn hàng chuyển sang Hoàn thành — không có cách tạo hóa đơn thủ công độc lập với đơn hàng.
 - **FR-INVO.2** Hóa đơn PHẢI ghi rõ ngày và giờ phát hành (theo giờ Việt Nam), không được sửa nội dung sau khi phát hành.
 - **FR-INVO.3** Hệ thống PHẢI cho phép xem danh sách hóa đơn (lọc theo khoảng ngày/khách hàng/phương thức thanh toán/người tạo, tìm theo số hóa đơn/mã đơn/tên khách hàng) và xem chi tiết từng hóa đơn.
-- **FR-INVO.4** Hệ thống PHẢI cho phép xuất hóa đơn dạng PDF (khổ A5) hiển thị đúng dấu tiếng Việt, có đầy đủ: thông tin cửa hàng, số hóa đơn, ngày giờ, mã đơn, nhân viên, khách hàng, danh sách sản phẩm, các dòng tổng (tạm tính/giảm giá/VAT/tổng cộng), phương thức thanh toán.
+- **FR-INVO.4** Hệ thống PHẢI cho phép xuất hóa đơn dạng PDF (khổ A5) hiển thị đúng dấu tiếng Việt, có đầy đủ: thông tin cửa hàng, số hóa đơn, ngày giờ, mã đơn, nhân viên, khách hàng, danh sách sản phẩm (đánh dấu riêng dòng nào là sản phẩm Pre-order — mục 3.19), các dòng tổng (tạm tính/giảm giá/VAT/tổng cộng), **thông tin giao hàng** (hình thức nhận hàng; nếu Ship thì kèm đơn vị vận chuyển và mã vận đơn nếu đã có — mới 2026-08-22), phương thức thanh toán. Bản xem trên web (không chỉ PDF) PHẢI hiển thị đầy đủ tương đương.
 - **FR-INVO.5** Hoàn tiền một đơn Hoàn thành KHÔNG sinh ra hóa đơn điều chỉnh/hóa đơn âm — chỉ trạng thái đơn hàng thay đổi.
+- **FR-INVO.6** *(Mới 2026-08-22)* Nếu đơn hàng gốc của hóa đơn được **chuyển đổi từ một đơn Đặt trước có tiền cọc** (mục 3.17), hóa đơn (cả bản web và PDF) PHẢI hiển thị thêm 3 dòng: **Tổng tiền khách phải thanh toán**, **Tiền đã cọc**, **Thanh toán cuối cùng** (= tổng tiền − tiền cọc) — thay cho dòng "Tổng cộng" đơn thuần. Đơn hàng không xuất phát từ Đặt trước (hoặc Đặt trước không có cọc) hiển thị như bình thường, không có 3 dòng này.
+- **FR-INVO.7** *(Mới 2026-08-22)* Màn hình danh sách Hóa đơn PHẢI hiển thị cột **mã vận đơn** (kèm nút chép nhanh) cho các đơn Ship đã có mã, để nhân viên lấy gửi lại cho khách ngay từ báo cáo tổng hợp mà không cần mở từng đơn hàng.
 
 ### 3.8 Tìm kiếm toàn cục (Search)
 
@@ -237,7 +241,7 @@ Ký hiệu: **FR-<module>.<số>**. Mỗi yêu cầu có Input/Output/Quy tắc 
 - **FR-PRE.6** Khi nhập kho (hoặc điều chỉnh tăng tồn, hoặc hoàn kho do hoàn tiền) làm tồn kho một sản phẩm tăng lên, hệ thống PHẢI tự động kiểm tra các đơn đặt trước đang **Chờ hàng** cho sản phẩm đó, khớp theo **thứ tự đặt trước** (đặt sớm nhất được ưu tiên trước — FIFO) dựa trên tồn kho hiện có, và đánh dấu **Sẵn sàng giao** cho các đơn đủ điều kiện — đây là một gợi ý/thông báo để nhân viên xác nhận, **không** giữ/trừ tồn kho hộ (hệ thống chưa có khái niệm giữ hàng — xem hạn chế 6.12).
 - **FR-PRE.7** Nhân viên PHẢI có thể xác nhận chuyển một đơn đặt trước (ở trạng thái Chờ hàng hoặc Sẵn sàng giao) thành một **Đơn hàng thật**, chọn phương thức thanh toán/kênh bán/VAT tại thời điểm chuyển; đơn hàng tạo ra dùng đúng số lượng và giá đã thỏa thuận ở đơn đặt trước, tự động ghi chú số tiền cọc đã thu và số tiền cần thu thêm (nếu có). Việc trừ kho/sinh hóa đơn diễn ra như đơn hàng thông thường, **chỉ** khi đơn đó sau này được chuyển sang Hoàn thành — không diễn ra ngay tại bước xác nhận chuyển đổi.
 - **FR-PRE.8** Nếu đơn đặt trước dành cho sản phẩm hoàn toàn mới (chưa có trong catalog), hệ thống PHẢI yêu cầu gắn một sản phẩm thật (đã được tạo trong màn Sản phẩm) vào thời điểm chuyển đổi thành đơn hàng — không cho chuyển đổi nếu chưa xác định được sản phẩm.
-- **FR-PRE.9** Hệ thống PHẢI cho phép hủy một đơn đặt trước đang Chờ hàng/Sẵn sàng giao (không hủy được đơn đã chuyển thành đơn hàng), và cho phép sửa số lượng/giá dự kiến/tiền cọc/ngày dự kiến/ghi chú khi đơn còn ở 2 trạng thái này.
+- **FR-PRE.9** Hệ thống PHẢI cho phép hủy một đơn đặt trước đang Chờ hàng/Sẵn sàng giao (không hủy được đơn đã chuyển thành đơn hàng), và cho phép sửa số lượng/giá dự kiến/tiền cọc/ngày dự kiến/ghi chú khi đơn còn ở 2 trạng thái này. Việc **xóa** hẳn một đơn đặt trước là một hành động khác — xem FR-DEL.4 (đã nới lỏng 2026-08-22, xóa được ở mọi trạng thái).
 - **FR-PRE.10** Hệ thống PHẢI cung cấp KPI tổng quan: số đơn đang chờ hàng, số đơn sẵn sàng giao, tổng tiền cọc đang giữ (của các đơn chưa chuyển/chưa hủy), và danh sách có tìm/lọc theo mã, khách hàng, sản phẩm, trạng thái.
 
 ### 3.18 Xóa dữ liệu (Delete) — **Đã triển khai** (2026-08-21)
@@ -246,17 +250,52 @@ Ký hiệu: **FR-<module>.<số>**. Mỗi yêu cầu có Input/Output/Quy tắc 
 
 **Nhóm an toàn** (mọi nhân viên đã đăng nhập, giống quyền hiện có của module đó — không thêm role riêng cho việc xóa):
 - **FR-DEL.1** Khách hàng — chỉ xóa được nếu **chưa có** đơn hàng hoặc đơn đặt trước nào (giữ lịch sử giao dịch).
-- **FR-DEL.2** Sản phẩm — chỉ xóa được nếu **chưa từng** xuất hiện trong đơn hàng, lịch sử kho, hoặc đơn đặt trước nào; sản phẩm đã có giao dịch phải dùng "Ngừng kinh doanh" (đã có từ trước) thay vì xóa.
+- **FR-DEL.2** *(Sửa 2026-08-22 — nới lỏng, xem FR-INV.9)* Sản phẩm — chỉ xóa được nếu **chưa có Đơn hàng hoặc Đặt trước nào còn tồn tại** tham chiếu tới sản phẩm đó. **Lịch sử giao dịch kho không còn chặn xóa** — nếu sản phẩm có lịch sử kho (nhập/xuất/điều chỉnh) nhưng không còn đơn hàng/đặt trước nào tham chiếu (ví dụ đơn hàng liên quan đã bị xóa), lịch sử kho riêng của sản phẩm đó sẽ tự xóa theo khi xóa sản phẩm. Sản phẩm còn Đơn hàng/Đặt trước tham chiếu phải dùng "Ngừng kinh doanh" (đã có từ trước) thay vì xóa.
 - **FR-DEL.3** Phiếu Thu/Chi, khoản Công nợ, Ghi chú khách hàng — xóa tự do (không có dữ liệu nào phụ thuộc vào các bảng này).
-- **FR-DEL.4** Đơn đặt trước — xóa tự do trừ khi đã ở trạng thái **Đã chuyển đơn** (đã có Đơn hàng thật liên kết — giữ lại để không mất truy vết).
+- **FR-DEL.4** *(Sửa 2026-08-22 — nới lỏng hoàn toàn)* Đơn đặt trước — xóa được ở **mọi trạng thái**, kể cả **Đã chuyển đơn**. Không có bảng nào ràng buộc khóa ngoại tới Đặt trước (chỉ Đặt trước tham chiếu ra Sản phẩm/Khách hàng/Đơn hàng), và Đơn hàng thật được tạo ra khi chuyển đổi đã tự chứa đầy đủ dữ liệu độc lập (sản phẩm, giá, ghi chú số tiền cọc) — xóa bản ghi Đặt trước không ảnh hưởng gì tới Đơn hàng đó. Xác nhận xóa PHẢI cảnh báo rõ khi đơn đã Đã chuyển đơn rằng đơn hàng thật vẫn được giữ nguyên, chỉ mất bản ghi đặt trước.
 
 **Nhóm nhạy cảm — chỉ vai trò Admin** (đây là điểm đánh đổi có chủ đích, chấp nhận rủi ro sai số liệu để đổi lấy khả năng sửa lỗi nhập liệu):
-- **FR-DEL.5** Đơn hàng — chỉ Admin xóa được, và chỉ khi đơn đó **chưa từng có hóa đơn** (nghĩa là chưa từng Hoàn thành) — đơn đã tính vào doanh thu/kế toán thì không xóa được dù là Admin.
+- **FR-DEL.5** Đơn hàng — chỉ Admin xóa được, và chỉ khi đơn đó **chưa từng có hóa đơn** (nghĩa là chưa từng Hoàn thành) — đơn đã tính vào doanh thu/kế toán thì không xóa được dù là Admin. *(Sửa 2026-08-22)* Nếu đơn đang ở Mới/Đang xử lý (đang giữ tồn kho theo FR-ORD.3), xóa đơn PHẢI tự động hoàn lại tồn kho đã giữ trước khi xóa, cùng cơ chế với hủy đơn (FR-INV.8) — tránh làm "mất" hàng oan khi xóa thẳng một đơn chưa từng hủy.
 - **FR-DEL.6** Hóa đơn — chỉ Admin xóa được; đơn hàng gốc vẫn giữ nguyên, chỉ mất liên kết hóa đơn (đơn hàng có thể ở trạng thái Hoàn thành mà không còn hóa đơn sau hành động này).
 - **FR-DEL.7** Giao dịch lịch sử kho — chỉ Admin xóa được, và **chỉ được xóa giao dịch gần nhất** của một sản phẩm (để không làm sai số liệu tồn trước/tồn sau của các giao dịch xếp sau); khi xóa, tồn kho sản phẩm được hoàn tác lại đúng phần đã ghi nhận.
 - **FR-DEL.8** Nhân viên — chỉ Admin xóa được, không tự xóa được chính mình, không xóa được tài khoản hệ thống dùng cho thanh toán tự động (mục 3.16), và chỉ xóa được nếu tài khoản đó **chưa từng** tạo/xử lý đơn hàng/hóa đơn/giao dịch kho/phiếu thu chi/đơn đặt trước nào — nhân viên đã dùng hệ thống phải dùng "Khóa tài khoản" (đã có từ trước) thay vì xóa.
 
 **FR-DEL.9** Mọi hành động xóa PHẢI yêu cầu xác nhận trước khi thực hiện (không xóa ngay khi bấm 1 lần) và không thể hoàn tác.
+
+### 3.19 Sản phẩm Pre-order/Có sẵn, phí vận chuyển, ảnh sản phẩm & vận chuyển đơn hàng — **Đã triển khai** (2026-08-22)
+
+> Nhóm các bổ sung cho Sản phẩm và Đơn hàng phục vụ vận hành thực tế: phân loại hàng cần chờ về, tính đúng chi phí đưa hàng về, quản lý ảnh, và theo dõi giao/nhận hàng.
+
+- **FR-PROD.7** Mỗi sản phẩm PHẢI có thêm một nhãn phân loại **Có sẵn** (mặc định) hoặc **Pre-order** — nhãn này **độc lập hoàn toàn** với sổ Đặt trước (mục 3.17): nó không tạo ra một `Preorder`, chỉ là thuộc tính mô tả bản chất của sản phẩm (ví dụ hàng đặt từ nước ngoài, luôn cần thời gian chờ về). Khi chọn Pre-order, hệ thống PHẢI **bắt buộc** nhập kèm ngày dự kiến hàng về, và có ô tùy chọn "nhắc hàng về" (bật/tắt). Khi đổi lại về Có sẵn, ngày dự kiến và trạng thái nhắc PHẢI tự xóa.
+- **FR-PROD.7.1** Khi một sản phẩm Pre-order đã tới/qua ngày dự kiến về mà cờ nhắc đang bật, hệ thống PHẢI hiển thị cảnh báo tại trang chi tiết sản phẩm đó **và** một panel tổng hợp ở Dashboard liệt kê tất cả sản phẩm đang trong tình trạng này (chỉ hiển thị trong ứng dụng — không gửi email/SMS/thông báo ra ngoài).
+- **FR-PROD.7.2** Một đơn hàng PHẢI có thể chứa đồng thời sản phẩm Có sẵn và sản phẩm Pre-order, xử lý theo **đúng một luồng đơn hàng duy nhất** (không có luồng riêng cho Pre-order) — xem mục 3.6. Trên chi tiết đơn hàng và trên hóa đơn (web + PDF, mục 3.7), mỗi dòng sản phẩm PHẢI hiển thị rõ nếu đó là sản phẩm loại Pre-order.
+- **FR-PROD.8** Sản phẩm PHẢI có thêm trường **phí vận chuyển** (số tiền, mặc định 0, cộng vào giá vốn khi tính giá vốn thực/giá trị tồn kho/lợi nhuận gộp) — phản ánh đúng chi phí thực tế đưa hàng về, không chỉ giá nhập từ nhà cung cấp.
+- **FR-PROD.9** Hệ thống PHẢI cho phép tải lên/đổi/xóa **một ảnh** cho mỗi sản phẩm (JPEG/PNG/WEBP/GIF, tối đa 3MB); ảnh PHẢI hiển thị ở danh sách sản phẩm (dạng thu nhỏ) và trang chi tiết; sản phẩm chưa có ảnh PHẢI hiển thị một icon mặc định thay thế.
+- **FR-ORD.7** Đơn hàng PHẢI có một cờ **trạng thái thanh toán** (Đã thanh toán/Chưa thanh toán), độc lập hoàn toàn với trạng thái xử lý đơn (Mới/Đang xử lý/Hoàn thành/...) — nhân viên chuyển cờ này thủ công theo thực tế đã thu tiền hay chưa, không có ràng buộc/gating với các trạng thái khác. Riêng đơn hoàn thành tự động qua đối soát QR ngân hàng khớp (FR-PAY.4) PHẢI tự đặt cờ này thành Đã thanh toán (vì tiền thật đã được ngân hàng xác nhận).
+- **FR-ORD.8** Đơn hàng PHẢI có trường **hình thức nhận hàng**: Khách tới lấy (mặc định) hoặc Ship. Chọn Ship PHẢI bắt buộc chọn kèm một **đơn vị vận chuyển** (SPX/GrabExpress/Khác); chọn Khách tới lấy PHẢI tự xóa đơn vị vận chuyển nếu có. Trường này sửa được độc lập, bất kỳ lúc nào, không phụ thuộc trạng thái xử lý đơn.
+- **FR-ORD.9** Đơn hàng Ship PHẢI có thêm trường **mã vận đơn** (nhập sau khi đã gửi hàng/khách đã chuyển khoản), có nút chép nhanh để gửi lại cho khách; đơn Khách tới lấy KHÔNG được nhập mã vận đơn. Mã vận đơn PHẢI hiển thị được ở: chi tiết đơn hàng, hóa đơn (web+PDF, FR-INVO.4), và danh sách Hóa đơn (FR-INVO.7) — không cần đưa vào báo cáo doanh thu dạng tổng hợp theo ngày (không phù hợp vì 1 dòng báo cáo đó gộp nhiều đơn).
+- **FR-ORD.10** Màn hình danh sách Đơn hàng PHẢI cung cấp một panel **"Khách mua nhiều nhất"** xếp hạng top khách hàng theo tổng giá trị các đơn **Hoàn thành** (tận dụng liên kết khách hàng đã có sẵn trên đơn hàng, không cần bảng thống kê riêng); bấm vào một khách trong panel PHẢI điều hướng thẳng tới hồ sơ khách hàng đó.
+
+### 3.20 Giữ tồn kho ngay khi tạo đơn hàng (Stock Reservation) — **Đã triển khai** (2026-08-22)
+
+> **Thay đổi hành vi quan trọng** so với thiết kế ban đầu (FR-ORD.3/FR-INV.6-8 phiên bản cũ): trước đây tồn kho chỉ bị trừ khi đơn chuyển sang Hoàn thành, nghĩa là nhiều đơn "Mới"/"Đang xử lý" cộng lại có thể vượt quá tồn kho thực tế mà hệ thống không cảnh báo — chỉ phát hiện khi cố hoàn thành đơn sau cùng. Thiết kế mới giữ hàng ngay từ lúc tạo đơn để tránh nhận đơn vượt quá khả năng cung ứng thực tế.
+
+- **FR-ORD.11** Tạo đơn hàng mới PHẢI trừ tồn kho ngay (xem FR-INV.6/FR-ORD.3); nếu không đủ hàng cho tổng số lượng đang giữ (kể cả khi có nhiều dòng cùng một sản phẩm trong đơn, phải gộp số lượng lại trước khi kiểm tra), việc tạo đơn PHẢI bị từ chối toàn bộ (không tạo đơn một phần).
+- **FR-ORD.12** Chuyển đơn sang **Đã hủy** (chỉ từ Mới/Đang xử lý) PHẢI hoàn lại đúng số tồn kho đã giữ. Chuyển đơn sang **Hoàn thành** KHÔNG được trừ tồn kho thêm lần nữa (đã trừ từ lúc tạo) — chỉ tăng số lượng "đã bán" và sinh hóa đơn.
+- **FR-ORD.13** Xóa hẳn một đơn hàng (FR-DEL.5) khi đơn còn Mới/Đang xử lý PHẢI hoàn lại tồn kho đã giữ trước khi xóa; nếu đơn đã Đã hủy trước đó (tồn kho đã hoàn lại rồi) thì xóa tiếp theo KHÔNG hoàn lại lần thứ hai.
+- **FR-ORD.14** Mọi thay đổi tồn kho theo mục này (giữ hàng lúc tạo, hoàn lại lúc hủy/xóa) PHẢI được ghi thành giao dịch kho có tham chiếu tới mã đơn hàng liên quan (giống mọi giao dịch kho khác, FR-INV.3) — không có ngoại lệ "âm thầm" nào không lưu vết.
+
+### 3.21 Xác thực dữ liệu bắt buộc bổ sung — **Đã triển khai** (2026-08-22)
+
+- **FR-VAL.1** Giá vốn và giá bán của sản phẩm PHẢI lớn hơn 0 khi tạo mới hoặc sửa (xem FR-PROD.2) — không còn cho phép giá trị 0.
+- **FR-VAL.2** Sản phẩm loại Pre-order PHẢI luôn có ngày dự kiến hàng về (xem FR-PROD.7) — áp dụng cả khi tạo mới và khi đổi một sản phẩm Có sẵn thành Pre-order.
+- **FR-VAL.3** Khách hàng PHẢI luôn có nguồn khách hàng được chọn rõ (xem FR-CUST.1) khi tạo mới — không còn ngầm định "Khác" khi bỏ trống.
+- **FR-VAL.4** Mọi trường bắt buộc PHẢI được đánh dấu rõ trên giao diện (dấu `*` cạnh tên trường) và được kiểm tra cả ở phía máy khách (trước khi gửi) và phía server (nguồn xác thực chính) — hai lớp kiểm tra PHẢI cho cùng kết quả.
+
+### 3.22 Xác nhận & thông báo dạng modal trong ứng dụng — **Đã triển khai** (2026-08-22)
+
+- **FR-UI.1** Mọi hành động xóa/hủy có yêu cầu xác nhận (FR-DEL.9 và tương đương) PHẢI hiển thị bằng một hộp thoại (modal) trong giao diện ứng dụng, **không** dùng hộp thoại `confirm()` gốc của trình duyệt.
+- **FR-UI.2** Mọi thông báo lỗi cần hiển thị ngay lập tức cho người dùng (ví dụ lỗi khi mở PDF hóa đơn) PHẢI hiển thị bằng modal trong ứng dụng, **không** dùng `alert()` gốc của trình duyệt — đảm bảo giao diện đồng nhất, có thể tùy biến (kiểu chữ, màu, nút) và không bị chặn bởi cấu hình chặn popup của trình duyệt.
 
 ---
 
@@ -309,7 +348,9 @@ Các điểm dưới đây được phát hiện khi đọc mã nguồn hiện t
 9. **6.9 — Không có dữ liệu mẫu ngoài 1 tài khoản Admin**: seed script chỉ tạo `admin@hdhtoys.vn`/`admin123`, không có sản phẩm/khách hàng/đơn hàng mẫu.
 10. **6.10 — Tích hợp QR ngân hàng (mục 3.16) cần cấu hình thật trước khi dùng với tiền thật**: mã nguồn đã chạy đầy đủ (kiểm thử qua HTTP thực tế thành công), nhưng môi trường phát triển hiện chỉ có tài khoản ngân hàng/`VIETQR_WEBHOOK_SECRET` dạng placeholder — cần thay bằng tài khoản thật + đăng ký dịch vụ đối soát trung gian thật trước khi triển khai production.
 11. **6.11 — Frontend phát hiện thanh toán QR khớp bằng polling (4 giây/lần)**, không phải push/WebSocket — độ trễ hiển thị cho nhân viên tối đa vài giây sau khi hệ thống đã tự hoàn thành đơn ở backend; chấp nhận được cho quy mô cửa hàng nhỏ nhưng nên nâng cấp lên WebSocket/SSE nếu số đơn đồng thời tăng cao.
-12. **6.12 — Khớp đặt trước (FR-PRE.6) là gợi ý, không phải giữ hàng chắc chắn**: hệ thống không "khóa"/trừ trước số lượng tồn kho cho các đơn đặt trước đã Sẵn sàng giao — nếu nhân viên bán hết số hàng đó cho khách vãng lai trước khi xác nhận chuyển đơn đặt trước, đơn đặt trước sẽ vẫn hiển thị Sẵn sàng giao dù thực tế không còn đủ hàng. Cần quy trình vận hành (nhân viên kiểm tra lại trước khi xác nhận) hoặc nâng cấp thêm cơ chế giữ hàng thật nếu cần chặt hơn.
+12. **6.12 — Khớp đặt trước (FR-PRE.6) là gợi ý, không phải giữ hàng chắc chắn**: hệ thống không "khóa"/trừ trước số lượng tồn kho cho các đơn đặt trước đã Sẵn sàng giao — nếu nhân viên bán hết số hàng đó cho khách vãng lai trước khi xác nhận chuyển đơn đặt trước, đơn đặt trước sẽ vẫn hiển thị Sẵn sàng giao dù thực tế không còn đủ hàng. Cần quy trình vận hành (nhân viên kiểm tra lại trước khi xác nhận) hoặc nâng cấp thêm cơ chế giữ hàng thật nếu cần chặt hơn. **Lưu ý 2026-08-22**: đơn hàng thông thường (mục 3.20) đã có cơ chế giữ hàng thật khi tạo đơn — hạn chế này chỉ còn áp dụng riêng cho *Đặt trước*, chưa mở rộng sang đó.
+13. **6.13 — [Mới 2026-08-22] Giữ tồn kho lúc tạo đơn (mục 3.20) chưa có khóa hàng (row-lock) chống race condition**: kiểm tra + trừ tồn kho đều nằm trong một transaction Postgres, nhưng không dùng `SELECT ... FOR UPDATE` — nếu hai đơn hàng cho cùng sản phẩm được tạo **đồng thời gần như cùng lúc** ở mức isolation mặc định, về lý thuyết cả hai có thể đọc cùng một số tồn trước khi commit, dẫn tới bán vượt tồn kho trong trường hợp hiếm. Rủi ro này đã tồn tại từ trước ở mọi giao dịch kho khác (nhập/xuất/điều chỉnh) cùng cơ chế `applyInventoryTransaction`, không phải vấn đề mới riêng của tính năng này — chấp nhận được ở quy mô 1 cửa hàng, ít nhân viên đồng thời; cần bổ sung khóa hàng nếu tăng số lượng nhân viên/terminal thao tác song song.
+14. **6.14 — [Mới 2026-08-22] Xóa Đặt trước đã chuyển đơn làm mất "ghi chú xuất xứ"**: sau khi nới lỏng FR-DEL.4, xóa một Đặt trước đã Đã chuyển đơn sẽ làm mất khả năng tra cứu *ngược* từ Đơn hàng về Đặt trước gốc qua UI (nút "Xem đơn đặt trước" không còn dữ liệu để hiển thị) — tuy vậy `Order.ghiChu` vẫn giữ lại dòng text ghi rõ đã chuyển từ đơn đặt trước nào và số tiền cọc, nên không mất thông tin nghiệp vụ cốt lõi, chỉ mất liên kết điều hướng hai chiều.
 
 ---
 
@@ -317,6 +358,8 @@ Các điểm dưới đây được phát hiện khi đọc mã nguồn hiện t
 
 Danh sách thực thể chính (chi tiết đầy đủ trường dữ liệu, kiểu, ràng buộc tại **SDS.md mục 3**):
 
-`Staff`, `Product`, `Customer`, `CustomerNote`, `Order`, `OrderItem`, `Invoice`, `InventoryTransaction`, `IncomeExpense`, `Debt`, `AccountingBalance`, `PaymentTransaction` *(mục 3.16)*, `Preorder` *(mục 3.17)*.
+`Staff`, `Product`, `ProductImage` *(mục 3.19, ảnh nhị phân — bảng riêng khỏi Product)*, `Customer`, `CustomerNote`, `Order`, `OrderItem`, `Invoice`, `InventoryTransaction`, `IncomeExpense`, `Debt`, `AccountingBalance`, `PaymentTransaction` *(mục 3.16)*, `Preorder` *(mục 3.17)*.
 
-Các enum nghiệp vụ chính: `StaffRole`, `StaffStatus`, `ProductStatus`, `CustomerTier`, `OrderStatus`, `PaymentMethod`, `SalesChannel`, `InventoryTransactionType`, `TransactionKind`, `IncomeExpenseCategory`, `DebtType`, `DebtStatus` (suy ra, không lưu trữ), `PaymentReconciliationStatus` (mục 3.16), `PreorderStatus` (mục 3.17).
+Các enum nghiệp vụ chính: `StaffRole`, `StaffStatus`, `ProductStatus`, `LoaiSanPham` *(mới — mục 3.19: `CO_SAN`, `PRE_ORDER`)*, `CustomerTier`, `OrderStatus`, `PaymentMethod`, `SalesChannel` (mở rộng 2026-08-22 thêm `ZALO`, `TIKTOK`), `PhuongThucNhanHang` *(mới — mục 3.19: `KHACH_TOI_LAY`, `SHIP`)*, `DonViVanChuyen` *(mới — mục 3.19: `SPX`, `GRAB`, `KHAC`)*, `InventoryTransactionType`, `TransactionKind`, `IncomeExpenseCategory`, `DebtType`, `DebtStatus` (suy ra, không lưu trữ), `PaymentReconciliationStatus` (mục 3.16), `PreorderStatus` (mục 3.17).
+
+Các trường mới bổ sung trên thực thể đã có (đầy đủ tại SDS.md mục 3.1): `Product.phiVanChuyen/loaiSanPham/ngayDuKienVe/nhacHang`; `Customer.diaChi/luuY/linkFacebook/nguonKhachHang`; `Order.daThanhToan/phuongThucNhanHang/donViVanChuyen/maVanDon`.

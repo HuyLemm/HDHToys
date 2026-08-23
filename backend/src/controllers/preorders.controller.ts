@@ -77,7 +77,6 @@ const convertSchema = z.object({
   productId: z.string().optional(),
   phuongThucThanhToan: z.enum(["TIEN_MAT", "CHUYEN_KHOAN", "THE", "QR_CODE"]),
   kenhBan: z.enum(["TAI_CUA_HANG", "DIEN_THOAI", "FACEBOOK", "ZALO", "TIKTOK", "KHAC"]).optional(),
-  vat: z.number().int().min(0).optional(),
 })
 
 export async function convertToOrder(req: Request, res: Response) {

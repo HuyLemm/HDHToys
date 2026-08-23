@@ -3,23 +3,39 @@ import { prisma } from "../src/lib/prisma.js"
 import { hashPassword } from "../src/lib/auth.js"
 import { PAYMENT_SYSTEM_STAFF_EMAIL } from "../src/lib/paymentConfig.js"
 
+/**
+ * KHÔNG hardcode mật khẩu mặc định ở đây (rủi ro an ninh nghiêm trọng nếu ai
+ * chạy seed trên production mà quên đổi ngay — "admin/admin123" là pattern
+ * ai cũng đoán được). Đọc từ SEED_ADMIN_EMAIL/SEED_ADMIN_PASSWORD nếu có; nếu
+ * không, tự sinh mật khẩu ngẫu nhiên và CHỈ in ra console đúng một lần lúc
+ * seed — người vận hành phải tự chép lại/đổi ngay sau khi đăng nhập lần đầu.
+ */
 async function seedAdmin() {
-  const email = "admin@hdhtoys.vn"
+  const email = process.env.SEED_ADMIN_EMAIL || "admin@hdhtoys.vn"
   const existing = await prisma.staff.findUnique({ where: { email } })
   if (existing) {
     console.log("Admin đã tồn tại, bỏ qua seed.")
     return
   }
 
+  const providedPassword = process.env.SEED_ADMIN_PASSWORD
+  const password = providedPassword || randomBytes(9).toString("base64url")
+
   await prisma.staff.create({
     data: {
       hoTen: "Admin HDH Toys",
       email,
-      matKhauHash: await hashPassword("admin123"),
+      matKhauHash: await hashPassword(password),
       vaiTro: "ADMIN",
     },
   })
-  console.log(`Đã tạo tài khoản admin: ${email} / admin123`)
+
+  if (providedPassword) {
+    console.log(`Đã tạo tài khoản admin: ${email} (mật khẩu lấy từ SEED_ADMIN_PASSWORD).`)
+  } else {
+    console.log(`Đã tạo tài khoản admin: ${email} / ${password}`)
+    console.log("⚠️  Mật khẩu ngẫu nhiên này chỉ hiện ra DUY NHẤT LẦN NÀY trong log — đăng nhập và đổi mật khẩu ngay, hoặc lưu lại an toàn trước khi log bị xoay vòng.")
+  }
 }
 
 /**

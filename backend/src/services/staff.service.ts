@@ -28,11 +28,22 @@ export async function create(params: { hoTen: string; email: string; matKhau: st
 }
 
 export function update(id: string, data: Partial<{ hoTen: string; vaiTro: StaffRole; trangThai: StaffStatus }>) {
-  return prisma.staff.update({ where: { id }, data, select: staffSelect })
+  return prisma.staff.update({
+    where: { id },
+    // Khóa tài khoản (trangThai=LOCKED) tăng luôn tokenVersion — token đang
+    // tồn tại của tài khoản này mất hiệu lực ngay ở lượt request kế tiếp,
+    // không phải chờ hết hạn 8h (xem middleware/requireAuth.ts).
+    data: data.trangThai === "LOCKED" ? { ...data, tokenVersion: { increment: 1 } } : data,
+    select: staffSelect,
+  })
 }
 
+/** Reset mật khẩu PHẢI vô hiệu hóa mọi token cũ (tokenVersion+1) — nếu không, kẻ chiếm được token trước khi Admin đổi mật khẩu vẫn dùng được tới hết 8h dù mật khẩu đã đổi. */
 export async function resetPassword(id: string, matKhauMoi: string) {
-  await prisma.staff.update({ where: { id }, data: { matKhauHash: await hashPassword(matKhauMoi) } })
+  await prisma.staff.update({
+    where: { id },
+    data: { matKhauHash: await hashPassword(matKhauMoi), tokenVersion: { increment: 1 } },
+  })
 }
 
 /**
