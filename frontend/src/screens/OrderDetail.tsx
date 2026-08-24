@@ -201,6 +201,12 @@ export function OrderDetailScreen({ orderId, onBack }: { orderId: string; onBack
                 </div>
               )}
               {order.phuongThucNhanHang === 'SHIP' && (
+                <div>
+                  <div className="text-slate-400 mb-0.5">Phí vận chuyển (khách trả)</div>
+                  <ShippingFeeField order={order} onSaved={setOrder} />
+                </div>
+              )}
+              {order.phuongThucNhanHang === 'SHIP' && (
                 <div className="col-span-3">
                   <div className="text-slate-400 mb-0.5">Mã vận đơn</div>
                   <TrackingCodeField order={order} onSaved={setOrder} />
@@ -232,21 +238,17 @@ export function OrderDetailScreen({ orderId, onBack }: { orderId: string; onBack
             <div className="mt-4 flex justify-end">
               <div className="w-56 text-xs space-y-1.5">
                 {[
-                  ['Tạm tính', order.tamTinh], ['Giảm giá', order.giamGia],
+                  ['Tạm tính', order.tamTinh], ['Giảm giá', order.giamGia], ['Phí vận chuyển', order.phiShip],
                 ].map(([k, v]) => (
                   <div key={k as string} className="flex justify-between text-slate-600"><span>{k}</span><span>{(v as number).toLocaleString('vi-VN')} VNĐ</span></div>
                 ))}
                 <div className="flex justify-between font-bold text-slate-900 pt-1.5 border-t border-slate-200">
-                  <span>{order.tienCoc > 0 ? 'Tổng tiền khách phải thanh toán' : 'Tổng cộng'}</span><span>{order.tongCong.toLocaleString('vi-VN')} VNĐ</span>
+                  <span>Tổng cộng</span><span>{order.tongCong.toLocaleString('vi-VN')} VNĐ</span>
                 </div>
-                {order.tienCoc > 0 && (
-                  <>
-                    <div className="flex justify-between text-emerald-600"><span>Tiền đã cọc</span><span>-{order.tienCoc.toLocaleString('vi-VN')} VNĐ</span></div>
-                    <div className="flex justify-between font-bold text-slate-900 pt-1.5 border-t border-slate-200">
-                      <span>Thanh toán cuối cùng</span><span>{(order.tongCong - order.tienCoc).toLocaleString('vi-VN')} VNĐ</span>
-                    </div>
-                  </>
-                )}
+                <div className="flex justify-between text-emerald-600"><span>Tiền đã cọc</span><span>{order.tienCoc > 0 ? `-${order.tienCoc.toLocaleString('vi-VN')}` : '0'} VNĐ</span></div>
+                <div className="flex justify-between font-bold text-slate-900 pt-1.5 border-t border-slate-200">
+                  <span>Thanh toán cuối cùng</span><span>{(order.tongCong - order.tienCoc).toLocaleString('vi-VN')} VNĐ</span>
+                </div>
               </div>
             </div>
           </div>
@@ -359,6 +361,50 @@ function TrackingCodeField({ order, onSaved }: { order: Order; onSaved: (o: Orde
         {order.maVanDon && !dirty && (
           <button onClick={() => navigator.clipboard.writeText(order.maVanDon!)} className="text-[10px] text-slate-400 hover:text-blue-600 cursor-pointer">Chép mã</button>
         )}
+      </div>
+      {error && <div className="text-[10px] text-red-500 mt-1">{error}</div>}
+    </div>
+  )
+}
+
+/**
+ * Phí vận chuyển tính cho khách — chỉ sửa được khi đơn còn Mới/Đang xử lý
+ * (backend chặn sửa sau khi Hoàn thành, vì tongCong lúc đó đã "chốt" vào Hóa
+ * đơn + sổ Thu/Chi, xem orders.service.ts#updateShippingFee).
+ */
+function ShippingFeeField({ order, onSaved }: { order: Order; onSaved: (o: Order) => void }) {
+  const editable = order.trangThai === 'MOI' || order.trangThai === 'DANG_XU_LY'
+  const [value, setValue] = useState(order.phiShip === 0 ? '' : String(order.phiShip))
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => { setValue(order.phiShip === 0 ? '' : String(order.phiShip)) }, [order.id, order.phiShip])
+
+  if (!editable) {
+    return <div className="text-xs font-semibold text-slate-800 py-1.5">{order.phiShip.toLocaleString('vi-VN')} VNĐ</div>
+  }
+
+  async function handleSave() {
+    setError(null)
+    setSaving(true)
+    try {
+      const updated = await api.orders.updateShippingFee(order.id, Number(value) || 0)
+      onSaved(updated)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Không thể lưu phí vận chuyển.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const dirty = (Number(value) || 0) !== order.phiShip
+
+  return (
+    <div>
+      <div className="flex gap-2 items-center">
+        <input type="number" min={0} value={value} onChange={e => setValue(e.target.value)}
+          className="text-xs px-2 py-1.5 border border-slate-200 rounded-md focus:outline-none focus:border-blue-400 max-w-32" placeholder="0" />
+        <Btn small disabled={saving || !dirty} onClick={handleSave}>{saving ? 'Đang lưu...' : 'Lưu'}</Btn>
       </div>
       {error && <div className="text-[10px] text-red-500 mt-1">{error}</div>}
     </div>

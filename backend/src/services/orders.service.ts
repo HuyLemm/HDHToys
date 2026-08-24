@@ -184,6 +184,7 @@ export async function create(params: {
   phuongThucThanhToan: PaymentMethod
   phuongThucNhanHang?: PhuongThucNhanHang
   donViVanChuyen?: DonViVanChuyen
+  phiShip?: number
   tienCoc?: number
   ghiChu?: string
   items: OrderItemInput[]
@@ -193,8 +194,13 @@ export async function create(params: {
 }) {
   const { khachHangId, nhanVienId, kenhBan, phuongThucThanhToan, ghiChu, items, fallbackNhanVienId } = params
   const tienCoc = params.tienCoc ?? 0
+  const phiShip = params.phiShip ?? 0
   const recordDepositIncome = params.recordDepositIncome ?? true
   const delivery = resolveDelivery(params.phuongThucNhanHang ?? "KHACH_TOI_LAY", params.donViVanChuyen)
+
+  if (phiShip > 0 && delivery.phuongThucNhanHang !== "SHIP") {
+    throw badRequest("Chỉ đơn hàng nhận qua Ship mới có phí vận chuyển.")
+  }
 
   const customer = await prisma.customer.findUnique({ where: { id: khachHangId } })
   if (!customer) throw badRequest("Khách hàng không tồn tại.")
@@ -221,7 +227,7 @@ export async function create(params: {
 
   const tamTinh = lines.reduce((sum, l) => sum + l.soLuong * l.donGia, 0)
   const giamGiaTong = lines.reduce((sum, l) => sum + l.giamGia, 0)
-  const tongCong = tamTinh - giamGiaTong
+  const tongCong = tamTinh - giamGiaTong + phiShip
 
   if (tienCoc > tongCong) throw badRequest("Tiền cọc không được vượt quá tổng tiền đơn hàng.")
 
@@ -241,6 +247,7 @@ export async function create(params: {
         phuongThucThanhToan,
         phuongThucNhanHang: delivery.phuongThucNhanHang,
         donViVanChuyen: delivery.donViVanChuyen,
+        phiShip,
         tienCoc,
         ghiChu,
         tamTinh,
@@ -491,6 +498,29 @@ export async function updateTrackingCode(orderId: string, maVanDon?: string) {
     throw badRequest("Chỉ đơn hàng nhận qua Ship mới cần mã vận đơn.")
   }
   return prisma.order.update({ where: { id: orderId }, data: { maVanDon: trimmed || null }, include: orderInclude })
+}
+
+/**
+ * Sửa phí vận chuyển tính cho khách (chỉ đơn Ship) — thường điền/sửa sau khi
+ * biết chính xác phí ship thật (lúc tạo đơn có thể chưa rõ). Chỉ cho sửa khi
+ * đơn CHƯA Hoàn thành: một khi Hoàn thành, tongCong đã được "chốt" vào Hóa
+ * đơn và sổ Thu/Chi (applyOrderCompletion) — sửa sau đó sẽ làm 2 nơi đó lệch
+ * khỏi Order, đúng lỗi vừa sửa ở BUG-017.
+ */
+export async function updateShippingFee(orderId: string, phiShip: number) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } })
+  if (!order) throw notFound("Không tìm thấy đơn hàng.")
+  if (order.phuongThucNhanHang !== "SHIP") {
+    throw badRequest("Chỉ đơn hàng nhận qua Ship mới có phí vận chuyển.")
+  }
+  if (order.trangThai !== "MOI" && order.trangThai !== "DANG_XU_LY") {
+    throw badRequest("Đơn hàng đã Hoàn thành/Hủy/Hoàn tiền — không thể sửa phí vận chuyển.")
+  }
+
+  const tongCongMoi = order.tongCong - order.phiShip + phiShip
+  if (order.tienCoc > tongCongMoi) throw badRequest("Phí vận chuyển làm tổng tiền đơn nhỏ hơn tiền cọc đã nhận — vui lòng kiểm tra lại.")
+
+  return prisma.order.update({ where: { id: orderId }, data: { phiShip, tongCong: tongCongMoi }, include: orderInclude })
 }
 
 /**

@@ -252,6 +252,7 @@ export type Order = {
   trangThai: OrderStatus
   tamTinh: number
   giamGia: number
+  phiShip: number
   tongCong: number
   tienCoc: number
   daThanhToan: boolean
@@ -480,6 +481,7 @@ export const api = {
       phuongThucThanhToan: PaymentMethod
       phuongThucNhanHang?: DeliveryMethod
       donViVanChuyen?: ShippingCarrier
+      phiShip?: number
       tienCoc?: number
       ghiChu?: string
       items: { productId: string; soLuong: number; giaOverride?: number; giamGia?: number }[]
@@ -489,6 +491,7 @@ export const api = {
     updateDelivery: (id: string, phuongThucNhanHang: DeliveryMethod, donViVanChuyen?: ShippingCarrier) =>
       patch<Order>(`/orders/${id}/delivery`, { phuongThucNhanHang, donViVanChuyen }),
     updateTrackingCode: (id: string, maVanDon: string) => patch<Order>(`/orders/${id}/tracking-code`, { maVanDon }),
+    updateShippingFee: (id: string, phiShip: number) => patch<Order>(`/orders/${id}/shipping-fee`, { phiShip }),
     /** Ảnh QR VietQR (PNG) của đơn hàng — dùng với URL.createObjectURL để hiển thị inline. */
     qrImageBlob: (id: string) => fetchAuthenticatedBlob(`/orders/${id}/qr.png`),
     /** Chỉ Admin — chỉ xóa được đơn chưa có hóa đơn (chưa từng Hoàn thành). */

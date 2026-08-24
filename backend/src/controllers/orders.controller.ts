@@ -77,6 +77,7 @@ const createSchema = z.object({
   phuongThucThanhToan: z.enum(["TIEN_MAT", "CHUYEN_KHOAN", "THE", "QR_CODE"]),
   phuongThucNhanHang: z.enum(["KHACH_TOI_LAY", "SHIP"]).optional(),
   donViVanChuyen: z.enum(["SPX", "GRAB", "KHAC"]).optional(),
+  phiShip: z.number().int().min(0).default(0),
   tienCoc: z.number().int().min(0).default(0),
   ghiChu: z.string().optional(),
   items: z.array(itemSchema).min(1),
@@ -141,5 +142,15 @@ export async function updateTrackingCode(req: Request, res: Response) {
   if (!parsed.success) throw badRequest("Mã vận đơn không hợp lệ.")
 
   const order = await ordersService.updateTrackingCode(req.params.id, parsed.data.maVanDon)
+  res.json(order)
+}
+
+const shippingFeeSchema = z.object({ phiShip: z.number().int().min(0) })
+
+export async function updateShippingFee(req: Request, res: Response) {
+  const parsed = shippingFeeSchema.safeParse(req.body)
+  if (!parsed.success) throw badRequest("Phí vận chuyển không hợp lệ.")
+
+  const order = await ordersService.updateShippingFee(req.params.id, parsed.data.phiShip)
   res.json(order)
 }

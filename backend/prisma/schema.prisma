@@ -199,6 +199,10 @@ model Order {
   phuongThucNhanHang  PhuongThucNhanHang @default(KHACH_TOI_LAY)
   donViVanChuyen      DonViVanChuyen?
   maVanDon            String?
+  // Phí giao hàng tính cho KHÁCH (cộng vào tongCong khách phải trả) — khác
+  // với Product.phiVanChuyen (chi phí nhập hàng của shop, không liên quan
+  // tới khách). Chỉ áp dụng khi phuongThucNhanHang = SHIP.
+  phiShip             Int           @default(0)
   tamTinh             Int
   giamGia             Int           @default(0)
   tongCong            Int

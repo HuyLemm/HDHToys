@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { FileDown, Printer } from 'lucide-react'
 import { BackBtn, Badge, Btn, HdhLogo, Spinner, ErrorBox } from '../components/ui'
 import { api, ApiError, type Invoice } from '../lib/api'
-import { paymentMethodLabel, loaiSanPhamLabel, deliveryMethodLabel, shippingCarrierLabel } from '../lib/labels'
+import { paymentMethodLabel, loaiSanPhamLabel, deliveryMethodLabel, shippingCarrierLabel, salesChannelLabel } from '../lib/labels'
 import { useAuth } from '../lib/auth'
 import { useDialog } from '../lib/dialog'
 
@@ -105,31 +105,34 @@ export function InvoiceDetailScreen({ invoiceId, onBack, onViewOrder }: {
 
           <div className="flex justify-end mb-5">
             <div className="w-60 text-xs space-y-1.5">
-              {[['Tạm tính', order.tamTinh], ['Giảm giá', order.giamGia]].map(([k, v]) => (
+              {[['Tạm tính', order.tamTinh], ['Giảm giá', order.giamGia], ['Phí vận chuyển', order.phiShip]].map(([k, v]) => (
                 <div key={k as string} className="flex justify-between text-slate-600"><span>{k}</span><span>{(v as number).toLocaleString('vi-VN')} VNĐ</span></div>
               ))}
               <div className="flex justify-between font-bold text-base pt-2 border-t-2 border-slate-300">
-                <span>{order.tienCoc > 0 ? 'Tổng tiền khách phải thanh toán' : 'Tổng cộng'}</span>
+                <span>Tổng cộng</span>
                 <span style={{ color: '#1a56db' }}>{order.tongCong.toLocaleString('vi-VN')} VNĐ</span>
               </div>
-              {order.tienCoc > 0 && (
-                <>
-                  <div className="flex justify-between text-slate-600 pt-1">
-                    <span>Tiền đã cọc{order.preorder ? ` (${order.preorder.ma})` : ''}</span>
-                    <span>-{order.tienCoc.toLocaleString('vi-VN')} VNĐ</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-base pt-2 border-t-2 border-slate-300">
-                    <span>Thanh toán cuối cùng</span>
-                    <span style={{ color: '#1a56db' }}>{(order.tongCong - order.tienCoc).toLocaleString('vi-VN')} VNĐ</span>
-                  </div>
-                </>
-              )}
+              <div className="flex justify-between text-slate-600 pt-1">
+                <span>Tiền đã cọc{order.preorder ? ` (${order.preorder.ma})` : ''}</span>
+                <span>{order.tienCoc > 0 ? `-${order.tienCoc.toLocaleString('vi-VN')}` : '0'} VNĐ</span>
+              </div>
+              <div className="flex justify-between font-bold text-base pt-2 border-t-2 border-slate-300">
+                <span>Thanh toán cuối cùng</span>
+                <span style={{ color: '#1a56db' }}>{(order.tongCong - order.tienCoc).toLocaleString('vi-VN')} VNĐ</span>
+              </div>
             </div>
           </div>
 
           <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700 text-center">
-            Phương thức thanh toán: <strong>{paymentMethodLabel[order.phuongThucThanhToan]}</strong>
+            Phương thức thanh toán: <strong>{paymentMethodLabel[order.phuongThucThanhToan]}</strong> · Kênh bán: <strong>{salesChannelLabel[order.kenhBan]}</strong>
           </div>
+
+          {order.ghiChu && (
+            <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs">
+              <div className="font-semibold text-amber-700 mb-1">Ghi chú</div>
+              <div className="text-amber-800">{order.ghiChu}</div>
+            </div>
+          )}
 
           <div className="mt-3 p-3 bg-slate-50 rounded-lg text-xs">
             <div className="font-semibold text-slate-700 mb-1">Thông tin giao hàng</div>

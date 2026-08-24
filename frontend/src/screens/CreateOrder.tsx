@@ -20,6 +20,7 @@ export function CreateOrderScreen({ onBack, onCreated }: { onBack: () => void; o
   const [phuongThuc, setPhuongThuc] = useState<PaymentMethod>('TIEN_MAT')
   const [phuongThucNhanHang, setPhuongThucNhanHang] = useState<DeliveryMethod>('KHACH_TOI_LAY')
   const [donViVanChuyen, setDonViVanChuyen] = useState<ShippingCarrier>('SPX')
+  const [phiShip, setPhiShip] = useState(0)
   const [tienCoc, setTienCoc] = useState(0)
   const [ghiChu, setGhiChu] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -61,7 +62,8 @@ export function CreateOrderScreen({ onBack, onCreated }: { onBack: () => void; o
 
   const tamTinh = cart.reduce((sum, l) => sum + l.soLuong * l.product.giaBan, 0)
   const giamGiaTong = cart.reduce((sum, l) => sum + l.giamGia, 0)
-  const tongCong = tamTinh - giamGiaTong
+  const phiShipApDung = phuongThucNhanHang === 'SHIP' ? phiShip : 0
+  const tongCong = tamTinh - giamGiaTong + phiShipApDung
 
   async function handleSubmit() {
     if (!customer) { setError('Vui lòng chọn khách hàng.'); return }
@@ -76,6 +78,7 @@ export function CreateOrderScreen({ onBack, onCreated }: { onBack: () => void; o
         phuongThucThanhToan: phuongThuc,
         phuongThucNhanHang,
         donViVanChuyen: phuongThucNhanHang === 'SHIP' ? donViVanChuyen : undefined,
+        phiShip: phiShipApDung || undefined,
         tienCoc: tienCoc || undefined,
         ghiChu: ghiChu || undefined,
         items: cart.map(l => ({ productId: l.product.id, soLuong: l.soLuong, giamGia: l.giamGia })),
@@ -209,6 +212,14 @@ export function CreateOrderScreen({ onBack, onCreated }: { onBack: () => void; o
                   </select>
                 </div>
               )}
+              {phuongThucNhanHang === 'SHIP' && (
+                <div>
+                  <label className="block text-slate-500 mb-1">Phí vận chuyển (khách trả, tùy chọn)</label>
+                  <input type="number" min={0} value={phiShip === 0 ? '' : phiShip}
+                    onChange={e => setPhiShip(Math.max(0, Number(e.target.value)))}
+                    className="w-full text-xs px-2.5 py-2 border border-slate-200 rounded-md focus:outline-none focus:border-blue-400" placeholder="0" />
+                </div>
+              )}
               <div>
                 <label className="block text-slate-500 mb-1">Tiền cọc (tùy chọn)</label>
                 <input type="number" min={0} value={tienCoc === 0 ? '' : tienCoc}
@@ -227,7 +238,10 @@ export function CreateOrderScreen({ onBack, onCreated }: { onBack: () => void; o
           <div className="bg-white rounded-lg border border-slate-200 p-4">
             <h3 className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wide">Tổng kết</h3>
             <div className="space-y-2 text-xs">
-              <div className="flex justify-between text-slate-600"><span>Tổng tiền hàng</span><span>{tongCong.toLocaleString('vi-VN')} VNĐ</span></div>
+              <div className="flex justify-between text-slate-600"><span>Tổng tiền hàng</span><span>{(tamTinh - giamGiaTong).toLocaleString('vi-VN')} VNĐ</span></div>
+              {phiShipApDung > 0 && (
+                <div className="flex justify-between text-slate-600"><span>Phí vận chuyển</span><span>{phiShipApDung.toLocaleString('vi-VN')} VNĐ</span></div>
+              )}
               <div className="flex justify-between text-emerald-600"><span>Tiền khách đã thanh toán</span><span>{tienCoc > 0 ? `-${tienCoc.toLocaleString('vi-VN')}` : '0'} VNĐ</span></div>
               <div className="flex justify-between font-bold text-base text-slate-900 pt-2 border-t border-slate-200">
                 <span className="text-sm">Thanh toán cuối cùng</span><span className="text-sm" style={{ color: '#1a56db' }}>{(tongCong - tienCoc).toLocaleString('vi-VN')} VNĐ</span>

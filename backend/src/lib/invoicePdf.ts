@@ -34,17 +34,29 @@ const SHIPPING_CARRIER_LABEL: Record<string, string> = {
   KHAC: "Khác",
 }
 
+const SALES_CHANNEL_LABEL: Record<string, string> = {
+  TAI_CUA_HANG: "Tại cửa hàng",
+  DIEN_THOAI: "Điện thoại",
+  FACEBOOK: "Facebook",
+  ZALO: "Zalo",
+  TIKTOK: "TikTok",
+  KHAC: "Khác",
+}
+
 export interface InvoicePdfData {
   soHoaDon: string
   createdAt: Date
   order: {
     ma: string
+    kenhBan: string
+    ghiChu: string | null
     phuongThucThanhToan: string
     phuongThucNhanHang: string
     donViVanChuyen: string | null
     maVanDon: string | null
     tamTinh: number
     giamGia: number
+    phiShip: number
     tongCong: number
     tienCoc: number
     khachHang: { hoTen: string; sdt: string; email: string | null; diaChi: string | null }
@@ -219,13 +231,10 @@ export async function renderInvoicePdf(invoice: InvoicePdfData, res: Response) {
   const totalsWidth = notesWidth
   const totalsX = PAGE_MARGIN + notesWidth + panelGap
 
+  const notesText =
+    order.ghiChu ?? "Cảm ơn quý khách đã mua hàng tại HDH Toys. Vui lòng lưu hóa đơn điện tử này để đối chiếu thông tin khi cần."
   doc.font(boldFont).fontSize(9.5).fillColor(NAVY).text("GHI CHÚ", PAGE_MARGIN, y, { lineBreak: false })
-  doc.font(bodyFont).fontSize(8.5).fillColor(MUTED).text(
-    "Cảm ơn quý khách đã mua hàng tại HDH Toys. Vui lòng lưu hóa đơn điện tử này để đối chiếu thông tin khi cần.",
-    PAGE_MARGIN,
-    y + 15,
-    { width: notesWidth },
-  )
+  doc.font(bodyFont).fontSize(8.5).fillColor(MUTED).text(notesText, PAGE_MARGIN, y + 15, { width: notesWidth })
 
   let ty = y
   const labelWidth = totalsWidth * 0.58
@@ -246,22 +255,21 @@ export async function renderInvoicePdf(invoice: InvoicePdfData, res: Response) {
   }
 
   totalsRow("Tạm tính", formatMoney(order.tamTinh))
-  if (order.giamGia > 0) totalsRow("Giảm giá", `-${formatMoney(order.giamGia)}`)
-  totalsRow(order.tienCoc > 0 ? "Tổng tiền khách phải thanh toán" : "Tổng cộng", formatMoney(order.tongCong), { bold: true, color: ACCENT, divider: true })
-  if (order.tienCoc > 0) {
-    const nguon = order.preorder ? ` (${order.preorder.ma})` : ""
-    totalsRow(`Tiền đã cọc${nguon}`, `-${formatMoney(order.tienCoc)}`)
-    totalsRow("THANH TOÁN CUỐI CÙNG", formatMoney(order.tongCong - order.tienCoc), { bold: true, color: ACCENT, divider: true })
-  }
+  totalsRow("Giảm giá", order.giamGia > 0 ? `-${formatMoney(order.giamGia)}` : formatMoney(0))
+  totalsRow("Phí vận chuyển", formatMoney(order.phiShip))
+  totalsRow("Tổng cộng", formatMoney(order.tongCong), { bold: true, color: ACCENT, divider: true })
+  const nguon = order.preorder ? ` (${order.preorder.ma})` : ""
+  totalsRow(`Tiền đã cọc${nguon}`, order.tienCoc > 0 ? `-${formatMoney(order.tienCoc)}` : formatMoney(0))
+  totalsRow("THANH TOÁN CUỐI CÙNG", formatMoney(order.tongCong - order.tienCoc), { bold: true, color: ACCENT, divider: true })
 
-  const notesHeight = doc.font(bodyFont).fontSize(8.5).heightOfString(
-    "Cảm ơn quý khách đã mua hàng tại HDH Toys. Vui lòng lưu hóa đơn điện tử này để đối chiếu thông tin khi cần.",
-    { width: notesWidth },
-  )
+  const notesHeight = doc.font(bodyFont).fontSize(8.5).heightOfString(notesText, { width: notesWidth })
   y = Math.max(y + 15 + notesHeight, ty) + 20
 
   // ─── Thông tin thanh toán + giao hàng ──────────────────────────────────────
-  const infoLines: string[] = [`Phương thức: ${PAYMENT_METHOD_LABEL[order.phuongThucThanhToan] ?? order.phuongThucThanhToan}`]
+  const infoLines: string[] = [
+    `Phương thức: ${PAYMENT_METHOD_LABEL[order.phuongThucThanhToan] ?? order.phuongThucThanhToan}`,
+    `Kênh bán: ${SALES_CHANNEL_LABEL[order.kenhBan] ?? order.kenhBan}`,
+  ]
   const matchedTxn = order.paymentTransactions[0]
   if (matchedTxn) infoLines.push(`Mã giao dịch: ${matchedTxn.maGiaoDichNganHang}`)
 
