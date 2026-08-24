@@ -1,7 +1,7 @@
 # HDH Toys — Software Design Specification (SDS)
 
-**Phiên bản**: 1.1 (tài liệu hóa hiện trạng hệ thống — reverse-engineered từ mã nguồn; cập nhật đồng bộ với SRS mục 3.19–3.22)
-**Ngày**: 2026-08-22
+**Phiên bản**: 1.2 (tài liệu hóa hiện trạng hệ thống — reverse-engineered từ mã nguồn; cập nhật đồng bộ với SRS mục 3.23–3.30 — bảo mật nâng cao/SePay, bỏ VAT, sổ Thu/Chi ghi đủ doanh thu, sửa cọc/phí ship sau khi tạo đơn, phiếu tạm tính, lợi nhuận giữ lại độc lập, hóa đơn PDF thiết kế lại, báo cáo doanh thu mở rộng, bộ kiểm thử tự động)
+**Ngày**: 2026-08-24
 **Tài liệu liên quan**: [SRS.md](./SRS.md) — yêu cầu chức năng/phi chức năng.
 
 ---
@@ -25,18 +25,18 @@ flowchart LR
     end
 
     subgraph Server["Backend — Express (Node.js/TypeScript)"]
-        MW["Middleware: cors, json, requireAuth, requireRole"]
+        MW["Middleware: helmet, cors (allow-list), rate-limit, json, requireAuth (JWT+tokenVersion), requireRole"]
         Routes["Routes → Controllers → Services"]
         Prisma["Prisma Client"]
-        Webhook["Payment Webhook Handler (đề xuất — mục 4.14)"]
+        Webhook["Payment Webhook Handler (đã triển khai — mục 4.14)"]
     end
 
-    DB[("PostgreSQL")]
-    PDF["pdfkit (hóa đơn PDF)"]
+    DB[("PostgreSQL — Neon, ap-southeast-1")]
+    PDF["pdfkit (hóa đơn PDF + phiếu tạm tính)"]
 
     subgraph Ext["Bên thứ 3 (tích hợp đã triển khai — cần cấu hình tài khoản/provider thật)"]
         Bank[("Ngân hàng")]
-        Recon["Dịch vụ đối soát trung gian (VietQR + Casso/SePay-style)"]
+        Recon["SePay (chế độ API Key) — đối soát VietQR"]
     end
 
     UI --> APIClient
@@ -48,7 +48,7 @@ flowchart LR
     Routes -. "GET /invoices/:id/pdf" .-> PDF
 
     Bank -. "khách quét QR chuyển khoản" .-> Recon
-    Recon -. "webhook báo có (ký secret riêng)" .-> Webhook
+    Recon -. "webhook báo có (Authorization: Apikey + IP allowlist)" .-> Webhook
     Webhook -. "đối soát khớp → tự Hoàn thành đơn" .-> Routes
 ```
 
@@ -57,13 +57,16 @@ flowchart LR
 | Lớp | Công nghệ |
 |---|---|
 | Backend runtime | Node.js + TypeScript, Express, `express-async-errors` |
-| ORM / DB | Prisma Client, PostgreSQL (`DATABASE_URL` + `DIRECT_URL`) |
-| Xác thực | `jsonwebtoken` (HS256), `bcryptjs` (cost 10) |
+| ORM / DB | Prisma Client, PostgreSQL — Neon, khu vực `ap-southeast-1` (Singapore) (`DATABASE_URL` + `DIRECT_URL`) |
+| Xác thực | `jsonwebtoken` (HS256, payload có `tokenVersion` để thu hồi trước hạn — mục 6), `bcryptjs` (cost 10) |
+| Bảo mật tầng HTTP *(mới 2026-08-23)* | `helmet` (CSP tắt, `crossOriginResourcePolicy: cross-origin`), `express-rate-limit` (giới hạn chung + riêng cho login), `cors` (allow-list qua `CORS_ORIGINS`) |
 | Validation | `zod` (schema validate ở tầng controller) |
-| Sinh PDF | `pdfkit` + font Unicode (`dejavu-fonts-ttf`, fallback OS font) |
+| Xác thực nội dung file | `file-type` *(mới 2026-08-23)* — kiểm tra magic-byte thật của ảnh sản phẩm, không tin MIME type client khai báo |
+| Sinh PDF | `pdfkit` + font Unicode (`dejavu-fonts-ttf`, fallback OS font) — hóa đơn chính thức và phiếu tạm tính (mục 3.26) |
+| Kiểm thử *(mới 2026-08-24)* | `vitest` — unit test (backend + frontend) và integration test tự dọn dẹp chạy trên DB dev thật (mục 10) |
 | Frontend | React 19, Vite 8, TypeScript 5.7, Tailwind CSS v4 |
 | State/Router | State nội bộ (`useState` trong `App.tsx`) — không dùng React Router |
-| Triển khai | Render.com (Web Service, plan free), build: `npm install && npx prisma migrate deploy && npm run build` |
+| Triển khai | Render.com (Web Service `hdhtoys-backend-sg`, khu vực Singapore — mục 2.4), build: `npm install && npx prisma migrate deploy && npm run build` |
 
 ### 2.3 Cấu trúc thư mục
 
@@ -84,7 +87,9 @@ frontend/src/
 
 ### 2.4 Triển khai (`render.yaml`)
 
-Một service `hdhtoys-backend` (Node, `rootDir: backend`), build chạy `prisma migrate deploy` trước khi build TypeScript — đảm bảo schema DB luôn đồng bộ trước khi start. Biến môi trường bắt buộc (không sync, phải cấu hình tay trên Render): `DATABASE_URL`, `DIRECT_URL`, `JWT_SECRET`. Frontend không có trong `render.yaml` — được deploy/host riêng (Figma Make dev server khi phát triển).
+Một service **`hdhtoys-backend-sg`** (Node, `rootDir: backend`, **`region: singapore`** — mới 2026-08-24), build chạy `prisma migrate deploy` trước khi build TypeScript — đảm bảo schema DB luôn đồng bộ trước khi start. Biến môi trường bắt buộc (không sync, phải cấu hình tay trên Render): `DATABASE_URL`, `DIRECT_URL`, `JWT_SECRET`, `CORS_ORIGINS`, `VIETQR_WEBHOOK_SECRET` (và `VIETQR_WEBHOOK_ALLOWED_IPS` tùy chọn). Frontend không có trong `render.yaml` — được deploy/host riêng (Vercel).
+
+**Vì sao đổi tên service + thêm region** *(mới 2026-08-24)*: Render mặc định deploy ở Oregon (Mỹ) nếu không khai báo `region`; DB (Neon) đặt tại `ap-southeast-1` (Singapore), nên mọi truy vấn phải đi vòng qua Thái Bình Dương 2 lượt, cộng thêm ~1-2s độ trễ mỗi request. Render **không cho đổi region của một service đã tồn tại** — phải tạo service mới hoàn toàn cùng chung `render.yaml` (đổi tên `hdhtoys-backend` → `hdhtoys-backend-sg`) để buộc Render tạo service mới thay vì cố (và thất bại) đổi region tại chỗ; service cũ được giữ chạy song song cho tới khi xác nhận service mới ổn định rồi mới xóa thủ công. Đã đo thực tế: `/api/health` giảm từ ~0.6–1.5s (Oregon) xuống ~0.2–0.5s (Singapore).
 
 ---
 
@@ -117,6 +122,7 @@ erDiagram
         string matKhauHash
         enum vaiTro
         enum trangThai
+        int tokenVersion "moi 2026-08-23 — tang len khi khoa/reset mat khau, de thu hoi token JWT truoc han"
     }
     Product {
         string id PK
@@ -173,10 +179,11 @@ erDiagram
         enum phuongThucNhanHang "moi — KHACH_TOI_LAY | SHIP"
         enum donViVanChuyen "moi — bat buoc neu SHIP"
         string maVanDon "moi — chi SHIP"
+        int phiShip "moi 2026-08-23 — thay the hoan toan truong vat da bi xoa; chi SHIP; sua duoc den khi Hoan thanh"
         int tamTinh
         int giamGia
-        int vat
         int tongCong
+        int tienCoc "sua duoc den khi Hoan thanh — chenh lech tu ghi vao so Thu/Chi"
     }
     OrderItem {
         string id PK
@@ -312,8 +319,8 @@ Base path: `/api`. Tất cả endpoint (trừ `/health`, `/auth/login`) yêu c�
 |---|---|---|
 | `GET /staff` | | `Staff[]` (không có `matKhauHash`) |
 | `POST /staff` | `{hoTen,email,matKhau≥6,vaiTro}` | `201 Staff` (409 nếu email trùng) |
-| `PATCH /staff/:id` | `Partial<{hoTen,vaiTro,trangThai}>` | `Staff` |
-| `POST /staff/:id/reset-password` | `{matKhauMoi≥6}` | `{ok:true}` |
+| `PATCH /staff/:id` | `Partial<{hoTen,vaiTro,trangThai}>` | `Staff` — đổi `trangThai="LOCKED"` tự tăng `tokenVersion` (mới 2026-08-23, mục 6) |
+| `POST /staff/:id/reset-password` | `{matKhauMoi≥6}` | `{ok:true}` — tự tăng `tokenVersion` (mới 2026-08-23, mục 6) |
 
 ### 4.3 Products — mutation `requireRole("ADMIN","MANAGER","INVENTORY_STAFF")`; discontinue/reactivate `requireRole("ADMIN","MANAGER")`
 
@@ -337,7 +344,7 @@ Base path: `/api`. Tất cả endpoint (trừ `/health`, `/auth/login`) yêu c�
 | `GET /customers` | `q?,hangKhachHang?,nguonKhachHang?,page,pageSize` | `{items,total,page,pageSize}` |
 | `GET /customers/:id` | | `Customer` |
 | `POST /customers` | `hoTen,sdt,nguonKhachHang(bắt buộc — SalesChannel),email?,ngaySinh?,diaChi?,luuY?,linkFacebook?,hangKhachHang?(default NEW)` | `201` (409 SĐT trùng; 400 nếu thiếu `nguonKhachHang`) |
-| `PATCH /customers/:id` | `Partial<{hoTen,email,ngaySinh,diaChi,luuY,linkFacebook,nguonKhachHang,hangKhachHang,diemTichLuy}>` | `Customer` |
+| `PATCH /customers/:id` | `Partial<{hoTen,email,ngaySinh,diaChi,luuY,linkFacebook,nguonKhachHang,hangKhachHang,diemTichLuy}>` — *(sửa 2026-08-24)* `email/ngaySinh/diaChi/luuY/linkFacebook` PHẢI nhận được `null` để xóa giá trị đã lưu (khác với bỏ hẳn field trong body = giữ nguyên); xem mục 5.23 | `Customer` |
 | `DELETE /customers/:id/notes/:noteId` | | `204` |
 | `GET /customers/:id/overview` | | `{customer,kpi,danhMucThuongMua,sanPhamMuaNhieuNhat,lanMuaGanNhat,donDangXuLyHienTai}` |
 | `GET /customers/:id/orders` | `trangThai?("active"\|enum),page,pageSize` | `{items,total,page,pageSize}` |
@@ -350,14 +357,17 @@ Base path: `/api`. Tất cả endpoint (trừ `/health`, `/auth/login`) yêu c�
 
 | Method & Path | Request | Response |
 |---|---|---|
-| `GET /orders` | `q?,trangThai?,khachHangId?,nhanVienId?,phuongThucThanhToan?,daThanhToan?,phuongThucNhanHang?,coMaVanDon?,tuNgay?,denNgay?,sortBy?("createdAt"\|"tongCong", default createdAt),sortOrder?("asc"\|"desc", default desc),page,pageSize` | paginated, kèm `khachHang,nhanVien,items+product(+loaiSanPham)` |
+| `GET /orders` | `q?,trangThai?,khachHangId?,nhanVienId?,phuongThucThanhToan?,daThanhToan?,phuongThucNhanHang?,coMaVanDon?,tuNgay?,denNgay?,sortBy?("createdAt"\|"tongCong", default createdAt),sortOrder?("asc"\|"desc", default desc),page,pageSize` | paginated, kèm `khachHang,nhanVien,items+product(+loaiSanPham),invoice{id,soHoaDon}\|null` *(mới 2026-08-24 — trước đây phải gọi thêm `GET /invoices?q=...` riêng để biết đơn đã có hóa đơn chưa)* |
 | `GET /orders/top-customers` | `limit?(default 5,≤50)` | `{items:[{khachHang:{id,hoTen,sdt},tongChiTieu,soDonHoanThanh}]}` — chỉ tính đơn `HOAN_THANH`, `groupBy khachHangId` sắp theo tổng giảm dần |
-| `GET /orders/:id` | | `Order` chi tiết (kèm `qrCode`) |
-| `POST /orders` | `khachHangId,nhanVienId?,kenhBan?,phuongThucThanhToan,phuongThucNhanHang?(default KHACH_TOI_LAY),donViVanChuyen?(bắt buộc nếu SHIP),vat?,ghiChu?,items:[{productId,soLuong,giaOverride?,giamGia?}]` | `201 Order` — **trừ tồn kho ngay trong transaction tạo đơn** (mục 5.12); `400` nếu tồn kho không đủ |
-| `PATCH /orders/:id/status` | `{trangThai}` | `Order` — xem máy trạng thái mục 5.1; chuyển `DA_HUY` tự hoàn tồn kho (mục 5.12) |
+| `GET /orders/:id` | | `Order` chi tiết (kèm `qrCode`, `invoice`) |
+| `GET /orders/:id/preview-pdf` | *(mới 2026-08-24)* | `application/pdf` — **phiếu tạm tính** (mục 5.22), không sinh Invoice, không giới hạn `trangThai` ở tầng API (xem SRS 6.17) |
+| `POST /orders` | `khachHangId,nhanVienId?,kenhBan?,phuongThucThanhToan,phuongThucNhanHang?(default KHACH_TOI_LAY),donViVanChuyen?(bắt buộc nếu SHIP),phiShip?(≥0, chỉ SHIP)(sửa 2026-08-23 — thay `vat` đã xóa),tienCoc?(≥0,≤tongCong),ghiChu?,items:[{productId,soLuong,giaOverride?,giamGia?}]` | `201 Order` — **trừ tồn kho ngay trong transaction tạo đơn** (mục 5.12); `400` nếu tồn kho không đủ |
+| `PATCH /orders/:id/status` | `{trangThai}` | `Order` — xem máy trạng thái mục 5.1; chuyển `DA_HUY` tự hoàn tồn kho (mục 5.12); chuyển `HOAN_THANH`/`HOAN_TIEN` tự ghi/đảo bút toán Thu-Chi (mục 5.4/5.20) |
 | `PATCH /orders/:id/payment-status` | `{daThanhToan:boolean}` | `Order` |
 | `PATCH /orders/:id/delivery` | `{phuongThucNhanHang,donViVanChuyen?}` | `Order` — validate như lúc tạo |
 | `PATCH /orders/:id/tracking-code` | `{maVanDon?}` | `Order` — `400` nếu đơn không phải SHIP; truyền rỗng/`undefined` để xóa mã |
+| `PATCH /orders/:id/shipping-fee` | `{phiShip≥0}` *(mới 2026-08-24)* | `Order` — chỉ SHIP; chỉ khi `trangThai∈{MOI,DANG_XU_LY}`; `400` nếu làm `tongCong` mới < `tienCoc` đã nhận (mục 5.21) |
+| `PATCH /orders/:id/deposit` | `{tienCoc≥0}` *(mới 2026-08-24)* | `Order` — chỉ khi `trangThai∈{MOI,DANG_XU_LY}`; `400` nếu vượt `tongCong`; chênh lệch tự ghi Thu/Chi (mục 5.21) |
 | `DELETE /orders/:id` | | `204`; hoàn tồn kho nếu đơn đang Mới/Đang xử lý trước khi xóa (mục 4.16/5.12) |
 
 ### 4.6 Inventory — mutation `requireRole("ADMIN","MANAGER","INVENTORY_STAFF")`; đọc chỉ cần đăng nhập
@@ -367,7 +377,7 @@ Base path: `/api`. Tất cả endpoint (trừ `/health`, `/auth/login`) yêu c�
 | `GET /inventory/summary` | | `{tongSku,tongSoLuongTon,giaTriTonKho,sanPhamSapHet,sanPhamHetHang}` |
 | `GET /inventory` | như `/products` | mỗi item thêm `coTheBan,giaTriTon` |
 | `POST /inventory/stock-in` | `{productId,soLuong≥1,thamChieu?,ghiChu?}` | `InventoryTransaction` (loai NHAP) |
-| `POST /inventory/stock-out` | như trên | loai XUAT |
+| `POST /inventory/stock-out` | như trên | loai XUAT — *(sửa 2026-08-23)* nếu sản phẩm là `PRE_ORDER`, tự tăng `product.daBan` (giao hàng thủ công không qua Order — mục 5.14 điểm 5); sản phẩm `CO_SAN` không tăng `daBan` ở đây (coi là hư hỏng/thất thoát, không phải bán) |
 | `POST /inventory/adjust` | `{productId,tonKhoMoi≥0,ghiChu?}` | loai DIEU_CHINH |
 | `GET /inventory/history` | `productId?,loai?,nguoiThucHienId?,tuNgay?,denNgay?,page,pageSize` | paginated |
 
@@ -377,7 +387,7 @@ Base path: `/api`. Tất cả endpoint (trừ `/health`, `/auth/login`) yêu c�
 |---|---|---|
 | `GET /invoices` | `q?,khachHangId?,phuongThucThanhToan?,nguoiTaoId?,tuNgay?,denNgay?,page,pageSize` | paginated; `order` kèm `phuongThucNhanHang/donViVanChuyen/maVanDon/preorder{ma,tienCoc}` |
 | `GET /invoices/:id` | | `Invoice` chi tiết (đầy đủ như trên) |
-| `GET /invoices/:id/pdf` | | `application/pdf` (inline) — nội dung xem mục 5.6 (đã cập nhật: badge Pre-order theo dòng, khối thông tin giao hàng, dòng cọc/còn lại nếu có) |
+| `GET /invoices/:id/pdf` | | `application/pdf` (inline) — nội dung xem mục 5.6 (đã thiết kế lại 2026-08-23/24: logo bo tròn, badge Pre-order theo dòng, dòng cọc/còn lại luôn hiển thị; **không còn** khối thông tin thanh toán/giao hàng, không hiển thị địa chỉ khách hàng) |
 | `DELETE /invoices/:id` | `ADMIN` | `204`; đơn hàng gốc giữ nguyên |
 
 ### 4.8 Search — chỉ cần đăng nhập
@@ -394,10 +404,12 @@ Tất cả nhận `range` (default `7_ngay`) + `tuNgay?/denNgay?` (chỉ dùng k
 |---|---|
 | `GET /revenue/summary` | `{tongDoanhThu,tongSoDon,giaTriDonTrungBinh,loiNhuanGop,tongGiamGia,tongHoanTien}` |
 | `GET /revenue/by-time` | `[{ngay,doanhThu,soDon}]` (theo ngày, giờ VN) |
-| `GET /revenue/by-category` | `[{danhMuc,doanhThu}]` |
-| `GET /revenue/by-product` | `[{ten,sku,soLuong,doanhThu}]` |
+| `GET /revenue/by-category` | `[{danhMuc,doanhThu,giaVon,loiNhuan}]` *(sửa 2026-08-24 — thêm `giaVon`/`loiNhuan`)* |
+| `GET /revenue/by-product` | `[{ten,sku,soLuong,doanhThu,giaVon,loiNhuan}]` *(sửa 2026-08-24 — thêm `giaVon`/`loiNhuan`)* |
 | `GET /revenue/by-staff` | `[{hoTen,doanhThu,soDon}]` |
 | `GET /revenue/by-payment-method` | `[{phuongThuc,doanhThu,soDon}]` |
+| `GET /revenue/inventory-turnover` | *(mới 2026-08-24)* `{items:[{productId,sku,ten,tonKho,soLuongBan,vongQuay}]}` — `vongQuay = soLuongBan/tonKho` (làm tròn 2 chữ số), `null` nếu `tonKho=0`; sắp tăng dần (bán chậm nhất trước). Ước tính đơn giản dựa trên tồn kho hiện tại, không phải công thức kế toán chuẩn (tồn kho bình quân theo thời gian) |
+| `GET /revenue/repeat-customers` | *(mới 2026-08-24)* `{tongKhachHang,khachMuaLai,tyLeMuaLai,items:[{hoTen,sdt,soDon,tongChiTieu}]}` — `khachMuaLai` = số khách có `soDon≥2` đơn `HOAN_THANH` trong kỳ |
 | `GET /revenue/detail` | `+page,pageSize` → `[{ngay,soDon,doanhThu,giamGia,hoanTien,giaVon,loiNhuanGop}]` |
 | `GET /revenue/export` | CSV (`text/csv`, UTF-8 BOM), cột `Ngay,So don,Doanh thu,Giam gia,Gia von,Loi nhuan gop` |
 
@@ -428,7 +440,7 @@ Tất cả nhận `range` (default `7_ngay`) + `tuNgay?/denNgay?` (chỉ dùng k
 | `GET /accounting/overview` | | `{tienMat,tienNganHang,congNoPhaiThu,congNoPhaiTra,giaTriTonKho,loiNhuanThang,tinhHinhTaiChinh[]}` |
 | `GET /accounting/balance` | | `AccountingBalance` (tự tạo nếu chưa có) |
 | `PATCH /accounting/balance` | `Partial<{tienMat,tienNganHang,vonChuSoHuu,taiSanKhac,chiPhiChuaThanhToan,khoanPhaiTraKhac}>` (int≥0) | |
-| `GET /accounting/balance-sheet` | | xem cấu trúc mục 5.5 |
+| `GET /accounting/balance-sheet` | | xem cấu trúc mục 5.5 (đã sửa 2026-08-24 — `loiNhuanGiuLai` độc lập, trả thêm `chenhLech`) |
 
 ### 4.13 Health
 
@@ -438,19 +450,20 @@ Tất cả nhận `range` (default `7_ngay`) + `tuNgay?/denNgay?` (chỉ dùng k
 
 ### 4.14 Payment Webhook — Đối soát thanh toán QR ngân hàng (**Đã triển khai**)
 
-> Xem yêu cầu tương ứng tại **SRS.md mục 3.16 (FR-PAY.1–9)**. Endpoint dưới đây **không** dùng `requireAuth` (JWT nội bộ) vì bên gọi là hệ thống thứ 3, mà xác thực bằng chữ ký/secret riêng theo hợp đồng của dịch vụ đối soát. Mã nguồn: `routes/payments.ts`, `controllers/payments.controller.ts`, `services/payments.service.ts`, `lib/webhookAuth.ts`. Đã kiểm thử qua HTTP thực tế (sai secret → 401; khớp mã đơn + số tiền → tự hoàn thành đơn, xuất kho, sinh hóa đơn; gửi lại cùng `referenceCode` → idempotent; sai số tiền/không tìm thấy đơn → lưu vết, không đổi trạng thái đơn).
+> Xem yêu cầu tương ứng tại **SRS.md mục 3.16 (FR-PAY.1–10)**. Endpoint dưới đây **không** dùng `requireAuth` (JWT nội bộ) vì bên gọi là hệ thống thứ 3 (**SePay**, chế độ "API Key"), mà xác thực bằng header `Authorization: Apikey <secret>` + allowlist IP tùy chọn. Mã nguồn: `routes/payments.ts`, `controllers/payments.controller.ts`, `services/payments.service.ts`, `lib/webhookAuth.ts`, `lib/paymentConfig.ts`. Đã kiểm thử qua HTTP thực tế (sai secret → 401; khớp mã đơn + số tiền → tự hoàn thành đơn, xuất kho, sinh hóa đơn; gửi lại cùng `referenceCode` → idempotent; sai số tiền/không tìm thấy đơn → lưu vết, không đổi trạng thái đơn).
 
 | Method & Path | Role | Request | Response |
 |---|---|---|---|
-| `POST /payments/vietqr/webhook` | Xác thực bằng header secret/HMAC signature (KHÔNG dùng Bearer JWT) | Theo format của dịch vụ trung gian, ví dụ dạng Casso/SePay: `{gateway, transactionDate, accountNumber, content, transferAmount, referenceCode, description}` | `200 {received:true}` ngay sau khi lưu bản ghi thô (để tránh bên gọi retry do timeout) — xử lý đối soát có thể chạy đồng bộ hoặc hàng đợi ngay sau đó |
-| `GET /payments/unmatched` *(đề xuất, hỗ trợ FR-PAY.5)* | requireAuth (nhân viên) | `page,pageSize` | Danh sách `PaymentTransaction` có `trangThaiDoiSoat != KHOP`, để nhân viên xử lý thủ công |
+| `POST /payments/vietqr/webhook` | Header `Authorization: Apikey <VIETQR_WEBHOOK_SECRET>` (KHÔNG dùng Bearer JWT) — *(mới 2026-08-23)* nếu `VIETQR_WEBHOOK_ALLOWED_IPS` được cấu hình, `req.ip` PHẢI khớp đúng một IP trong danh sách (so khớp chuỗi tuyệt đối, không hỗ trợ CIDR — xem SRS 6.15), nếu không → `401` cùng thông báo như sai secret | `{referenceCode, transferAmount, content, gateway?, transactionDate?, accountNumber?, description?}` (đúng format SePay chế độ API Key) | `200 {received:true}` ngay sau khi lưu bản ghi thô (để tránh bên gọi retry do timeout) — xử lý đối soát có thể chạy đồng bộ hoặc hàng đợi ngay sau đó |
+| `GET /payments/unmatched` (hỗ trợ FR-PAY.5) | requireAuth (nhân viên) | `page,pageSize` | Danh sách `PaymentTransaction` có `trangThaiDoiSoat != KHOP`, để nhân viên xử lý thủ công |
 
 **Thiết kế endpoint webhook**:
-1. Xác thực chữ ký request (secret theo cấu hình provider) — sai → `401`, ghi log cảnh báo, **không** xử lý tiếp.
-2. Lưu ngay một dòng `PaymentTransaction` thô với `maGiaoDichNganHang` = `referenceCode` (unique constraint) — nếu đã tồn tại (`referenceCode` trùng) → coi là webhook gửi lại, trả `200` ngay, **không** xử lý lần 2 (đảm bảo NFR-10 idempotent).
-3. Trích mã đơn hàng từ `content` (regex khớp định dạng `HDH-{năm}-{5 số}`), tìm `Order` có `ma` tương ứng và `trangThai ∈ {MOI, DANG_XU_LY}` và `phuongThucThanhToan = QR_CODE`.
-4. So khớp `transferAmount === order.tongCong`: khớp → set `trangThaiDoiSoat = KHOP`, gọi lại logic hoàn thành đơn hàng dùng chung với `PATCH /orders/:id/status` (mục 5.1); không tìm thấy đơn → `KHONG_KHOP`; tìm thấy đơn nhưng sai số tiền → `SAI_SO_TIEN`.
-5. Trả `200` cho dịch vụ trung gian trong mọi trường hợp đã nhận được request hợp lệ chữ ký (để tránh bị retry vô hạn); lỗi nghiệp vụ (không khớp) không phải lỗi HTTP.
+1. Trích API key từ header `Authorization` bằng regex `/^Apikey\s+(.+)$/i`, so sánh với `VIETQR_WEBHOOK_SECRET` bằng `timingSafeEqual` — sai → `401 "Webhook secret không hợp lệ."`, **không** xử lý tiếp.
+2. *(Mới 2026-08-23)* Nếu `VIETQR_WEBHOOK_ALLOWED_IPS` không rỗng, kiểm tra `req.ip` có trong danh sách — sai → cùng lỗi `401` như bước 1 (không để lộ nguyên nhân cụ thể cho kẻ tấn công dò).
+3. Lưu ngay một dòng `PaymentTransaction` thô với `maGiaoDichNganHang` = `referenceCode` (unique constraint) — nếu đã tồn tại (`referenceCode` trùng) → coi là webhook gửi lại, trả `200` ngay, **không** xử lý lần 2 (đảm bảo NFR-10 idempotent).
+4. Trích mã đơn hàng từ `content` (regex khớp định dạng `HDH-{năm}-{5 số}`), tìm `Order` có `ma` tương ứng và `trangThai ∈ {MOI, DANG_XU_LY}` và `phuongThucThanhToan = QR_CODE`.
+5. So khớp `transferAmount === order.tongCong`: khớp → set `trangThaiDoiSoat = KHOP`, gọi lại logic hoàn thành đơn hàng dùng chung với `PATCH /orders/:id/status` (mục 5.1); không tìm thấy đơn → `KHONG_KHOP`; tìm thấy đơn nhưng sai số tiền → `SAI_SO_TIEN`.
+6. Trả `200` cho dịch vụ trung gian trong mọi trường hợp đã nhận được request hợp lệ header/IP (để tránh bị retry vô hạn); lỗi nghiệp vụ (không khớp) không phải lỗi HTTP.
 
 ### 4.15 Preorders — Đặt trước (**Đã triển khai**)
 
@@ -464,7 +477,7 @@ Xem yêu cầu tương ứng tại **SRS.md mục 3.17 (FR-PRE.1–10)**. Mã ng
 | `POST /preorders` | `{khachHangId,productId? XOR tenSanPhamMoi,soLuong,donGiaDuKien,tienCoc?,ngayDuKienCo?,ghiChu?}` | `201` — nếu `tienCoc>0` tự tạo kèm 1 `IncomeExpense` (THU) trong cùng transaction |
 | `PATCH /preorders/:id` | `Partial<{soLuong,donGiaDuKien,tienCoc,ngayDuKienCo,ghiChu}>` | chỉ khi còn `CHO_HANG`/`SAN_SANG` |
 | `POST /preorders/:id/cancel` | | → `DA_HUY`, chỉ khi chưa `DA_CHUYEN_DON`/`DA_HUY` |
-| `POST /preorders/:id/convert-to-order` | `{productId?(bắt buộc nếu preorder chưa gắn sản phẩm),phuongThucThanhToan,kenhBan?,vat?}` | tạo 1 `Order` thật (gọi lại `orders.service.ts#create`) + set `DA_CHUYEN_DON` + `orderId` |
+| `POST /preorders/:id/convert-to-order` | `{productId?(bắt buộc nếu preorder chưa gắn sản phẩm),phuongThucThanhToan,kenhBan?}` *(sửa 2026-08-23 — bỏ `vat`)* | tạo 1 `Order` thật (gọi lại `orders.service.ts#create`) + set `DA_CHUYEN_DON` + `orderId` |
 
 ### 4.16 Xóa dữ liệu (Delete) — **Đã triển khai**
 
@@ -541,9 +554,11 @@ Trạng thái này **không lưu DB**, luôn tính lại tại thời điểm tr
 
 ### 5.4 Công thức doanh thu & lợi nhuận
 
-- `tamTinh = Σ(soLuong × donGia)`; `giamGia (đơn) = Σ(giamGia từng dòng)`; **`tongCong = tamTinh − giamGia + vat`** — VAT là **số tiền cộng thêm cố định**, không phải phần trăm.
+- *(Sửa 2026-08-23 — bỏ VAT, xem mục 3.23 SRS)* `tamTinh = Σ(soLuong × donGia)`; `giamGia (đơn) = Σ(giamGia từng dòng)`; **`tongCong = tamTinh − giamGia + phiShip`** — `phiShip` là số tiền cố định do nhân viên nhập cho đơn Ship (0 với đơn Khách tới lấy), **không** phải phần trăm/thuế. Hệ thống không còn khái niệm VAT ở bất kỳ đâu.
 - Lợi nhuận gộp mỗi dòng = `thanhTien − soLuong × giaVon`, dùng `giaVon` **snapshot trên `OrderItem` tại thời điểm tạo đơn** (không phải giá vốn hiện tại của sản phẩm) → số liệu lợi nhuận lịch sử ổn định dù giá vốn sản phẩm thay đổi sau đó.
-- Mọi báo cáo doanh thu (`/revenue/*`) chỉ tính trên đơn `trangThai = HOAN_THANH`; `tongHoanTien` lấy từ đơn `HOAN_TIEN` trong cùng khoảng ngày, báo cáo **riêng**, không trừ vào `tongDoanhThu`.
+- Mọi báo cáo doanh thu (`/revenue/*`) chỉ tính trên đơn `trangThai = HOAN_THANH`; `tongHoanTien` lấy từ đơn `HOAN_TIEN` trong cùng khoảng ngày, báo cáo **riêng**, không trừ vào `tongDoanhThu`. *(Mới 2026-08-24)* `by-category`/`by-product` bổ sung `giaVon`/`loiNhuan = doanhThu − giaVon`, tổng hợp từ `OrderItem` của các đơn `HOAN_THANH` trong kỳ.
+- *(Mới 2026-08-24)* **Vòng quay tồn kho** (`GET /revenue/inventory-turnover`) = `soLuongBan (kỳ) / tonKho (hiện tại)`, làm tròn 2 chữ số; là ước tính đơn giản để so sánh tương đối sản phẩm bán nhanh/chậm, **không** phải công thức kế toán chuẩn (vốn dùng tồn kho bình quân theo thời gian, không phải tồn kho tại một thời điểm).
+- *(Mới 2026-08-24)* **Khách mua lại** (`GET /revenue/repeat-customers`) = khách có `soDon ≥ 2` đơn `HOAN_THANH` trong kỳ, group theo `khachHangId`; `tyLeMuaLai = khachMuaLai / tongKhachHang`.
 
 ### 5.5 Bảng cân đối kế toán (Balance Sheet)
 
@@ -558,19 +573,33 @@ Nợ phải trả (tongNoPhaiTra) =
     congNoNhaCungCap                               (Σ conLai của Debt loại PHAI_TRA)
   + chiPhiChuaThanhToan + khoanPhaiTraKhac          (từ AccountingBalance, nhập tay)
 
-Vốn chủ sở hữu:
-    loiNhuanGiuLai = tongTaiSan − tongNoPhaiTra − vonChuSoHuu     ⟵ SỐ DƯ CÂN BẰNG (plug figure)
+Vốn chủ sở hữu: (SỬA 2026-08-24 — không còn là số dư cân bằng ép buộc)
+    loiNhuanGiuLai = getAllTimeNetIncome()          ⟵ Σ THU − Σ CHI TOÀN THỜI GIAN từ IncomeExpense, tính ĐỘC LẬP
     tongVonChuSoHuu = vonChuSoHuu + loiNhuanGiuLai
 
-tongNguonVon = tongNoPhaiTra + tongVonChuSoHuu   (⟺ luôn bằng tongTaiSan theo cách tính trên)
-canDoi = (tongTaiSan === tongNguonVon)            ⟵ luôn true theo xây dựng công thức
+tongNguonVon = tongNoPhaiTra + tongVonChuSoHuu
+chenhLech = tongTaiSan − tongNguonVon              ⟵ MỚI — có thể khác 0 nếu số liệu nhập tay sai
+canDoi = (chenhLech === 0)                          ⟵ nay là kiểm tra thật, có thể ra false
 ```
 
-> **Ghi chú thiết kế quan trọng** (khớp với SRS mục 6.5): vì hệ thống chưa có sổ cái tổng quát để tính lợi nhuận giữ lại một cách độc lập, `loiNhuanGiuLai` hiện được suy ngược ra để buộc bảng luôn cân — do đó cờ `canDoi` là một **đồng nhất thức toán học**, không phải một kiểm tra đối chiếu độc lập giữa hai vế. Nếu cần kiểm tra tính đúng đắn sổ sách thật, cần bổ sung khả năng tính lợi nhuận giữ lại tích lũy từ lịch sử `IncomeExpense`/`Order` độc lập rồi so sánh với vế còn lại.
+> **Ghi chú thiết kế** (thay thế hoàn toàn ghi chú cũ khớp với SRS mục 6.5 bản 1.1 — nay đã lỗi thời): `loiNhuanGiuLai` không còn suy ngược từ các trường còn lại để ép bảng luôn cân. `getAllTimeNetIncome()` (`accounting.service.ts`) cộng dồn **toàn bộ** `IncomeExpense.soTien` theo `loai` (THU trừ CHI, không lọc theo ngày) — con số này giờ phản ánh đúng lợi nhuận lũy kế thật của cửa hàng từ khi vận hành, độc lập với các trường nhập tay ở `AccountingBalance`. Hệ quả: `chenhLech`/`canDoi` giờ là một **kiểm tra đối chiếu thật** — nếu nhân viên kế toán nhập sai/thiếu tiền mặt/ngân hàng/tài sản khác, `canDoi` sẽ ra `false` và `chenhLech` cho biết đúng số tiền lệch, thay vì luôn báo cân bằng như thiết kế cũ (xem SRS FR-ACC.4/6.5 đã sửa).
 
-### 5.6 Sinh PDF hóa đơn có dấu tiếng Việt
+### 5.6 Sinh PDF hóa đơn có dấu tiếng Việt (**thiết kế lại 2026-08-23/24**)
 
-`invoicePdf.ts` dùng `pdfkit`, khổ A5, margin 36pt. Font Unicode được nạp theo thứ tự ưu tiên: biến môi trường `INVOICE_FONT_PATH` → font `DejaVuSans.ttf` đóng gói sẵn trong package `dejavu-fonts-ttf` (ưu tiên vì không phụ thuộc OS) → font hệ điều hành (`arial.ttf`/`segoeui.ttf` trên Windows, `DejaVuSans.ttf` trên Linux) → fallback Helvetica (mất dấu nếu không có font nào). Kết quả đường dẫn font được cache trong memory sau lần tìm đầu tiên. Nội dung hóa đơn: tiêu đề cửa hàng, số hóa đơn, ngày giờ (Asia/Ho_Chi_Minh), mã đơn, nhân viên, khách hàng, bảng dòng sản phẩm, các dòng tổng, phương thức thanh toán.
+`invoicePdf.ts` (hàm `renderInvoicePdf`) dùng `pdfkit`, khổ **A4**, margin **40pt** *(sửa 2026-08-24 — bản mô tả A5/36pt trước đó đã lỗi thời)*. Font Unicode nạp theo thứ tự ưu tiên: biến môi trường `INVOICE_FONT_PATH` → font `DejaVuSans.ttf` đóng gói sẵn trong package `dejavu-fonts-ttf` → font hệ điều hành (`arial.ttf`/`segoeui.ttf` trên Windows, `DejaVuSans.ttf` trên Linux) → fallback Helvetica (mất dấu nếu không có font nào). Cùng một hàm phục vụ **cả 2 loại tài liệu** qua tham số `provisional?: boolean` (mục 5.22).
+
+**Nội dung hiện tại** (theo đúng thứ tự vẽ):
+1. **Header**: logo cửa hàng bo tròn (clip path hình tròn, `doc.circle(...).clip()`, viền mỏng sau khi vẽ xong) nếu đã cấu hình; tên/tagline/hotline/website cửa hàng bên trái; tiêu đề bên phải — **"HÓA ĐƠN ĐIỆN TỬ"** (màu xanh `#2563eb`) hoặc **"PHIẾU TẠM TÍNH"** (màu cam `#b45309`, mục 5.22) — kèm mã đơn + ngày giờ lập; đường kẻ ngang cùng màu tiêu đề.
+2. **Hai khối thông tin** cạnh nhau, cùng chiều cao:
+   - **"THÔNG TIN CỬA HÀNG"**: tên/địa chỉ/điện thoại/website cửa hàng (chỉ hiện nếu đã cấu hình env tương ứng), và dòng **"Nhân viên: {tên nhân viên xử lý đơn}"** *(sửa 2026-08-24 — trước đây ghi "Thu ngân")*.
+   - **"THÔNG TIN KHÁCH HÀNG"**: họ tên, điện thoại, email nếu có. *(Sửa 2026-08-24)* **Không còn hiển thị địa chỉ khách hàng.**
+3. **Bảng sản phẩm**: STT / Sản phẩm (kèm SKU + badge "Pre-order" nếu `loaiSanPham=PRE_ORDER`) / SL / Đơn giá / Thành tiền.
+4. **GHI CHÚ** (trái) — `order.ghiChu` nếu có, else một câu cảm ơn mặc định.
+5. **Khối tổng tiền** (phải) — *(sửa 2026-08-23, không còn VAT)* luôn hiển thị đủ (kể cả bằng 0): Tạm tính, Giảm giá, Phí vận chuyển, **Tổng cộng** (đậm, có gạch chia), Tiền đã cọc (kèm mã đặt trước nếu có nguồn), **THANH TOÁN CUỐI CÙNG** = tổng cộng − tiền cọc (đậm, có gạch chia).
+6. **"KẾT NỐI VỚI HDH TOYS"** — mã QR dẫn tới Facebook/Zalo của cửa hàng (`STORE_FACEBOOK_URL`/`STORE_ZALO_URL`), chỉ vẽ khối này nếu ít nhất một trong hai đã cấu hình.
+7. **Lời cảm ơn** — câu chúc + một dòng phụ khác nhau tùy loại tài liệu: hóa đơn thật ghi "có giá trị xác nhận thông tin mua hàng"; phiếu tạm tính ghi rõ "chưa Hoàn thành, có thể thay đổi, không phải hóa đơn chính thức" (mục 5.22).
+
+*(Đã bỏ hoàn toàn, sửa 2026-08-23/24)*: khối "THÔNG TIN THANH TOÁN/GIAO HÀNG" (phương thức thanh toán, kênh bán, hình thức nhận hàng, đơn vị vận chuyển, mã vận đơn) từng có ở bản thiết kế trước — các trường này vẫn nằm trong kiểu dữ liệu `InvoicePdfData` (được fetch sẵn cho các mục đích khác) nhưng không còn được vẽ ra PDF.
 
 ### 5.7 Giải quyết khoảng thời gian (`dateRange.ts`)
 
@@ -714,18 +743,62 @@ Tương ứng FR-UI.1–2 (SRS mục 3.22).
 3. **Áp dụng toàn bộ 27 lượt gọi cũ** (20 `confirm()` + 7 `alert()`) trải trên 13 file màn hình (Products, ProductDetail, Customers, CustomerDetail, Orders/OrderDetail, Invoices/InvoiceDetail, Preorders/PreorderDetail, InventoryHistory, KeToan, ThuChi, CaiDat) — mỗi component gọi `useDialog()` ở đầu hàm và thay trực tiếp lời gọi gốc; các hàm xử lý sự kiện vốn đã `async` (đang `await` API call ngay sau) nên không cần đổi chữ ký hàm, chỉ thêm `await` trước lệnh gọi dialog.
 4. **Nút xác nhận mặc định màu đỏ (`variant="danger"`)** trừ khi truyền `danger:false` — vì tuyệt đại đa số lời gọi là hành động xóa/hủy không thể hoàn tác; nhãn nút mặc định "Xóa", override bằng `confirmLabel` cho các trường hợp khác nghĩa (ví dụ "Hủy đơn" khi hủy đặt trước).
 
+### 5.20 Ghi nhận đầy đủ dòng tiền bán hàng vào sổ Thu/Chi khi Hoàn thành & đảo ngược khi Hoàn tiền — **Đã triển khai** (2026-08-24)
+
+Tương ứng FR-ORD.16/17, FR-ACC.5, FR-PRE.11 (SRS mục 3.24). Trước bản này, `applyOrderCompletion` chỉ từng ghi tiền cọc (nếu có) vào sổ Thu/Chi lúc tạo đơn/đặt trước — doanh thu bán hàng thật và giá vốn hàng bán **chưa bao giờ** được ghi vào sổ này khi đơn Hoàn thành, khiến "Lợi nhuận" (Kế toán, tính từ sổ Thu/Chi) và "Lợi nhuận gộp" (Doanh thu, tính từ đơn hàng) lệch nhau cho cùng kỳ.
+
+1. **Lúc Hoàn thành** (`applyOrderCompletion`, dùng chung bởi `updateStatus` và `completeOrderViaPayment` — mục 5.1/5.8): gọi `createLedgerEntry(tx, ...)` (helper dùng chung, sinh mã `PT-#####`/`PC-#####` theo đúng quy tắc mục 3.3) hai lần:
+   - `doanhThuConLai = order.tongCong - order.tienCoc`; nếu `> 0` → ghi **THU / BAN_HANG**, nội dung `"Doanh thu bán hàng đơn {ma}"`.
+   - `giaVonDon = Σ(soLuong × giaVon)` của các `OrderItem`; nếu `> 0` → ghi **CHI / NHAP_HANG**, nội dung `"Giá vốn hàng bán đơn {ma}"`.
+   - Không ghi lại phần tiền cọc — đã ghi Thu từ lúc tạo đơn/đặt trước (mục 5.9).
+2. **Lúc Hoàn tiền** (nhánh `HOAN_TIEN` trong `updateStatus`, chỉ chạy khi trạng thái trước đó là `HOAN_THANH`): đảo ngược đúng 2 bút toán trên theo thứ tự — **CHI / BAN_HANG** `"Hoàn tiền đơn hàng {ma}"` (= `doanhThuDaGhi`), **THU / NHAP_HANG** `"Hoàn giá vốn do hoàn tiền đơn hàng {ma}"` (= `giaVonDon`) — cộng thêm, nếu `tienCoc > 0`, một bút toán **CHI / BAN_HANG** thứ ba `"Hoàn cọc đơn hàng {ma}"` (= `tienCoc`), vì tiền cọc là một phần của cùng giao dịch bị hủy, không tách riêng khỏi 2 bút toán kia. Một đơn có cọc bị hoàn tiền do đó tạo ra **tối đa 3** bút toán đảo ngược, đưa dòng tiền ròng của toàn bộ giao dịch về đúng 0 (đã kiểm thử bằng test tích hợp).
+3. **Hủy một đơn đặt trước có cọc** (`preorders.service.ts#cancel`, độc lập với 2 bước trên): nếu `tienCoc > 0`, gọi lại đúng `ordersService.createLedgerEntry` để ghi **CHI / BAN_HANG** `"Hoàn cọc đơn đặt trước {ma}"` — đảo ngược khoản Thu đã ghi lúc tạo đặt trước (mục 5.9).
+4. **Hệ quả**: "Lợi nhuận" (Kế toán) và "Lợi nhuận gộp" (Doanh thu) nay khớp nhau tuyệt đối cho cùng khoảng thời gian — đã xác nhận bằng test tích hợp so khớp `thu - chi` từ sổ Thu/Chi với `tongCong - giaVon` tính từ đơn hàng.
+
+### 5.21 Sửa tiền cọc & phí vận chuyển sau khi tạo đơn — **Đã triển khai** (2026-08-24)
+
+Tương ứng FR-ORD.18–20 (SRS mục 3.25). Cả hai hàm đều nằm trong `orders.service.ts`, theo cùng một khuôn: chỉ cho sửa khi `order.trangThai ∈ {MOI, DANG_XU_LY}` — lý do giống hệt nhau, đã giải thích ở mục 5.20: một khi Hoàn thành, `tongCong`/`tienCoc` đã "chốt" vào Hóa đơn + sổ Thu/Chi, sửa sau đó sẽ làm hai nơi lệch nhau.
+
+1. **`updateDeposit(orderId, tienCoc, nguoiThucHienId)`**: validate `trangThai` hợp lệ và `tienCoc ≤ order.tongCong`, tính `delta = tienCoc - order.tienCoc`, rồi trong `$transaction`: `delta > 0` → `createLedgerEntry({loai:"THU", danhMuc:"BAN_HANG", noiDung:"Đặt cọc thêm đơn hàng {ma}", soTien: delta})`; `delta < 0` → `createLedgerEntry({loai:"CHI", danhMuc:"BAN_HANG", noiDung:"Hoàn một phần tiền cọc đơn hàng {ma}", soTien: -delta})`; `delta === 0` → không ghi gì. Cuối cùng `update({tienCoc})`.
+2. **`updateShippingFee(orderId, phiShip)`**: chỉ áp dụng đơn `SHIP`; tính lại `tongCongMoi = tongCong - phiShip_cu + phiShip_moi`, từ chối nếu `tienCoc > tongCongMoi`. **Không ghi bút toán Thu/Chi nào** — khác với tiền cọc, phí vận chuyển tại thời điểm sửa chưa phải tiền đã thu/hoàn thật, chỉ ảnh hưởng số tiền còn phải thu khi đơn Hoàn thành.
+3. **Frontend**: `OrderDetail.tsx` có 2 field editable riêng (`DepositField`/`ShippingFeeField`) cùng khuôn mẫu — input số có định dạng dấu phân cách nghìn khi gõ (state giữ chuỗi số thuần, chỉ format lúc render), nút "Lưu" chỉ bật khi giá trị thay đổi, tự chuyển về dạng chỉ xem (không có ô nhập) khi đơn đã Hoàn thành/Hủy/Hoàn tiền.
+
+### 5.22 Phiếu tạm tính cho đơn hàng đang xử lý — **Đã triển khai** (2026-08-24)
+
+Tương ứng FR-ORD.21–23 (SRS mục 3.26). Giải quyết khoảng trống: hóa đơn chính thức chỉ sinh khi đơn Hoàn thành (mục 3.7 SRS), nên đơn **Đang xử lý** không có gì để in dù nhân viên có thể cần một bản để đóng gói/gửi kèm hàng.
+
+1. **`orders.service.ts#getForPreviewPdf(id)`**: query riêng (không dùng `orderInclude` chung) — bổ sung `khachHang.diaChi`, `preorder:{select:{ma:true}}`, `paymentTransactions` (bản ghi mới nhất) mà mẫu PDF cần nhưng `orderInclude` chuẩn không có.
+2. **`orders.controller.ts#getPreviewPdf`**: gọi `renderInvoicePdf({soHoaDon: order.ma, createdAt: order.createdAt, provisional: true, order}, res)` — dùng **mã đơn** làm số hiển thị (chưa có số hóa đơn thật), **không** đụng tới bảng `Invoice` ở bất kỳ bước nào (xác nhận: đây là hàm chỉ đọc).
+3. **`invoicePdf.ts`**: tham số `provisional?: boolean` đổi tiêu đề/màu/dòng chú thích cuối trang (chi tiết mục 5.6) — cùng một hàm `renderInvoicePdf` phục vụ cả hóa đơn thật lẫn phiếu tạm tính, tránh trùng lặp code.
+4. **Route không tự giới hạn theo `trangThai`** (xem SRS 6.17) — việc chỉ hiển thị nút cho đơn Đang xử lý là quy ước ở tầng giao diện (`Orders.tsx`/`OrderDetail.tsx`: đơn có `invoice` → nút "Xuất PDF"; đơn `DANG_XU_LY` không có `invoice` → nút "Phiếu tạm tính"; đơn khác → không có nút nào), không phải một gate cứng ở server.
+
+### 5.23 Sửa lỗi không xóa được các trường tùy chọn của khách hàng — **Đã triển khai** (2026-08-24)
+
+Tương ứng FR-CUST.1 (đã sửa, SRS mục 3.5/3.30).
+
+1. **Triệu chứng gốc**: form sửa khách hàng (`EditCustomerModal`, `CustomerDetail.tsx`) gửi `field || undefined` khi người dùng xóa trắng một ô tùy chọn (email/ngày sinh/địa chỉ/lưu ý/link Facebook). `JSON.stringify` loại bỏ hoàn toàn các key có giá trị `undefined` khỏi request body — backend nhận request **không có** key đó, và với Prisma, "không có key" nghĩa là "giữ nguyên giá trị cũ", không phải "xóa nó đi". Kết quả: xóa ô rồi lưu không có tác dụng.
+2. **Sửa ở frontend**: đổi `field || undefined` → `field || null` — `null` (khác `undefined`) **có** được `JSON.stringify` giữ lại, nên backend nhận được tín hiệu "xóa" thật.
+3. **Sửa ở backend**: `customers.controller.ts#updateSchema` đổi 5 field này từ `.optional()` sang `.nullable().optional()` — chấp nhận `string | null | undefined` (trước đây chỉ chấp nhận `string | undefined`, gửi `null` sẽ bị Zod từ chối với lỗi "expected string, received null"). `customers.service.ts#update()` cập nhật kiểu tương ứng (`string | null`) và truyền thẳng vào `prisma.customer.update({data})` — Prisma tự hiểu `null` trong `data` là "đặt cột về NULL", không cần logic xử lý thêm.
+4. **`hoTen`, `nguonKhachHang`, `hangKhachHang`, `diemTichLuy` không đổi** — vẫn chỉ `.optional()`, không cho xóa về rỗng (đây là các trường không có ý nghĩa "để trống": họ tên/nguồn khách hàng luôn bắt buộc có giá trị, điểm tích lũy là số).
+
 ---
 
 ## 6. Thiết kế bảo mật
 
+> **Sửa toàn bộ 2026-08-24**: mục này ở bản 1.1 mô tả CORS mở hoàn toàn và không có cơ chế thu hồi token — cả hai đã lỗi thời từ commit `0d462cb` (2026-08-23) nhưng bản 1.1 chưa từng cập nhật lại. Nội dung dưới đây phản ánh đúng code hiện tại.
+
 - **Hash mật khẩu**: `bcryptjs`, cost factor 10.
-- **JWT**: thuật toán `HS256`, payload `{sub: staffId, vaiTro}`, hết hạn sau **8 giờ**. `JWT_SECRET` được validate khi khởi động server: bắt buộc tồn tại, đủ dài (≥32 ký tự), không phải giá trị placeholder mặc định — server **từ chối khởi động** nếu vi phạm (fail-fast, tránh chạy production với secret yếu).
-- **`requireAuth`**: đọc header `Authorization: Bearer <token>`; thiếu → `401 "Thiếu token xác thực."`; sai/hết hạn → `401 "Token không hợp lệ hoặc đã hết hạn."`.
+- **JWT**: thuật toán `HS256`, payload `{sub: staffId, vaiTro, tokenVersion}` *(sửa 2026-08-23 — thêm `tokenVersion`)*, hết hạn sau **8 giờ**. `JWT_SECRET` được validate khi khởi động server: bắt buộc tồn tại, đủ dài (≥32 ký tự), không phải giá trị placeholder mặc định — server **từ chối khởi động** nếu vi phạm (fail-fast, tránh chạy production với secret yếu).
+- **`requireAuth`** *(sửa 2026-08-23)*: đọc header `Authorization: Bearer <token>`; thiếu → `401 "Thiếu token xác thực."`. Sau khi verify chữ ký JWT, PHẢI tra lại `Staff` trong DB và so `staff.tokenVersion === payload.tokenVersion` cùng `staff.trangThai !== "LOCKED"` — lệch bất kỳ điều nào (kể cả token còn hạn) → `401 "Token không hợp lệ hoặc đã hết hạn."`. Đây chính là cơ chế **thu hồi token trước hạn** (xem mục dưới).
+- **Thu hồi token (`tokenVersion` revocation)** *(mới 2026-08-23 — thay thế mục "Không có refresh token/revoke" ở bản 1.1)*: `Staff.tokenVersion` (mặc định 0) được nhúng vào JWT lúc đăng nhập và tăng thêm 1 (`increment: 1`) mỗi khi Admin **khóa tài khoản** hoặc **đặt lại mật khẩu** cho nhân viên đó — mọi token đã phát hành trước thời điểm đó lập tức bị `requireAuth` từ chối ở request tiếp theo, dù JWT về mặt kỹ thuật chưa hết hạn 8 giờ. Không cần bảng blacklist/session riêng.
 - **`requireRole(...roles)`**: so `req.auth.vaiTro` với danh sách cho phép; không khớp → `403 "Bạn không có quyền thực hiện thao tác này."`.
-- **Không có refresh token / revoke phía server** — đăng xuất chỉ xóa token phía client (`localStorage`); token cũ vẫn hợp lệ tới khi hết hạn 8h nếu bị đánh cắp.
-- **CORS**: mở (`cors()` không giới hạn origin) — phù hợp giai đoạn phát triển, cần thắt lại whitelist origin khi lên production thật.
-- **Webhook thanh toán bên thứ 3 (mục 4.14)**: endpoint `POST /payments/vietqr/webhook` **không** dùng JWT nội bộ (bên gọi không phải nhân viên) — PHẢI xác thực bằng secret/HMAC signature riêng theo hợp đồng của dịch vụ đối soát, lưu secret này tách biệt khỏi `JWT_SECRET`, và nên hạn chế theo IP allowlist của bên cung cấp dịch vụ nếu họ công bố dải IP cố định.
-- **Khoảng trống đã biết**: RBAC phía frontend không đầy đủ (xem SRS mục 5–6.2) — cần bổ sung để trải nghiệm người dùng nhất quán với thực thi backend, dù backend đã chặn đúng ở tầng API.
+- **Đăng xuất**: vẫn chỉ xóa token phía client (`localStorage`) — không gọi API; nếu cần vô hiệu hóa ngay lập tức (máy bị mất/lộ token), dùng đường "Đặt lại mật khẩu"/"Khóa tài khoản" ở trên để buộc đăng nhập lại.
+- **Rate limiting** *(mới 2026-08-23)*: `express-rate-limit`, key theo IP (`app.set("trust proxy", 1)` để lấy đúng IP thật qua 1 lớp proxy của Render). Hai tầng: giới hạn chung toàn API (`/api`, mọi route) và giới hạn riêng, chặt hơn, chỉ cho `POST /auth/login` để chống dò mật khẩu (brute-force) — vượt giới hạn trả `429` kèm thông báo tiếng Việt tương ứng.
+- **`helmet`** *(mới 2026-08-23)*: bật với `contentSecurityPolicy: false` (API JSON/PDF/ảnh thuần, không phục vụ HTML nên CSP không có tác dụng) và `crossOriginResourcePolicy: "cross-origin"` (ghi đè mặc định `same-origin` của helmet, để frontend ở domain khác `fetch()` được ảnh sản phẩm/PDF hóa đơn) — các header bảo mật mặc định khác (HSTS, X-Frame-Options...) giữ nguyên.
+- **CORS** *(sửa 2026-08-23 — thay thế "mở hoàn toàn" ở bản 1.1)*: allow-list origin tường minh, đọc từ biến môi trường `CORS_ORIGINS` (danh sách phân tách dấu phẩy, mặc định `http://localhost:8443` nếu không cấu hình), `credentials: true`. Bản 1.1 ghi CORS "mở, không giới hạn origin" — **không còn đúng**, phải cấu hình rõ domain frontend thật trên production.
+- **Xác thực nội dung file tải lên** *(mới 2026-08-23)*: ảnh sản phẩm được kiểm tra bằng package `file-type`, đọc **magic byte thật** của buffer (không tin MIME type client khai báo qua `multer`) — chỉ chấp nhận JPEG/PNG/WEBP/GIF theo nội dung byte thực tế; MIME lưu vào DB cũng lấy từ kết quả sniff này, không phải từ request.
+- **Webhook thanh toán bên thứ 3 (mục 4.14)** *(sửa 2026-08-23 — chốt nhà cung cấp SePay)*: endpoint `POST /payments/vietqr/webhook` **không** dùng JWT nội bộ — xác thực bằng header `Authorization: Apikey <secret>` (đúng chuẩn SePay chế độ "API Key", so sánh bằng `timingSafeEqual` để chống timing attack), cộng thêm một lớp **allowlist địa chỉ IP nguồn** tùy chọn (biến môi trường riêng, so khớp chuỗi tuyệt đối — không hỗ trợ CIDR, xem SRS 6.15). Cả hai lớp thất bại đều trả cùng một thông báo lỗi để không lộ nguyên nhân cụ thể cho kẻ dò quét.
+- **Khoảng trống đã biết**: RBAC phía frontend không đầy đủ (xem SRS mục 5–6.2) — cần bổ sung để trải nghiệm người dùng nhất quán với thực thi backend, dù backend đã chặn đúng ở tầng API. Ngoài ra chưa có audit log riêng cho các sự kiện bị chặn bởi rate limit/CORS/IP allowlist/sai webhook secret (SRS 6.16) — chỉ dựa vào log mặc định của nền tảng hosting.
 
 ---
 
@@ -820,10 +893,13 @@ sequenceDiagram
         Note over API,DB: KHÔNG trừ kho ở đây nữa — đã trừ lúc tạo đơn ở trên
     end
     API->>DB: Insert Invoice (mã HDH-INV-...)
+    API->>DB: Insert IncomeExpense THU "Doanh thu bán hàng đơn ..." (= tongCong - tienCoc, nếu > 0)
+    API->>DB: Insert IncomeExpense CHI "Giá vốn hàng bán đơn ..." (= Σ giaVon, nếu > 0)
+    Note over API,DB: Ghi sổ Thu/Chi mới 2026-08-24 (mục 5.20) — trước đây chỉ ghi tiền cọc, không ghi doanh thu/giá vốn thật
     API->>DB: Update Order.trangThai = HOAN_THANH
     API->>DB: COMMIT
-    API-->>FE: 200 Order (HOAN_THANH)
-    FE->>API: GET /invoices?q=<ma đơn> (để bật nút Xuất PDF)
+    API-->>FE: 200 Order (HOAN_THANH, kèm invoice{id,soHoaDon})
+    Note over FE,API: Nút "Xuất PDF" bật thẳng từ order.invoice có sẵn (mới 2026-08-24) — không còn cần gọi GET /invoices?q=... riêng như trước
 
     Note over NV,DB: Nếu NV Hủy đơn (Mới/Đang xử lý) hoặc Xóa hẳn đơn đang ở 2 trạng thái này<br/>thay vì Hoàn thành → applyInventoryTransaction(TRA_HANG, +soLuong) hoàn lại tồn kho đã giữ (mục 5.12)
 ```
@@ -843,9 +919,13 @@ sequenceDiagram
         API->>DB: product.daBan -= soLuong
         API->>DB: applyInventoryTransaction(TRA_HANG, +soLuong)
     end
+    API->>DB: Insert IncomeExpense CHI "Hoàn tiền đơn hàng ..." (đảo doanh thu đã ghi lúc Hoàn thành)
+    API->>DB: Insert IncomeExpense THU "Hoàn giá vốn do hoàn tiền đơn hàng ..." (đảo giá vốn đã ghi)
+    API->>DB: [nếu tienCoc > 0] Insert IncomeExpense CHI "Hoàn cọc đơn hàng ..." (= tienCoc)
+    Note over API,DB: Đảo ngược đúng các bút toán của mục 5.20 — mới 2026-08-24, dòng tiền ròng của đơn về lại 0
     API->>DB: Update Order.trangThai = HOAN_TIEN
     API->>DB: COMMIT
-    Note over DB: Không sinh hóa đơn điều chỉnh — chỉ đổi trạng thái đơn
+    Note over DB: Không sinh hóa đơn điều chỉnh — chỉ đổi trạng thái đơn + đảo bút toán Thu/Chi
 ```
 
 ### 8.3 Thanh toán QR ngân hàng → tự động hoàn thành đơn hàng (**Đã triển khai** — luồng dưới đã kiểm thử qua HTTP thực tế)
@@ -854,7 +934,7 @@ sequenceDiagram
 sequenceDiagram
     actor KH as Khách hàng
     participant NH as Ngân hàng
-    participant Recon as Dịch vụ đối soát trung gian
+    participant Recon as SePay
     participant API as Backend HDH Toys
     participant DB as PostgreSQL
 
@@ -862,7 +942,7 @@ sequenceDiagram
 
     KH->>NH: Quét mã QR, chuyển khoản đúng số tiền
     NH->>Recon: Báo có vào tài khoản cửa hàng
-    Recon->>API: POST /payments/vietqr/webhook (ký secret)
+    Recon->>API: POST /payments/vietqr/webhook (Authorization: Apikey ...)
     API->>API: Xác thực chữ ký request
     alt chữ ký không hợp lệ
         API-->>Recon: 401 — ghi log cảnh báo
@@ -936,14 +1016,48 @@ Tổng hợp lại các điểm kỹ thuật đã nêu ở SRS mục 6, dưới 
 2. Đồng bộ ẩn/khóa UI theo `StaffRole` ở frontend, khớp với các `requireRole` đã có ở backend và ma trận phân quyền hiển thị tại Cài đặt.
 3. Chuyển bộ lọc tìm kiếm văn bản ở Lịch sử kho và Thu/Chi thành query param gửi lên server (thay vì lọc trên dữ liệu trang hiện tại).
 4. Thống nhất cách gọi các endpoint cần xác thực khi trả file (áp dụng pattern `openAuthenticatedPdf` cho cả export CSV nếu endpoint đó cũng yêu cầu Bearer token).
-5. Xem xét bổ sung khả năng tính "lợi nhuận giữ lại" độc lập (từ lịch sử Order/IncomeExpense) để `canDoi` trở thành một kiểm tra đối chiếu thực sự, không chỉ là đồng nhất thức.
+5. **[ĐÃ GIẢI QUYẾT 2026-08-24 — xem mục 5.5]** ~~Xem xét bổ sung khả năng tính "lợi nhuận giữ lại" độc lập...~~ — `loiNhuanGiuLai` nay tính độc lập từ `getAllTimeNetIncome()`, `canDoi`/`chenhLech` đã là kiểm tra đối chiếu thật, không còn đồng nhất thức.
 6. Tối ưu truy vấn `GET /debts` (hiện lọc `trangThai` suy ra trong bộ nhớ sau khi tải toàn bộ bản ghi khớp `loai`/`q`) khi số lượng công nợ tăng lớn — có thể cần lưu `trangThai` như cột tính toán/denormalized hoặc lọc bằng raw SQL.
-7. Bổ sung endpoint/luồng thu hồi token (revoke) nếu yêu cầu bảo mật tăng lên (hiện JWT không thể vô hiệu hóa trước khi hết hạn 8h).
-8. **Mục 5.8/4.14 (tích hợp QR ngân hàng) đã triển khai và kiểm thử qua HTTP thực tế** (2026-08-21) — 4 điểm từng cần quyết định đã chốt: (a) hợp đồng webhook tự định nghĩa dạng generic `{referenceCode, transferAmount, content}`, tương thích trực tiếp hoặc cần adapter nhỏ tùy provider thật (Casso/SePay/khác) chọn sau; (b) TTL mã QR mặc định 15 phút, cấu hình qua `VIETQR_TTL_MINUTES`; (c) tài khoản `Staff` đại diện hệ thống (`system@hdhtoys.internal`, LOCKED) đã seed sẵn; (d) giao dịch "Không khớp"/"Sai số tiền" hiển thị ở Kế toán → tab "Đối soát QR" (`GET /payments/unmatched`) để nhân viên xử lý tay — SLA xử lý cụ thể (bao lâu) vẫn là quy trình vận hành cần thống nhất với đội kế toán, không phải vấn đề kỹ thuật.
-9. **Trước khi dùng với tiền thật**: thay `VIETQR_BANK_BIN`/`VIETQR_ACCOUNT_NO`/`VIETQR_WEBHOOK_SECRET` (hiện là placeholder ở môi trường dev) bằng tài khoản ngân hàng thật của cửa hàng và secret do dịch vụ đối soát trung gian thật cấp.
+7. **[ĐÃ GIẢI QUYẾT 2026-08-23 — xem mục 6]** ~~Bổ sung endpoint/luồng thu hồi token...~~ — `Staff.tokenVersion` nay cho phép vô hiệu hóa token ngay khi khóa tài khoản/đặt lại mật khẩu, không cần đợi hết hạn 8h.
+8. **Mục 5.8/4.14 (tích hợp QR ngân hàng) đã triển khai và kiểm thử qua HTTP thực tế** (2026-08-21, hoàn thiện 2026-08-23) — các điểm từng cần quyết định đã chốt: (a) **nhà cung cấp đã chọn là SePay** (chế độ API Key, header `Authorization: Apikey <secret>`, không phải HMAC như dự tính ban đầu — xem mục 4.14/6); (b) TTL mã QR mặc định 15 phút, cấu hình qua `VIETQR_TTL_MINUTES`; (c) tài khoản `Staff` đại diện hệ thống (`system@hdhtoys.internal`, LOCKED) đã seed sẵn; (d) giao dịch "Không khớp"/"Sai số tiền" hiển thị ở Kế toán → tab "Đối soát QR" (`GET /payments/unmatched`) để nhân viên xử lý tay — SLA xử lý cụ thể (bao lâu) vẫn là quy trình vận hành cần thống nhất với đội kế toán, không phải vấn đề kỹ thuật; (e) *(mới 2026-08-23)* đã thêm lớp allowlist IP nguồn tùy chọn, nhưng so khớp chuỗi tuyệt đối, chưa hỗ trợ CIDR (xem SRS 6.15).
+9. **Trước khi dùng với tiền thật**: thay `VIETQR_BANK_BIN`/`VIETQR_ACCOUNT_NO`/`VIETQR_WEBHOOK_SECRET`/`VIETQR_WEBHOOK_ALLOWED_IPS` (hiện là placeholder ở môi trường dev) bằng tài khoản ngân hàng thật của cửa hàng và API Key/IP thật do SePay cấp cho tài khoản doanh nghiệp.
 10. Phát hiện tự hoàn thành ở frontend hiện dựa vào polling 4 giây/lần (`OrderDetail.tsx`), không phải push — đủ dùng cho quy mô nhỏ, nên nâng cấp WebSocket/SSE nếu cần realtime chặt hơn hoặc số đơn đồng thời tăng cao.
 11. **Preorder không giữ hàng thật** (mục 5.9 điểm 3) — trạng thái `SAN_SANG` là gợi ý dựa trên tồn kho tại thời điểm nhập, có thể bị bán mất cho khách vãng lai trước khi nhân viên xác nhận chuyển đổi. Nếu cần chặt hơn, phải thêm khái niệm "tồn kho khả dụng vs giữ chỗ" — ảnh hưởng rộng tới Inventory/Orders, nên cân nhắc kỹ trước khi làm (rủi ro/độ phức tạp cao hơn hẳn tính năng hiện tại). **Lưu ý 2026-08-22**: Đơn hàng thường (mục 5.12) đã có giữ hàng thật từ lúc tạo — điểm còn thiếu này giờ chỉ áp dụng riêng cho Đặt trước.
 12. **[Mới 2026-08-22] Giữ tồn kho lúc tạo đơn (mục 5.12) chưa có row-lock**: rủi ro race condition hiếm gặp khi nhiều terminal tạo đơn gần như đồng thời cho cùng một sản phẩm ở mức isolation mặc định của Postgres — nên bổ sung `SELECT ... FOR UPDATE` (hoặc nâng isolation level) nếu số lượng nhân viên/terminal thao tác song song tăng lên.
 13. **[Mới 2026-08-22] Xóa Đặt trước đã chuyển đơn làm mất liên kết điều hướng 2 chiều**: sau khi nới lỏng `DELETE /preorders/:id` (mục 4.16), xóa một Preorder đã `DA_CHUYEN_DON` khiến nút "Xem đơn đặt trước" ở Order không còn dữ liệu để trỏ tới — số tiền cọc/mã đặt trước vẫn còn dưới dạng text trong `Order.ghiChu` (không mất thông tin nghiệp vụ), chỉ mất khả năng điều hướng ngược qua UI.
 14. **[Mới 2026-08-22] Ảnh sản phẩm lưu trong Postgres (`bytea`)** — phù hợp quy mô nhỏ (giới hạn 3MB/ảnh, 1 ảnh/sản phẩm, tránh phụ thuộc dịch vụ ngoài khi Render free tier không có ổ đĩa bền) nhưng sẽ làm phình kích thước DB nếu số SKU có ảnh tăng lớn — nên chuyển sang object storage (S3-compatible) nếu cần scale.
 15. **[Mới 2026-08-22] Sản phẩm Pre-order không có nhắc hàng thật (email/SMS/push)** — banner nhắc chỉ hiển thị trong ứng dụng (Dashboard + chi tiết sản phẩm) khi nhân viên đang mở app, tính lại mỗi lần render, không có cơ chế đẩy thông báo chủ động ra ngoài nếu không ai mở app đúng lúc.
+16. **[Mới 2026-08-23] Không có audit log riêng cho sự kiện bảo mật bị chặn** — request bị từ chối bởi rate limit/CORS/webhook IP allowlist/sai `Authorization: Apikey` chỉ trả lỗi HTTP tương ứng, không ghi vào bảng log tập trung để dò tìm mẫu tấn công theo thời gian — hiện chỉ dựa vào log console/nền tảng hosting mặc định.
+17. **[Mới 2026-08-23] Allowlist IP webhook so khớp chuỗi tuyệt đối, không hỗ trợ CIDR** — nếu SePay đổi/luân phiên dải IP nguồn, phải cập nhật thủ công từng IP.
+18. **[Mới 2026-08-24] `GET /orders/:id/preview-pdf` (mục 5.22) không tự giới hạn theo `trangThai` ở tầng server** — chỉ giao diện mới chỉ hiện nút cho đơn Đang xử lý; gọi thẳng API vẫn ra được phiếu tạm tính cho đơn ở trạng thái khác (rủi ro thấp — vẫn yêu cầu đăng nhập, dữ liệu hiển thị vẫn đúng, chỉ thiếu một gate nghiệp vụ rõ ràng).
+19. **[Mới 2026-08-24] `updateShippingFee` không ghi bút toán Thu/Chi** — khác với `updateDeposit` (mục 5.21), sửa phí vận chuyển không tạo bút toán nào vì phí ship chưa phải tiền đã thu/hoàn tại thời điểm sửa (chỉ ảnh hưởng số tiền còn phải thu khi Hoàn thành) — cần lưu ý đây là thiết kế có chủ đích, không phải thiếu sót, khi đối chiếu với hành vi của tiền cọc.
+20. **[Mới 2026-08-24] Xóa Đặt trước đã chuyển đơn và có cọc đã hoàn (mục 5.20 điểm 3) không để lại vết liên kết tới bút toán hoàn cọc** — bút toán Chi hoàn cọc vẫn còn trong sổ Thu/Chi (đúng số tiền, đúng thời điểm), nhưng nội dung bút toán tham chiếu tới mã đặt trước bằng text tự do (`noiDung`), không phải khóa ngoại — nếu bản ghi Đặt trước gốc đã bị xóa (FR-DEL.4), không thể click-through từ bút toán về lại đặt trước qua UI, chỉ tra cứu được bằng tìm kiếm text.
+
+---
+
+## 10. Kiểm thử tự động (**Mới 2026-08-24**)
+
+Trước bản này, hệ thống hoàn toàn không có test tự động — mọi thay đổi chỉ được xác minh thủ công qua HTTP thực tế. Đã bổ sung `vitest` cho cả backend và frontend.
+
+### 10.1 Backend (`backend/src/**/*.test.ts`, chạy bằng `npm test` / `vitest run`)
+
+**Unit test** (không chạm DB) — `src/lib/*.test.ts`:
+`dateRange.test.ts`, `debtStatus.test.ts`, `productStatus.test.ts`, `orderCode.test.ts`, `invoiceCode.test.ts`, `preorderCode.test.ts` (quy tắc sinh mã, mục 3.3), `vietqr.test.ts` (CRC16/EMVCo, mục 5.8), `webhookAuth.test.ts` + `webhookAuth.unconfigured.test.ts` (xác thực webhook SePay, mục 6, kể cả trường hợp chưa cấu hình secret).
+
+**Integration test** (chạy thẳng trên **DB dev thật** qua Prisma, không mock) — `src/services/*.service.integration.test.ts`:
+- `orders.service.integration.test.ts` — máy trạng thái đơn hàng, giữ/hoàn tồn kho (mục 5.12), khóa sửa cọc/phí ship sau Hoàn thành (mục 5.21), đối chiếu bút toán Thu/Chi ròng về 0 sau khi Hoàn tiền (mục 5.20).
+- `accounting.service.integration.test.ts` — `getBalanceSheet`/`getAllTimeNetIncome` (mục 5.5): xác nhận `chenhLech` di chuyển đúng bằng (THU − CHI) khi có bút toán mới, tức không còn là số dư ép cân.
+- `revenue.service.integration.test.ts` — các báo cáo mới (lợi nhuận theo sản phẩm/danh mục, vòng quay tồn kho, khách mua lại — mục 5.4/3.28).
+- `customers.service.integration.test.ts` — xác nhận `null` xóa được field tùy chọn, còn field bị bỏ qua thì giữ nguyên giá trị cũ (mục 5.23).
+
+Mỗi file integration test tự sinh dữ liệu với một `RUN_ID` duy nhất (timestamp + chuỗi ngẫu nhiên) để không đụng dữ liệu thật, và tự xóa sạch trong `afterAll` — **không cần** một database test riêng biệt. **Lưu ý vận hành**: vì chạy trên cùng DB dev dùng chung, các bài test đọc **tổng toàn cục** (ví dụ `getAllTimeNetIncome` cộng dồn *mọi* `IncomeExpense`) có thể bị nhiễu nếu nhiều file test khác chạy song song ghi dữ liệu vào đúng lúc — đã quan sát thấy 1 lần thất bại giả (flake) khi chạy toàn bộ suite song song, nhưng test đó pass ngay khi chạy riêng lẻ; không phải lỗi logic.
+
+### 10.2 Frontend (`frontend/src/**/*.test.ts(x)`, chạy bằng `npx pnpm run test`)
+
+`vitest` (môi trường `jsdom`) + `@testing-library/react`. Chiến lược: tách logic tính toán thuần túy ra khỏi component để test không cần mock toàn bộ `api`/`recharts`:
+- `lib/orderMath.test.ts` — test hàm `computeOrderTotals` (tách từ `CreateOrder.tsx`) tính tạm tính/giảm giá/phí ship/tổng cộng.
+- `screens/KeToan.test.tsx` — test component thuần `BalanceSheetStatus` (tách từ `KeToan.tsx`) hiển thị đúng trạng thái cân đối/lệch (mục 5.5).
+
+### 10.3 Phạm vi chưa có test
+
+Chưa có test cho: tích hợp thanh toán QR/webhook SePay ở tầng HTTP đầy đủ (mới chỉ kiểm thử thủ công qua HTTP thực tế, mục 9 điểm 8), luồng Đặt trước → khớp FIFO → chuyển đơn (mục 5.9), và toàn bộ frontend ngoài 2 unit test kể trên (không có test E2E/component cho các màn hình chính).

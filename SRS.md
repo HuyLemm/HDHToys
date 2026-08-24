@@ -1,7 +1,7 @@
 # HDH Toys — Software Requirements Specification (SRS)
 
-**Phiên bản**: 1.1 (tài liệu hóa hiện trạng hệ thống — reverse-engineered từ mã nguồn; cập nhật đồng bộ với các mục 3.19–3.22 mới)
-**Ngày**: 2026-08-22
+**Phiên bản**: 1.2 (tài liệu hóa hiện trạng hệ thống — reverse-engineered từ mã nguồn; cập nhật đồng bộ với các mục 3.23–3.30 mới, đồng thời sửa lại các mục 1.3/3.6/3.7/3.12 đã lỗi thời do VAT bị loại bỏ và hóa đơn PDF được thiết kế lại ở commit `0d462cb` mà bản 1.1 chưa từng ghi nhận)
+**Ngày**: 2026-08-24
 **Nguồn**: `backend/` (Node.js/Express/Prisma/PostgreSQL) + `frontend/` (React/Vite/TypeScript), tham chiếu `BACKEND_FEATURES.md`, `BIZFLOW_DEMO.md`.
 **Tài liệu liên quan**: [SDS.md](./SDS.md) — thiết kế kỹ thuật chi tiết (data model, API, luồng nghiệp vụ).
 
@@ -27,8 +27,11 @@ Tài liệu này mô tả đầy đủ các yêu cầu chức năng và phi ch�
 | Công nợ (Debt) | Khoản phải thu/phải trả, quản lý **độc lập** với Order/Invoice |
 | Cân đối kế toán (Balance Sheet) | Bảng tài sản = nợ phải trả + vốn chủ sở hữu, tính tại một thời điểm |
 | Khách hàng 360 | Hồ sơ khách hàng tổng hợp: lịch sử mua, đơn đang xử lý, sản phẩm đã mua, hóa đơn |
-| VAT | Trong hệ thống này là **số tiền cộng thêm cố định** (không phải %) |
+| Phí vận chuyển (đơn hàng) | Khoản phí giao hàng tính **cho khách** trên đơn Ship, cộng thẳng vào `tongCong` (khác với phí vận chuyển trên *Sản phẩm* ở mục 2.4/3.19, vốn là chi phí nhập hàng cộng vào giá vốn) |
+| Phiếu tạm tính | Bản PDF in trước cho đơn **Đang xử lý** (chưa Hoàn thành) — dùng dữ liệu đơn hàng hiện tại, không sinh Hóa đơn thật, có thể thay đổi trước khi đơn Hoàn thành (mục 3.27) |
 | RBAC | Role-Based Access Control — kiểm soát truy cập theo vai trò nhân viên |
+
+> **Đã loại bỏ (2026-08-23)**: khái niệm **VAT** (số tiền cộng thêm cố định trên đơn hàng) đã bị xóa hoàn toàn khỏi hệ thống (schema, API, hóa đơn PDF, giao diện) — xem mục 3.23. Bản SRS 1.1 trước đó vẫn còn nhắc tới VAT ở một số chỗ (FR-ORD.1/2) dù code đã xóa từ commit `0d462cb`; các mục đó đã được sửa lại trong bản 1.2 này.
 
 ### 1.4 Vai trò người dùng (Staff Role)
 `ADMIN`, `MANAGER`, `ACCOUNTANT`, `INVENTORY_STAFF` — xem chi tiết ma trận phân quyền tại mục 5.
@@ -137,7 +140,7 @@ Ký hiệu: **FR-<module>.<số>**. Mỗi yêu cầu có Input/Output/Quy tắc 
 
 ### 3.5 Quản lý khách hàng & Customer 360 (Customers)
 
-- **FR-CUST.1** Hệ thống PHẢI cho phép mọi nhân viên đã đăng nhập xem/tạo/sửa hồ sơ khách hàng, gồm các trường bắt buộc: họ tên, số điện thoại duy nhất, **nguồn khách hàng** *(mới 2026-08-22 — bắt buộc chọn, không còn để trống/ngầm định "Khác" như trước, để không mất dữ liệu phân tích kênh mua)*; và các trường tùy chọn: email, ngày sinh, hạng (New/Member/VIP, mặc định New), điểm tích lũy, **địa chỉ**, **lưu ý** (ghi chú nhanh hiển thị nổi bật ở hồ sơ), **link Facebook** (hiển thị dạng link bấm mở được).
+- **FR-CUST.1** Hệ thống PHẢI cho phép mọi nhân viên đã đăng nhập xem/tạo/sửa hồ sơ khách hàng, gồm các trường bắt buộc: họ tên, số điện thoại duy nhất, **nguồn khách hàng** *(mới 2026-08-22 — bắt buộc chọn, không còn để trống/ngầm định "Khác" như trước, để không mất dữ liệu phân tích kênh mua)*; và các trường tùy chọn: email, ngày sinh, hạng (New/Member/VIP, mặc định New), điểm tích lũy, **địa chỉ**, **lưu ý** (ghi chú nhanh hiển thị nổi bật ở hồ sơ), **link Facebook** (hiển thị dạng link bấm mở được). *(Sửa 2026-08-24)* Mỗi trường tùy chọn kể trên PHẢI xóa được về rỗng sau khi đã lưu giá trị (không chỉ sửa được từ rỗng sang có giá trị) — sửa lỗi trước đây xóa trắng ô rồi lưu không có tác dụng, do phía client gửi `undefined` (bị loại bỏ khi mã hóa JSON) thay vì tín hiệu "xóa" thật.
 - **FR-CUST.2** Hệ thống PHẢI cho phép tìm kiếm khách hàng theo tên/SĐT/email, lọc theo hạng và theo **nguồn khách hàng** (Tại cửa hàng/Điện thoại/Facebook/Zalo/TikTok/Khác), có phân trang.
 - **FR-CUST.3** Hồ sơ 360 của một khách hàng PHẢI tổng hợp: tổng chi tiêu (chỉ tính đơn Hoàn thành), tổng số đơn (mọi trạng thái), giá trị đơn trung bình, tổng sản phẩm đã mua, số đơn đang xử lý, danh mục thường mua (top 3), sản phẩm mua nhiều nhất, lần mua gần nhất.
 - **FR-CUST.4** Hệ thống PHẢI cho phép xem: lịch sử đơn hàng (lọc theo trạng thái/đang xử lý), danh sách sản phẩm đã mua (tổng số lượng, số lần mua, chi tiêu), danh sách hóa đơn liên quan.
@@ -145,8 +148,8 @@ Ký hiệu: **FR-<module>.<số>**. Mỗi yêu cầu có Input/Output/Quy tắc 
 
 ### 3.6 Quản lý đơn hàng (Orders)
 
-- **FR-ORD.1** Hệ thống PHẢI cho phép tạo đơn hàng mới với: khách hàng (bắt buộc, phải tồn tại), nhân viên xử lý (mặc định là người tạo), kênh bán (Tại cửa hàng/Điện thoại/Facebook/Zalo/TikTok/Khác), phương thức thanh toán, **hình thức nhận hàng** (Khách tới lấy — mặc định, hoặc Ship kèm bắt buộc chọn đơn vị vận chuyển SPX/GrabExpress/Khác — mục 3.19), danh sách sản phẩm (≥1 dòng, mỗi dòng gồm sản phẩm, số lượng ≥1, đơn giá có thể override giá bán mặc định, giảm giá theo dòng — sản phẩm dòng có thể thuộc loại Có sẵn hoặc Pre-order tự do trong cùng một đơn, dùng chung một luồng xử lý duy nhất, mục 3.19), VAT (số tiền cộng thêm cố định), ghi chú.
-- **FR-ORD.2** Hệ thống PHẢI tính: tạm tính = Σ(số lượng × đơn giá), giảm giá tổng = Σ(giảm giá từng dòng), tổng cộng = tạm tính − giảm giá + VAT. Giá vốn từng dòng PHẢI được lưu lại (snapshot = giá vốn sản phẩm + phí vận chuyển sản phẩm) tại thời điểm tạo đơn để không bị ảnh hưởng nếu giá vốn/phí vận chuyển sản phẩm thay đổi sau này.
+- **FR-ORD.1** *(Sửa 2026-08-23 — bỏ VAT, xem 3.23)* Hệ thống PHẢI cho phép tạo đơn hàng mới với: khách hàng (bắt buộc, phải tồn tại), nhân viên xử lý (mặc định là người tạo), kênh bán (Tại cửa hàng/Điện thoại/Facebook/Zalo/TikTok/Khác), phương thức thanh toán, **hình thức nhận hàng** (Khách tới lấy — mặc định, hoặc Ship kèm bắt buộc chọn đơn vị vận chuyển SPX/GrabExpress/Khác, và kèm **phí vận chuyển** tính cho khách — mục 3.19/3.23), danh sách sản phẩm (≥1 dòng, mỗi dòng gồm sản phẩm, số lượng ≥1, đơn giá có thể override giá bán mặc định, giảm giá theo dòng — sản phẩm dòng có thể thuộc loại Có sẵn hoặc Pre-order tự do trong cùng một đơn, dùng chung một luồng xử lý duy nhất, mục 3.19), tiền cọc (tùy chọn), ghi chú. Hệ thống **không còn** khái niệm VAT/thuế trên đơn hàng.
+- **FR-ORD.2** *(Sửa 2026-08-23 — bỏ VAT, thay bằng phí vận chuyển)* Hệ thống PHẢI tính: tạm tính = Σ(số lượng × đơn giá), giảm giá tổng = Σ(giảm giá từng dòng), **tổng cộng = tạm tính − giảm giá + phí vận chuyển** (0 nếu không phải đơn Ship hoặc chưa nhập). Giá vốn từng dòng PHẢI được lưu lại (snapshot = giá vốn sản phẩm + phí vận chuyển sản phẩm) tại thời điểm tạo đơn để không bị ảnh hưởng nếu giá vốn/phí vận chuyển sản phẩm thay đổi sau này.
 - **FR-ORD.3** *(Sửa 2026-08-22 — đảo ngược hoàn toàn yêu cầu cũ, xem mục 3.20)* Đơn hàng mới PHẢI kiểm tra và **giữ (trừ) tồn kho khả dụng ngay tại thời điểm tạo** cho mọi dòng sản phẩm; nếu tổng số lượng đang giữ trước đó cộng với đơn mới vượt quá tồn kho thực tế, việc tạo đơn PHẢI bị từ chối với thông báo rõ số hiện có/số cần — không còn đợi tới lúc Hoàn thành mới kiểm tra như thiết kế trước đây.
 - **FR-ORD.4** Trạng thái đơn hàng PHẢI tuân theo máy trạng thái: Mới → {Đang xử lý, Đã hủy}; Đang xử lý → {Hoàn thành, Đã hủy}; Hoàn thành → {Hoàn tiền}. Đã hủy và Hoàn tiền là trạng thái kết thúc (không chuyển tiếp được nữa). Mọi lượt chuyển trạng thái sai quy tắc PHẢI bị từ chối. Việc chuyển trạng thái có thể do **nhân viên** thực hiện thủ công, hoặc do **hệ thống** thực hiện tự động khi nhận xác nhận thanh toán QR ngân hàng hợp lệ (xem FR-PAY.4, mục 3.16) — trường hợp tự động này được phép chuyển thẳng từ Mới **hoặc** Đang xử lý sang Hoàn thành, là một ngoại lệ có chủ đích của máy trạng thái nói trên.
 - **FR-ORD.5** Hệ thống PHẢI cho phép tìm/lọc đơn hàng theo mã đơn/tên-SĐT khách hàng, trạng thái, khách hàng, nhân viên, phương thức thanh toán, **trạng thái thanh toán, hình thức nhận hàng, đã/chưa có mã vận đơn** (mục 3.19), khoảng ngày tạo; và PHẢI cho phép **sắp xếp** theo ngày tạo (mới nhất/cũ nhất) hoặc theo giá trị đơn (cao nhất/thấp nhất) *(mới 2026-08-22, mục 3.19)*.
@@ -157,10 +160,11 @@ Ký hiệu: **FR-<module>.<số>**. Mỗi yêu cầu có Input/Output/Quy tắc 
 - **FR-INVO.1** Hệ thống PHẢI tự động sinh hóa đơn (mã `HDH-INV-{năm}-{số thứ tự 5 chữ số}`) ngay khi đơn hàng chuyển sang Hoàn thành — không có cách tạo hóa đơn thủ công độc lập với đơn hàng.
 - **FR-INVO.2** Hóa đơn PHẢI ghi rõ ngày và giờ phát hành (theo giờ Việt Nam), không được sửa nội dung sau khi phát hành.
 - **FR-INVO.3** Hệ thống PHẢI cho phép xem danh sách hóa đơn (lọc theo khoảng ngày/khách hàng/phương thức thanh toán/người tạo, tìm theo số hóa đơn/mã đơn/tên khách hàng) và xem chi tiết từng hóa đơn.
-- **FR-INVO.4** Hệ thống PHẢI cho phép xuất hóa đơn dạng PDF (khổ A5) hiển thị đúng dấu tiếng Việt, có đầy đủ: thông tin cửa hàng, số hóa đơn, ngày giờ, mã đơn, nhân viên, khách hàng, danh sách sản phẩm (đánh dấu riêng dòng nào là sản phẩm Pre-order — mục 3.19), các dòng tổng (tạm tính/giảm giá/VAT/tổng cộng), **thông tin giao hàng** (hình thức nhận hàng; nếu Ship thì kèm đơn vị vận chuyển và mã vận đơn nếu đã có — mới 2026-08-22), phương thức thanh toán. Bản xem trên web (không chỉ PDF) PHẢI hiển thị đầy đủ tương đương.
-- **FR-INVO.5** Hoàn tiền một đơn Hoàn thành KHÔNG sinh ra hóa đơn điều chỉnh/hóa đơn âm — chỉ trạng thái đơn hàng thay đổi.
-- **FR-INVO.6** *(Mới 2026-08-22)* Nếu đơn hàng gốc của hóa đơn được **chuyển đổi từ một đơn Đặt trước có tiền cọc** (mục 3.17), hóa đơn (cả bản web và PDF) PHẢI hiển thị thêm 3 dòng: **Tổng tiền khách phải thanh toán**, **Tiền đã cọc**, **Thanh toán cuối cùng** (= tổng tiền − tiền cọc) — thay cho dòng "Tổng cộng" đơn thuần. Đơn hàng không xuất phát từ Đặt trước (hoặc Đặt trước không có cọc) hiển thị như bình thường, không có 3 dòng này.
-- **FR-INVO.7** *(Mới 2026-08-22)* Màn hình danh sách Hóa đơn PHẢI hiển thị cột **mã vận đơn** (kèm nút chép nhanh) cho các đơn Ship đã có mã, để nhân viên lấy gửi lại cho khách ngay từ báo cáo tổng hợp mà không cần mở từng đơn hàng.
+- **FR-INVO.4** *(Sửa 2026-08-23/24 — thiết kế lại giao diện hóa đơn, xem 3.23/3.30)* Hệ thống PHẢI cho phép xuất hóa đơn dạng PDF (khổ A5, logo cửa hàng bo tròn) hiển thị đúng dấu tiếng Việt, có đầy đủ: khối "THÔNG TIN CỬA HÀNG" (tên/địa chỉ/điện thoại/website cửa hàng nếu có cấu hình, và dòng **Nhân viên**: tên người xử lý đơn), khối "THÔNG TIN KHÁCH HÀNG" (họ tên, điện thoại, email nếu có — **không hiển thị địa chỉ khách hàng**), số hóa đơn, ngày giờ, mã đơn, danh sách sản phẩm (đánh dấu riêng dòng nào là sản phẩm Pre-order — mục 3.19), các dòng tổng luôn hiển thị đủ dù bằng 0 (Tạm tính/Giảm giá/Phí vận chuyển/Tổng cộng/Tiền đã cọc/Thanh toán cuối cùng — mục 3.30), và mã QR liên kết Facebook/Zalo của cửa hàng nếu đã cấu hình. Hóa đơn PDF **không còn** hiển thị khối thông tin phương thức thanh toán/hình thức nhận hàng/đơn vị vận chuyển/mã vận đơn riêng (đã bỏ ở mục 3.30) — các thông tin này vẫn xem được ở chi tiết đơn hàng (mục 3.6/3.19). Bản xem trên web (không chỉ PDF) PHẢI hiển thị đầy đủ tương đương phần tổng tiền.
+- **FR-INVO.5** Hoàn tiền một đơn Hoàn thành KHÔNG sinh ra hóa đơn điều chỉnh/hóa đơn âm — chỉ trạng thái đơn hàng thay đổi (và các bút toán Thu/Chi được đảo ngược — mục 3.25).
+- **FR-INVO.6** *(Sửa 2026-08-24 — không còn giới hạn riêng cho đơn từ Đặt trước, xem 3.30)* Hóa đơn (web + PDF) PHẢI **luôn** hiển thị đủ 3 dòng **Tổng cộng**, **Tiền đã cọc**, **Thanh toán cuối cùng** (= tổng cộng − tiền cọc) cho **mọi** đơn hàng — kể cả khi không có cọc (hiển thị `0`) và dù đơn có xuất phát từ Đặt trước hay không, để giao diện nhất quán thay vì ẩn/hiện tùy trường hợp như thiết kế cũ.
+- **FR-INVO.7** Màn hình danh sách Hóa đơn PHẢI hiển thị cột **mã vận đơn** (kèm nút chép nhanh) cho các đơn Ship đã có mã, để nhân viên lấy gửi lại cho khách ngay từ báo cáo tổng hợp mà không cần mở từng đơn hàng.
+- **FR-INVO.8** *(Mới 2026-08-24 — mục 3.28)* Màn hình danh sách **Đơn hàng** (không chỉ Hóa đơn) PHẢI có sẵn hành động xuất PDF ngay trên từng dòng: đơn đã có Hóa đơn (Hoàn thành/Hoàn tiền) hiển thị nút **Xuất PDF** (hóa đơn chính thức); đơn **Đang xử lý** (chưa có Hóa đơn) hiển thị nút **Phiếu tạm tính** thay thế (mục 3.27) — không cần mở chi tiết đơn hàng mới xuất được PDF.
 
 ### 3.8 Tìm kiếm toàn cục (Search)
 
@@ -172,9 +176,11 @@ Ký hiệu: **FR-<module>.<số>**. Mỗi yêu cầu có Input/Output/Quy tắc 
 
 - **FR-REV.1** Hệ thống PHẢI tính doanh thu/số đơn/giá trị đơn trung bình/lợi nhuận gộp/tổng giảm giá **chỉ từ các đơn Hoàn thành**; tổng hoàn tiền được báo cáo riêng (không trừ vào doanh thu).
 - **FR-REV.2** Hệ thống PHẢI hỗ trợ các khoảng thời gian: Hôm nay, Hôm qua, 7 ngày, 30 ngày, Tháng này, Quý này, Năm nay, Tùy chỉnh (khoảng ngày tự chọn).
-- **FR-REV.3** Hệ thống PHẢI cung cấp báo cáo doanh thu theo: thời gian (biểu đồ theo ngày), danh mục sản phẩm, sản phẩm, nhân viên, phương thức thanh toán.
+- **FR-REV.3** *(Sửa 2026-08-24 — bổ sung lợi nhuận, không chỉ doanh thu, xem 3.28)* Hệ thống PHẢI cung cấp báo cáo doanh thu theo: thời gian (biểu đồ theo ngày), danh mục sản phẩm (kèm giá vốn/lợi nhuận), sản phẩm (kèm giá vốn/lợi nhuận), nhân viên, phương thức thanh toán.
 - **FR-REV.4** Hệ thống PHẢI cung cấp bảng chi tiết doanh thu theo ngày (số đơn, doanh thu, giảm giá, hoàn tiền, giá vốn, lợi nhuận gộp), có phân trang.
 - **FR-REV.5** Hệ thống PHẢI cho phép xuất báo cáo chi tiết doanh thu ra file CSV (mã hóa UTF-8, hiển thị đúng tiếng Việt).
+- **FR-REV.6** *(Mới 2026-08-24 — mục 3.28)* Hệ thống PHẢI cung cấp báo cáo **vòng quay tồn kho** theo khoảng thời gian: với mỗi sản phẩm, so sánh số lượng đã bán (đơn Hoàn thành trong kỳ) với tồn kho hiện tại, sắp xếp sản phẩm bán chậm nhất lên đầu để cảnh báo hàng tồn đọng; sản phẩm hết hàng (tồn kho = 0) hiển thị riêng, không tính vòng quay bằng 0 gây hiểu nhầm.
+- **FR-REV.7** *(Mới 2026-08-24 — mục 3.28)* Hệ thống PHẢI cung cấp báo cáo **tỷ lệ khách mua lại** theo khoảng thời gian: tổng số khách có đơn Hoàn thành trong kỳ, số khách có **từ 2 đơn Hoàn thành trở lên** trong kỳ, và tỷ lệ phần trăm tương ứng — chỉ tính theo số đơn đã hoàn thành, không tính các lượt tương tác khác (hỏi hàng, đặt trước...).
 
 ### 3.10 Thu / Chi (Income & Expense)
 
@@ -195,7 +201,7 @@ Ký hiệu: **FR-<module>.<số>**. Mỗi yêu cầu có Input/Output/Quy tắc 
 - **FR-ACC.1** Hệ thống PHẢI cho phép Admin/Accountant nhập/sửa các số liệu tài chính thủ công: tiền mặt, tiền ngân hàng, vốn chủ sở hữu, tài sản khác, chi phí chưa thanh toán, khoản phải trả khác.
 - **FR-ACC.2** Màn hình Tổng quan kế toán PHẢI hiển thị: tiền mặt, tiền ngân hàng, tổng công nợ phải thu/phải trả (từ module Công nợ), giá trị tồn kho (từ module Kho hàng), lợi nhuận gộp tháng hiện tại (từ đơn Hoàn thành), biểu đồ Thu/Chi/Lợi nhuận 3 tháng gần nhất.
 - **FR-ACC.3** Hệ thống PHẢI tạo được Bảng cân đối kế toán tại một thời điểm, gồm: Tài sản ngắn hạn (tiền mặt + tiền gửi ngân hàng + công nợ phải thu + hàng tồn kho + tài sản khác), Nợ phải trả (công nợ nhà cung cấp + chi phí chưa thanh toán + khoản phải trả khác), Vốn chủ sở hữu (vốn chủ sở hữu nhập tay + lợi nhuận giữ lại tính toán), và xác nhận Tổng tài sản = Tổng nguồn vốn.
-- **FR-ACC.4** *(Lưu ý thiết kế — xem mục 6.5)*: "Lợi nhuận giữ lại" hiện được tính như một **số dư cân bằng** (Tổng tài sản − Tổng nợ phải trả − Vốn chủ sở hữu nhập tay) để đảm bảo bảng luôn cân, nên chỉ báo "Cân đối" hiện tại là một phép tính đồng nhất thức, chưa phải kiểm tra độc lập dựa trên sổ cái tổng.
+- **FR-ACC.4** *(Sửa 2026-08-24 — trước đây là số dư cân bằng ép buộc, nay là số liệu độc lập, xem mục 3.29)* "Lợi nhuận giữ lại" PHẢI được tính **độc lập** = tổng Thu − tổng Chi **toàn thời gian** từ sổ Thu/Chi (không còn suy ngược từ các trường nhập tay để ép bảng luôn cân). Chỉ báo "Cân đối" (`canDoi`) PHẢI so sánh Tổng tài sản với Tổng nguồn vốn tính từ số liệu độc lập này — nếu nhân viên nhập sai/thiếu số dư tiền mặt/ngân hàng/tài sản khác ở mục Cân đối kế toán, hệ thống PHẢI hiển thị rõ phần chênh lệch thực tế (`chenhLech = tổng tài sản − tổng nguồn vốn`) thay vì luôn báo cân bằng.
 
 ### 3.13 Dashboard tổng quan
 
@@ -213,14 +219,16 @@ Ký hiệu: **FR-<module>.<số>**. Mỗi yêu cầu có Input/Output/Quy tắc 
 - **FR-SET.2** Trang Cài đặt PHẢI hiển thị ma trận phân quyền dự kiến theo vai trò × màn hình, ở dạng thông tin tham khảo.
 - **FR-SET.3** *(Chưa triển khai — placeholder)*: Thông tin cửa hàng, Danh mục sản phẩm (quản lý danh mục dạng danh sách), Nhà cung cấp (quản lý danh sách nhà cung cấp), Phương thức thanh toán (cấu hình), Cấu hình hóa đơn, Cảnh báo tồn kho tự động.
 
-### 3.16 Tích hợp thanh toán QR ngân hàng (**Đã triển khai** — 2026-08-21)
+### 3.16 Tích hợp thanh toán QR ngân hàng (**Đã triển khai** — 2026-08-21, hoàn thiện với SePay 2026-08-23)
 
 > Đã cài đặt đầy đủ FR-PAY.1–9 dưới đây trong mã nguồn (backend: `lib/vietqr.ts`, `lib/paymentConfig.ts`, `lib/webhookAuth.ts`, `services/payments.service.ts`, `controllers/payments.controller.ts`, `routes/payments.ts`, cộng các thay đổi trong `orders.service.ts`/`schema.prisma`; frontend: panel QR trong `OrderDetail.tsx`, tab "Đối soát QR" trong `KeToan.tsx`). Chi tiết kỹ thuật đầy đủ tại **SDS.md mục 4.14/5.8/8.3**.
 >
-> **Cần làm thêm trước khi dùng với tiền thật**: (1) cấu hình `VIETQR_BANK_BIN`/`VIETQR_ACCOUNT_NO` bằng tài khoản ngân hàng thật của cửa hàng (hiện đang để giá trị placeholder trong môi trường phát triển); (2) đăng ký một dịch vụ đối soát trung gian thật (Casso/SePay/tương đương), lấy `VIETQR_WEBHOOK_SECRET` do dịch vụ đó cấp, và có thể cần viết một adapter nhỏ nếu tên trường JSON của họ khác với hợp đồng `{referenceCode, transferAmount, content}` đã định nghĩa ở đây.
+> **Đã chọn nhà cung cấp** *(cập nhật 2026-08-23 — trước đây còn để ngỏ)*: dịch vụ đối soát trung gian là **SePay**, chế độ xác thực "API Key" — gửi header `Authorization: Apikey <secret>` (không phải chữ ký HMAC như dự tính ban đầu). Hệ thống còn hỗ trợ thêm một lớp phòng thủ tùy chọn: **allowlist địa chỉ IP nguồn** của webhook (cấu hình qua biến môi trường riêng, để trống thì bỏ qua kiểm tra này).
+>
+> **Cần làm thêm trước khi dùng với tiền thật**: cấu hình `VIETQR_BANK_BIN`/`VIETQR_ACCOUNT_NO` bằng tài khoản ngân hàng thật của cửa hàng và `VIETQR_WEBHOOK_SECRET`/IP allowlist theo API Key thật do SePay cấp cho tài khoản doanh nghiệp (hiện đang để giá trị placeholder trong môi trường phát triển).
 
 - **FR-PAY.1** Khi tạo đơn hàng với phương thức thanh toán **QR Code**, hệ thống PHẢI sinh một mã QR chuẩn VietQR gắn với đơn hàng đó, mã hóa: số tài khoản/ngân hàng nhận tiền của cửa hàng, số tiền = `tongCong` của đơn, và nội dung chuyển khoản **chứa mã đơn hàng** (`ma`, ví dụ `HDH-2026-00042`) để phục vụ đối soát tự động.
-- **FR-PAY.2** Hệ thống PHẢI cung cấp một endpoint webhook để nhận thông báo "báo có" từ dịch vụ đối soát trung gian; mọi request tới endpoint này PHẢI được xác thực bằng chữ ký/secret riêng (không dùng cơ chế JWT nội bộ, vì bên gọi là hệ thống thứ 3) — request không xác thực được PHẢI bị từ chối và ghi log.
+- **FR-PAY.2** *(Sửa 2026-08-23 — chốt nhà cung cấp SePay, thêm IP allowlist)* Hệ thống PHẢI cung cấp một endpoint webhook để nhận thông báo "báo có" từ SePay; mọi request tới endpoint này PHẢI được xác thực bằng header `Authorization: Apikey <secret>` riêng (không dùng cơ chế JWT nội bộ, vì bên gọi là hệ thống thứ 3) — request sai secret PHẢI bị từ chối. Hệ thống PHẢI hỗ trợ thêm một lớp kiểm tra **địa chỉ IP nguồn** tùy chọn (danh sách IP được phép, cấu hình qua biến môi trường, bỏ qua nếu để trống) — request từ IP không được phép PHẢI bị từ chối với cùng thông báo lỗi như sai secret (không để lộ nguyên nhân cụ thể cho kẻ tấn công).
 - **FR-PAY.3** Với mỗi giao dịch báo có nhận được, hệ thống PHẢI tự đối soát với các đơn hàng đang chờ thanh toán QR (trạng thái Mới/Đang xử lý, phương thức QR Code) dựa trên **nội dung chuyển khoản chứa đúng mã đơn** VÀ **số tiền khớp đúng** `tongCong`; kết quả đối soát (khớp/không khớp/số tiền sai) PHẢI được lưu thành một **giao dịch thanh toán** gắn với đơn hàng (hoặc gắn cờ "chưa xác định" nếu không tìm được đơn phù hợp).
 - **FR-PAY.4** Khi đối soát khớp, hệ thống PHẢI **tự động chuyển đơn hàng sang trạng thái Hoàn thành** — kích hoạt đầy đủ các side-effect hiện có của việc hoàn thành đơn (xuất kho theo FR-INV.6, sinh hóa đơn theo FR-INVO.1) — **không** cần nhân viên xác nhận thêm bước nào.
 - **FR-PAY.5** Khi đối soát **không khớp** (sai số tiền, không tìm thấy mã đơn, hoặc đơn đã ở trạng thái kết thúc như Đã hủy/Hoàn tiền), hệ thống PHẢI **không** tự đổi trạng thái đơn — giao dịch được đưa vào danh sách "Chưa đối soát" để nhân viên kế toán/quản lý xử lý thủ công.
@@ -239,9 +247,9 @@ Ký hiệu: **FR-<module>.<số>**. Mỗi yêu cầu có Input/Output/Quy tắc 
 - **FR-PRE.4** Mỗi đơn đặt trước PHẢI có mã hiển thị định dạng `PO-{năm}-{5 chữ số}`, sinh tự động, duy nhất.
 - **FR-PRE.5** Trạng thái đơn đặt trước PHẢI theo máy trạng thái: Chờ hàng → {Sẵn sàng giao (tự động), Đã hủy}; Sẵn sàng giao → {Đã chuyển đơn, Đã hủy}; Chờ hàng → Đã chuyển đơn (nhân viên có thể chuyển thẳng nếu tự xác định đã có hàng, không cần chờ hệ thống tự khớp). Đã chuyển đơn và Đã hủy là trạng thái kết thúc.
 - **FR-PRE.6** Khi nhập kho (hoặc điều chỉnh tăng tồn, hoặc hoàn kho do hoàn tiền) làm tồn kho một sản phẩm tăng lên, hệ thống PHẢI tự động kiểm tra các đơn đặt trước đang **Chờ hàng** cho sản phẩm đó, khớp theo **thứ tự đặt trước** (đặt sớm nhất được ưu tiên trước — FIFO) dựa trên tồn kho hiện có, và đánh dấu **Sẵn sàng giao** cho các đơn đủ điều kiện — đây là một gợi ý/thông báo để nhân viên xác nhận, **không** giữ/trừ tồn kho hộ (hệ thống chưa có khái niệm giữ hàng — xem hạn chế 6.12).
-- **FR-PRE.7** Nhân viên PHẢI có thể xác nhận chuyển một đơn đặt trước (ở trạng thái Chờ hàng hoặc Sẵn sàng giao) thành một **Đơn hàng thật**, chọn phương thức thanh toán/kênh bán/VAT tại thời điểm chuyển; đơn hàng tạo ra dùng đúng số lượng và giá đã thỏa thuận ở đơn đặt trước, tự động ghi chú số tiền cọc đã thu và số tiền cần thu thêm (nếu có). Việc trừ kho/sinh hóa đơn diễn ra như đơn hàng thông thường, **chỉ** khi đơn đó sau này được chuyển sang Hoàn thành — không diễn ra ngay tại bước xác nhận chuyển đổi.
+- **FR-PRE.7** Nhân viên PHẢI có thể xác nhận chuyển một đơn đặt trước (ở trạng thái Chờ hàng hoặc Sẵn sàng giao) thành một **Đơn hàng thật**, chọn phương thức thanh toán/kênh bán tại thời điểm chuyển; đơn hàng tạo ra dùng đúng số lượng và giá đã thỏa thuận ở đơn đặt trước, tự động ghi chú số tiền cọc đã thu và số tiền cần thu thêm (nếu có). Việc trừ kho/sinh hóa đơn diễn ra như đơn hàng thông thường, **chỉ** khi đơn đó sau này được chuyển sang Hoàn thành — không diễn ra ngay tại bước xác nhận chuyển đổi.
 - **FR-PRE.8** Nếu đơn đặt trước dành cho sản phẩm hoàn toàn mới (chưa có trong catalog), hệ thống PHẢI yêu cầu gắn một sản phẩm thật (đã được tạo trong màn Sản phẩm) vào thời điểm chuyển đổi thành đơn hàng — không cho chuyển đổi nếu chưa xác định được sản phẩm.
-- **FR-PRE.9** Hệ thống PHẢI cho phép hủy một đơn đặt trước đang Chờ hàng/Sẵn sàng giao (không hủy được đơn đã chuyển thành đơn hàng), và cho phép sửa số lượng/giá dự kiến/tiền cọc/ngày dự kiến/ghi chú khi đơn còn ở 2 trạng thái này. Việc **xóa** hẳn một đơn đặt trước là một hành động khác — xem FR-DEL.4 (đã nới lỏng 2026-08-22, xóa được ở mọi trạng thái).
+- **FR-PRE.9** Hệ thống PHẢI cho phép hủy một đơn đặt trước đang Chờ hàng/Sẵn sàng giao (không hủy được đơn đã chuyển thành đơn hàng), và cho phép sửa số lượng/giá dự kiến/tiền cọc/ngày dự kiến/ghi chú khi đơn còn ở 2 trạng thái này. *(Mới 2026-08-24)* Nếu đơn đặt trước đang hủy có **tiền cọc > 0**, hệ thống PHẢI tự động ghi một bút toán Chi hoàn cọc vào sổ Thu/Chi (mục 3.25) — tiền cọc đã ghi Thu lúc tạo đặt trước (FR-PRE.2) phải được đảo ngược khi hủy, tránh sổ sách ghi nhận một khoản thu không còn giá trị. Việc **xóa** hẳn một đơn đặt trước là một hành động khác — xem FR-DEL.4 (đã nới lỏng 2026-08-22, xóa được ở mọi trạng thái).
 - **FR-PRE.10** Hệ thống PHẢI cung cấp KPI tổng quan: số đơn đang chờ hàng, số đơn sẵn sàng giao, tổng tiền cọc đang giữ (của các đơn chưa chuyển/chưa hủy), và danh sách có tìm/lọc theo mã, khách hàng, sản phẩm, trạng thái.
 
 ### 3.18 Xóa dữ liệu (Delete) — **Đã triển khai** (2026-08-21)
@@ -297,13 +305,67 @@ Ký hiệu: **FR-<module>.<số>**. Mỗi yêu cầu có Input/Output/Quy tắc 
 - **FR-UI.1** Mọi hành động xóa/hủy có yêu cầu xác nhận (FR-DEL.9 và tương đương) PHẢI hiển thị bằng một hộp thoại (modal) trong giao diện ứng dụng, **không** dùng hộp thoại `confirm()` gốc của trình duyệt.
 - **FR-UI.2** Mọi thông báo lỗi cần hiển thị ngay lập tức cho người dùng (ví dụ lỗi khi mở PDF hóa đơn) PHẢI hiển thị bằng modal trong ứng dụng, **không** dùng `alert()` gốc của trình duyệt — đảm bảo giao diện đồng nhất, có thể tùy biến (kiểu chữ, màu, nút) và không bị chặn bởi cấu hình chặn popup của trình duyệt.
 
+### 3.23 Loại bỏ VAT, phí vận chuyển đơn hàng & bảo mật nâng cao — **Đã triển khai** (2026-08-23)
+
+> Nhóm các thay đổi lớn nhất kể từ SRS 1.1, đến từ một đợt rà soát bảo mật + đơn giản hóa nghiệp vụ. Các mục dưới đây **thay thế hoàn toàn** khái niệm VAT từng xuất hiện ở bản 1.1 (FR-ORD.1/2 cũ).
+
+- **FR-ORD.15** *(Thay thế VAT)* Đơn hàng nhận qua **Ship** PHẢI có thêm trường **phí vận chuyển** (số tiền cố định do nhân viên nhập, mặc định 0, cộng thẳng vào `tổng cộng`) — đơn Khách tới lấy KHÔNG được nhập phí này. Hệ thống KHÔNG còn khái niệm thuế/VAT ở bất kỳ đâu (schema, API, hóa đơn, giao diện).
+- **FR-SEC.1** *(Mới)* API PHẢI giới hạn tần suất request theo địa chỉ IP (rate limiting) để chống dò quét/tấn công từ chối dịch vụ cơ bản — endpoint đăng nhập PHẢI có giới hạn riêng, chặt hơn mức áp dụng chung cho toàn bộ API, để chống dò mật khẩu.
+- **FR-SEC.2** *(Mới)* API PHẢI chỉ chấp nhận request trình duyệt (CORS) từ một danh sách domain được cấu hình rõ ràng (allow-list) — không mở cho mọi nguồn gốc ở môi trường thật.
+- **FR-SEC.3** *(Mới)* Hệ thống PHẢI có khả năng **vô hiệu hóa ngay lập tức** mọi phiên đăng nhập (token) đã phát hành cho một tài khoản khi: tài khoản đó bị Khóa, hoặc mật khẩu bị Admin đặt lại — không đợi token tự hết hạn theo thời gian sống thông thường (8 giờ).
+- **FR-SEC.4** *(Mới)* Ảnh sản phẩm tải lên PHẢI được kiểm tra đúng định dạng ảnh hợp lệ dựa trên **nội dung byte thực tế** của file, không chỉ dựa vào phần mở rộng tên file hay MIME type trình duyệt tự khai báo (có thể giả mạo).
+- **FR-PAY.10** *(Mới — bổ sung cho mục 3.16)* Ngoài xác thực bằng secret, endpoint webhook thanh toán PHẢI hỗ trợ thêm một lớp kiểm tra **địa chỉ IP nguồn** tùy chọn (danh sách cho phép, cấu hình được, bỏ qua nếu để trống).
+
+### 3.24 Ghi nhận đầy đủ dòng tiền bán hàng vào sổ Thu/Chi & hoàn tác khi Hoàn tiền — **Đã triển khai** (2026-08-24)
+
+> Trước đây, khi đơn hàng Hoàn thành, sổ Thu/Chi chỉ ghi nhận tiền cọc (nếu có) — doanh thu bán hàng thật và giá vốn hàng bán **không** được ghi vào sổ này, khiến "Lợi nhuận" xem ở màn Kế toán (tính từ sổ Thu/Chi) và "Lợi nhuận gộp" xem ở màn Doanh thu (tính từ dữ liệu đơn hàng) cho ra hai con số khác nhau cho cùng một khoảng thời gian — một lỗi đối chiếu sổ sách nghiêm trọng.
+
+- **FR-ORD.16** Khi một đơn hàng chuyển sang **Hoàn thành**, hệ thống PHẢI tự động ghi vào sổ Thu/Chi: một khoản **Thu** bằng (tổng cộng − tiền cọc đã ghi từ trước, nếu có) — tức phần doanh thu **còn lại** thật sự thu được tại thời điểm hoàn thành — và một khoản **Chi** bằng tổng giá vốn hàng đã bán trong đơn (nếu > 0). Không ghi lại phần tiền cọc (đã ghi Thu từ lúc tạo đơn/đặt trước).
+- **FR-ORD.17** Khi một đơn **Hoàn thành** chuyển sang **Hoàn tiền**, hệ thống PHẢI tự động đảo ngược đúng các bút toán đã ghi ở FR-ORD.16 (Chi phần doanh thu đã ghi, Thu lại phần giá vốn đã ghi), **cộng thêm** một khoản Chi hoàn trả đúng số tiền cọc (nếu đơn có cọc) — vì tiền cọc là một phần của cùng giao dịch bị hủy, không tách riêng. Tổng hợp lại, một đơn có cọc bị hoàn tiền tạo ra tối đa 3 bút toán đảo ngược, đưa dòng tiền ròng của giao dịch này về đúng 0.
+- **FR-ACC.5** *(Hệ quả của FR-ORD.16/17)* "Lợi nhuận" xem ở màn Kế toán và "Lợi nhuận gộp" xem ở màn Doanh thu PHẢI luôn khớp nhau cho cùng một khoảng thời gian, vì cả hai giờ cùng phản ánh đúng một luồng tiền/giá vốn thật.
+
+### 3.25 Sửa tiền cọc & phí vận chuyển sau khi tạo đơn — **Đã triển khai** (2026-08-24)
+
+> Cho phép sửa lỗi nhập liệu ban đầu, và đáp ứng nhu cầu thực tế: khách có thể đặt cọc **sau** khi đơn đã được tạo (không phải lúc nào cũng cọc ngay).
+
+- **FR-ORD.18** Hệ thống PHẢI cho phép sửa **tiền cọc** của một đơn hàng bất kỳ lúc nào khi đơn còn ở **Mới**/**Đang xử lý** — khóa lại (từ chối sửa) ngay khi đơn đã Hoàn thành/Hủy/Hoàn tiền, vì tiền cọc lúc đó đã được dùng để tính bút toán doanh thu chốt vào Hóa đơn + sổ Thu/Chi (FR-ORD.16), sửa sau đó sẽ làm hai nơi lệch nhau. Tiền cọc mới không được vượt quá tổng cộng của đơn.
+- **FR-ORD.19** Phần **chênh lệch** giữa tiền cọc mới và tiền cọc cũ PHẢI tự động ghi vào sổ Thu/Chi: tăng cọc → ghi một khoản **Thu**; giảm cọc → ghi một khoản **Chi** (hoàn lại đúng phần chênh lệch) — phản ánh đúng dòng tiền thật đã thay đổi, không chỉ sửa con số trên đơn.
+- **FR-ORD.20** Hệ thống PHẢI cho phép sửa **phí vận chuyển** của một đơn Ship theo cùng điều kiện thời điểm với FR-ORD.18 (chỉ khi Mới/Đang xử lý) — không cho phép sửa khiến tổng cộng nhỏ hơn tiền cọc đã nhận.
+- **FR-PRE.11** *(Bổ sung cho mục 3.17)* Khi hủy một đơn đặt trước đang có tiền cọc > 0, hệ thống PHẢI tự động ghi một khoản Chi hoàn cọc vào sổ Thu/Chi (xem FR-PRE.9 đã sửa).
+
+### 3.26 Phiếu tạm tính cho đơn hàng đang xử lý — **Đã triển khai** (2026-08-24)
+
+> Hóa đơn chính thức chỉ được sinh khi đơn Hoàn thành (FR-INVO.1) — nghĩa là đơn **Đang xử lý** chưa có gì để xuất PDF, dù nhân viên có thể cần in một bản để đóng gói/gửi kèm hàng trước khi đơn được xác nhận xong.
+
+- **FR-ORD.21** Hệ thống PHẢI cho phép xuất một **phiếu tạm tính** (PDF) cho đơn hàng đang ở trạng thái **Đang xử lý** — dùng đúng dữ liệu hiện tại của đơn hàng, có thể thay đổi sau đó, và **không** được coi là hóa đơn chính thức (không sinh bản ghi Hóa đơn nào, không có số hóa đơn thật).
+- **FR-ORD.22** Phiếu tạm tính PHẢI được phân biệt rõ với hóa đơn chính thức trên giao diện lẫn trên chính file PDF (tiêu đề, màu sắc, dòng ghi chú khác biệt) để tránh nhầm lẫn với hóa đơn thật.
+- **FR-ORD.23** Màn hình danh sách Đơn hàng và trang chi tiết đơn hàng PHẢI hiển thị đúng một trong hai nút — "Xuất PDF" (nếu đơn đã có Hóa đơn) hoặc "Phiếu tạm tính" (nếu đơn đang Đang xử lý, chưa có Hóa đơn) — không hiển thị nút nào cho đơn Mới/Đã hủy (chưa có gì để in).
+
+### 3.27 Lợi nhuận giữ lại tính độc lập từ sổ Thu/Chi — **Đã triển khai** (2026-08-24)
+
+> Thay thế hoàn toàn thiết kế "số dư cân bằng ép buộc" đã ghi nhận là hạn chế ở SRS 1.1 mục 6.5 — xem FR-ACC.4 (đã sửa ở mục 4).
+
+- **FR-ACC.6** Bảng cân đối kế toán PHẢI hiển thị rõ phần **chênh lệch** (nếu có) giữa Tổng tài sản và Tổng nguồn vốn khi số liệu nhập tay (tiền mặt/ngân hàng/tài sản khác) không khớp với lợi nhuận giữ lại tính độc lập — không được tự động "làm tròn" chênh lệch này về 0.
+
+### 3.28 Báo cáo doanh thu mở rộng — **Đã triển khai** (2026-08-24)
+
+Xem FR-REV.6/7 (đã thêm ở mục 3.9) — vòng quay tồn kho và tỷ lệ khách mua lại — cùng phần lợi nhuận theo sản phẩm/danh mục bổ sung vào FR-REV.3.
+
+### 3.29 Hóa đơn PDF: bỏ khối giao hàng/địa chỉ khách, đổi nhãn nhân viên — **Đã triển khai** (2026-08-24)
+
+Xem FR-INVO.4/6 (đã sửa ở mục 3.7). Tóm tắt: hóa đơn PDF không còn hiển thị khối "thông tin thanh toán/giao hàng" (phương thức thanh toán, hình thức nhận hàng, đơn vị vận chuyển, mã vận đơn) và không còn hiển thị địa chỉ khách hàng; dòng nhân sự xử lý đơn đổi nhãn từ "Thu ngân" thành **"Nhân viên"**.
+
+### 3.30 Sửa lỗi không xóa được các trường tùy chọn của khách hàng — **Đã triển khai** (2026-08-24)
+
+Xem FR-CUST.1 (đã sửa ở mục 3.5) — email, ngày sinh, địa chỉ, lưu ý, link Facebook nay xóa được về rỗng sau khi đã có giá trị.
+
 ---
 
 ## 4. Yêu cầu phi chức năng
 
 | # | Yêu cầu | Mô tả |
 |---|---|---|
-| NFR-1 | Bảo mật xác thực | Mật khẩu PHẢI được hash (không lưu plaintext); token JWT PHẢI có thời hạn hữu hạn; secret ký token PHẢI đủ độ dài và không dùng giá trị mặc định trong môi trường thật. |
+| NFR-1 | Bảo mật xác thực | Mật khẩu PHẢI được hash (không lưu plaintext); token JWT PHẢI có thời hạn hữu hạn; secret ký token PHẢI đủ độ dài và không dùng giá trị mặc định trong môi trường thật. *(Sửa 2026-08-23)* Hệ thống PHẢI hỗ trợ **thu hồi token trước hạn**: khóa tài khoản hoặc đặt lại mật khẩu PHẢI làm mọi token đã phát hành trước đó cho tài khoản này hết hiệu lực ngay lập tức (không phải đợi tới khi JWT tự hết hạn 8 giờ). |
 | NFR-2 | Toàn vẹn dữ liệu tài chính | Mọi thay đổi tồn kho/tiền PHẢI để lại vết (ledger) không thể sửa xóa; số tiền PHẢI luôn là số nguyên VNĐ, không âm ngoài các trường hợp nghiệp vụ hợp lệ (VD: giảm giá). |
 | NFR-3 | Ngôn ngữ & định dạng | Toàn bộ giao diện, thông báo lỗi, dữ liệu hiển thị PHẢI bằng tiếng Việt; ngày/giờ/tiền tệ định dạng theo chuẩn `vi-VN`; hóa đơn PDF PHẢI hiển thị đúng dấu tiếng Việt. |
 | NFR-4 | Hiệu năng truy vấn | Các danh sách (sản phẩm, đơn hàng, khách hàng, hóa đơn, kho...) PHẢI hỗ trợ phân trang phía server để tránh tải toàn bộ dữ liệu về client. |
@@ -313,6 +375,11 @@ Ký hiệu: **FR-<module>.<số>**. Mỗi yêu cầu có Input/Output/Quy tắc 
 | NFR-8 | Khả năng mở rộng dữ liệu | Thiết kế CSDL PHẢI cho phép tăng trưởng số lượng đơn hàng/giao dịch kho theo thời gian mà không phá vỡ tính duy nhất của mã tự sinh (đơn hàng, hóa đơn, giao dịch kho, phiếu thu/chi). |
 | NFR-9 | Bảo mật tích hợp bên thứ 3 | Endpoint webhook nhận dữ liệu từ dịch vụ đối soát ngân hàng (FR-PAY.2) PHẢI xác thực nguồn gọi (chữ ký/secret riêng biệt với JWT nội bộ) trước khi xử lý; request không hợp lệ PHẢI bị từ chối và ghi log để phát hiện tấn công giả mạo giao dịch. |
 | NFR-10 | Độ tin cậy đối soát thanh toán | Xử lý webhook thanh toán PHẢI idempotent (không hoàn thành đơn hai lần / không tính trùng tiền khi bên thứ 3 gửi lại cùng một giao dịch) và PHẢI có khả năng phục hồi khi webhook đến trễ hoặc mất kết nối tạm thời (không làm mất giao dịch, không tự động sai lệch trạng thái đơn). |
+| NFR-11 | *(Mới 2026-08-23)* Chống lạm dụng API | API PHẢI giới hạn số lượng request theo IP trong một cửa sổ thời gian (rate limiting) — riêng endpoint đăng nhập PHẢI có giới hạn chặt hơn mức chung để chống dò mật khẩu (brute-force). |
+| NFR-12 | *(Mới 2026-08-23)* Nguồn gốc truy cập (CORS) | API PHẢI chỉ chấp nhận request trình duyệt từ danh sách domain được phép cấu hình rõ ràng (allow-list), không mở cho mọi domain (`*`) ở môi trường thật. |
+| NFR-13 | *(Mới 2026-08-23)* Xác thực nội dung file tải lên | Ảnh sản phẩm tải lên PHẢI được kiểm tra đúng định dạng ảnh dựa trên **nội dung byte thực tế của file** (không chỉ dựa vào phần mở rộng tên file hay MIME type do trình duyệt tự khai báo, vốn có thể giả mạo). |
+| NFR-14 | *(Mới 2026-08-24)* Khả năng kiểm thử tự động | Logic nghiệp vụ cốt lõi (máy trạng thái đơn hàng, đối soát ngân hàng, tính công nợ/tồn kho, sổ Thu/Chi, các báo cáo doanh thu mới) PHẢI có bộ kiểm thử tự động (unit + tích hợp) chạy được độc lập với giao diện, để phát hiện hồi quy khi sửa code. |
+| NFR-15 | *(Mới 2026-08-24)* Độ trễ hạ tầng | Máy chủ backend PHẢI được đặt tại khu vực địa lý **gần với CSDL** (cùng khu vực hoặc lân cận) để tránh độ trễ round-trip không cần thiết ảnh hưởng tới trải nghiệm dùng hằng ngày. |
 
 ---
 
@@ -341,8 +408,8 @@ Các điểm dưới đây được phát hiện khi đọc mã nguồn hiện t
 2. **6.2 — Khoảng trống RBAC ở frontend**: xem mục 5. Ma trận phân quyền hiển thị ở Cài đặt chỉ mang tính tài liệu, chưa được lập trình để ẩn menu/nút theo vai trò.
 3. **6.3 — Tìm kiếm lọc phía client trên dữ liệu đã phân trang**: 2 màn hình (Lịch sử kho, Thu/Chi) áp dụng ô tìm kiếm văn bản **sau khi** đã nhận trang dữ liệu từ server, nên có thể bỏ lọt kết quả nằm ở trang khác — cần chuyển bộ lọc này lên server.
 4. **6.4 — Xuất CSV doanh thu dùng `window.open` trực tiếp**: khác với cách xử lý PDF hóa đơn (phải fetch kèm token rồi mở blob vì API yêu cầu xác thực), xuất CSV mở thẳng URL — nếu endpoint này cũng yêu cầu Bearer token thì thao tác này sẽ lỗi 401 (cần xác nhận và đồng bộ cách xử lý).
-5. **6.5 — "Cân đối kế toán" hiện là đồng nhất thức, không phải kiểm tra độc lập**: vì hệ thống chưa có sổ cái tổng để tính lợi nhuận giữ lại độc lập, giá trị này đang được suy ra ngược để luôn khớp — cờ báo "Bảng cân đối kế toán cân bằng" hiện luôn đúng theo cách tính, không phản ánh việc phát hiện sai lệch sổ sách thực tế.
-6. **6.6 — "In hóa đơn" chưa gọi lệnh in thực sự**: nút "In hóa đơn" hiện hành xử giống nút "Xuất PDF" (chỉ mở file PDF ở tab mới), việc in do người dùng tự thực hiện từ trình xem PDF của trình duyệt.
+5. **6.5 — [ĐÃ SỬA 2026-08-24] "Cân đối kế toán" nay là kiểm tra độc lập, không còn là đồng nhất thức**: xem FR-ACC.4/mục 3.29 — "Lợi nhuận giữ lại" giờ tính độc lập từ tổng Thu − Chi toàn thời gian, nên cờ "Cân đối" có thể ra sai lệch thật nếu số liệu nhập tay (tiền mặt/ngân hàng/tài sản khác) không khớp thực tế.
+6. **6.6 — [ĐÃ GIẢM NHẸ 2026-08-24] "In hóa đơn" đã gộp chung với "Xuất PDF" thành một nút duy nhất** (2 nút cũ gọi cùng một hàm `openPdf`, nay chỉ còn 1 nút "Xuất PDF") — nhưng bản chất kỹ thuật không đổi: nút vẫn chỉ mở PDF ở tab mới, việc in do người dùng tự thực hiện từ trình xem PDF của trình duyệt, hệ thống chưa tự gọi lệnh in.
 7. **6.7 — Không có xác nhận (confirm dialog) trước các hành động không thể hoàn tác** như chuyển trạng thái đơn hàng, ngừng kinh doanh sản phẩm, khóa nhân viên — nên bổ sung nếu muốn giảm rủi ro thao tác nhầm.
 8. **6.8 — Các mục Cài đặt còn là placeholder** (Thông tin cửa hàng, Danh mục sản phẩm, Nhà cung cấp, Phương thức thanh toán, Cấu hình hóa đơn, Cảnh báo tồn kho tự động) — chưa có yêu cầu chức năng chi tiết, cần thu thập thêm khi triển khai.
 9. **6.9 — Không có dữ liệu mẫu ngoài 1 tài khoản Admin**: seed script chỉ tạo `admin@hdhtoys.vn`/`admin123`, không có sản phẩm/khách hàng/đơn hàng mẫu.
@@ -351,6 +418,9 @@ Các điểm dưới đây được phát hiện khi đọc mã nguồn hiện t
 12. **6.12 — Khớp đặt trước (FR-PRE.6) là gợi ý, không phải giữ hàng chắc chắn**: hệ thống không "khóa"/trừ trước số lượng tồn kho cho các đơn đặt trước đã Sẵn sàng giao — nếu nhân viên bán hết số hàng đó cho khách vãng lai trước khi xác nhận chuyển đơn đặt trước, đơn đặt trước sẽ vẫn hiển thị Sẵn sàng giao dù thực tế không còn đủ hàng. Cần quy trình vận hành (nhân viên kiểm tra lại trước khi xác nhận) hoặc nâng cấp thêm cơ chế giữ hàng thật nếu cần chặt hơn. **Lưu ý 2026-08-22**: đơn hàng thông thường (mục 3.20) đã có cơ chế giữ hàng thật khi tạo đơn — hạn chế này chỉ còn áp dụng riêng cho *Đặt trước*, chưa mở rộng sang đó.
 13. **6.13 — [Mới 2026-08-22] Giữ tồn kho lúc tạo đơn (mục 3.20) chưa có khóa hàng (row-lock) chống race condition**: kiểm tra + trừ tồn kho đều nằm trong một transaction Postgres, nhưng không dùng `SELECT ... FOR UPDATE` — nếu hai đơn hàng cho cùng sản phẩm được tạo **đồng thời gần như cùng lúc** ở mức isolation mặc định, về lý thuyết cả hai có thể đọc cùng một số tồn trước khi commit, dẫn tới bán vượt tồn kho trong trường hợp hiếm. Rủi ro này đã tồn tại từ trước ở mọi giao dịch kho khác (nhập/xuất/điều chỉnh) cùng cơ chế `applyInventoryTransaction`, không phải vấn đề mới riêng của tính năng này — chấp nhận được ở quy mô 1 cửa hàng, ít nhân viên đồng thời; cần bổ sung khóa hàng nếu tăng số lượng nhân viên/terminal thao tác song song.
 14. **6.14 — [Mới 2026-08-22] Xóa Đặt trước đã chuyển đơn làm mất "ghi chú xuất xứ"**: sau khi nới lỏng FR-DEL.4, xóa một Đặt trước đã Đã chuyển đơn sẽ làm mất khả năng tra cứu *ngược* từ Đơn hàng về Đặt trước gốc qua UI (nút "Xem đơn đặt trước" không còn dữ liệu để hiển thị) — tuy vậy `Order.ghiChu` vẫn giữ lại dòng text ghi rõ đã chuyển từ đơn đặt trước nào và số tiền cọc, nên không mất thông tin nghiệp vụ cốt lõi, chỉ mất liên kết điều hướng hai chiều.
+15. **6.15 — [Mới 2026-08-23] Allowlist IP webhook so khớp chuỗi tuyệt đối, không hỗ trợ dải CIDR**: nếu nhà cung cấp đối soát (SePay) đổi dải IP nguồn hoặc dùng nhiều IP luân phiên trong một dải, cần liệt kê thủ công từng IP một thay vì khai báo một dải mạng — chấp nhận được ở quy mô hiện tại (danh sách IP của SePay ổn định), nhưng cần nâng cấp lên so khớp CIDR nếu nhà cung cấp đổi hạ tầng thường xuyên.
+16. **6.16 — [Mới 2026-08-23] Không có audit log riêng cho các sự kiện bảo mật**: request bị chặn bởi rate limit/CORS/IP allowlist/sai chữ ký webhook chỉ trả lỗi HTTP tương ứng, không ghi vào một bảng log tập trung riêng để theo dõi tấn công theo thời gian — chỉ dựa vào log ứng dụng mặc định (console/nhà cung cấp hosting).
+17. **6.17 — [Mới 2026-08-24] Sinh phiếu tạm tính không giới hạn theo trạng thái đơn ở tầng backend**: endpoint `GET /orders/:id/preview-pdf` (mục 3.26) không tự chặn gọi cho đơn Mới/Đã hủy/Hoàn thành ở tầng API — chỉ giao diện mới chỉ hiển thị nút này cho đơn Đang xử lý (FR-ORD.23). Nếu gọi thẳng API cho đơn ở trạng thái khác vẫn ra được PDF (nội dung vẫn đúng dữ liệu đơn, không rò rỉ thông tin sai, chỉ là chưa có gate nghiệp vụ rõ ràng ở server) — rủi ro thấp vì mọi endpoint đều yêu cầu đăng nhập nội bộ.
 
 ---
 
@@ -362,4 +432,4 @@ Danh sách thực thể chính (chi tiết đầy đủ trường dữ liệu, k
 
 Các enum nghiệp vụ chính: `StaffRole`, `StaffStatus`, `ProductStatus`, `LoaiSanPham` *(mới — mục 3.19: `CO_SAN`, `PRE_ORDER`)*, `CustomerTier`, `OrderStatus`, `PaymentMethod`, `SalesChannel` (mở rộng 2026-08-22 thêm `ZALO`, `TIKTOK`), `PhuongThucNhanHang` *(mới — mục 3.19: `KHACH_TOI_LAY`, `SHIP`)*, `DonViVanChuyen` *(mới — mục 3.19: `SPX`, `GRAB`, `KHAC`)*, `InventoryTransactionType`, `TransactionKind`, `IncomeExpenseCategory`, `DebtType`, `DebtStatus` (suy ra, không lưu trữ), `PaymentReconciliationStatus` (mục 3.16), `PreorderStatus` (mục 3.17).
 
-Các trường mới bổ sung trên thực thể đã có (đầy đủ tại SDS.md mục 3.1): `Product.phiVanChuyen/loaiSanPham/ngayDuKienVe/nhacHang`; `Customer.diaChi/luuY/linkFacebook/nguonKhachHang`; `Order.daThanhToan/phuongThucNhanHang/donViVanChuyen/maVanDon`.
+Các trường mới bổ sung trên thực thể đã có (đầy đủ tại SDS.md mục 3.1): `Product.phiVanChuyen/loaiSanPham/ngayDuKienVe/nhacHang`; `Customer.diaChi/luuY/linkFacebook/nguonKhachHang`; `Order.daThanhToan/phuongThucNhanHang/donViVanChuyen/maVanDon/phiShip` *(mới 2026-08-23, mục 3.23 — thay thế hoàn toàn trường `vat` đã bị xóa)*; `Staff.tokenVersion` *(mới 2026-08-23, mục 3.23 — phục vụ thu hồi token trước hạn, NFR-1)*.

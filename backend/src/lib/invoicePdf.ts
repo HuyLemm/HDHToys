@@ -16,33 +16,6 @@ function formatMoney(n: number) {
   return `${n.toLocaleString("vi-VN")} VNĐ`
 }
 
-const PAYMENT_METHOD_LABEL: Record<string, string> = {
-  TIEN_MAT: "Tiền mặt",
-  CHUYEN_KHOAN: "Chuyển khoản",
-  THE: "Thẻ",
-  QR_CODE: "QR Code",
-}
-
-const DELIVERY_METHOD_LABEL: Record<string, string> = {
-  KHACH_TOI_LAY: "Khách tới lấy",
-  SHIP: "Ship",
-}
-
-const SHIPPING_CARRIER_LABEL: Record<string, string> = {
-  SPX: "SPX (Shopee Express)",
-  GRAB: "GrabExpress",
-  KHAC: "Khác",
-}
-
-const SALES_CHANNEL_LABEL: Record<string, string> = {
-  TAI_CUA_HANG: "Tại cửa hàng",
-  DIEN_THOAI: "Điện thoại",
-  FACEBOOK: "Facebook",
-  ZALO: "Zalo",
-  TIKTOK: "TikTok",
-  KHAC: "Khác",
-}
-
 export interface InvoicePdfData {
   soHoaDon: string
   createdAt: Date
@@ -77,7 +50,6 @@ const TEXT = "#0f172a"
 const MUTED = "#64748b"
 const BORDER = "#e2e8f0"
 const PANEL_BG = "#eff6ff"
-const GRAY_BG = "#f8fafc"
 
 export async function renderInvoicePdf(invoice: InvoicePdfData, res: Response) {
   // Sinh QR trước khi bắt đầu vẽ PDF — doc.image() cần buffer đã có sẵn
@@ -164,12 +136,11 @@ export async function renderInvoicePdf(invoice: InvoicePdfData, res: Response) {
     storeConfig.address && `Địa chỉ: ${storeConfig.address}`,
     storeConfig.hotline && `Điện thoại: ${storeConfig.hotline}`,
     storeConfig.website && `Website: ${storeConfig.website}`,
-    `Thu ngân: ${order.nhanVien.hoTen}`,
+    `Nhân viên: ${order.nhanVien.hoTen}`,
   ].filter((l): l is string => Boolean(l))
   const customerLines = [
     order.khachHang.hoTen,
     `Điện thoại: ${order.khachHang.sdt}`,
-    order.khachHang.diaChi && `Địa chỉ: ${order.khachHang.diaChi}`,
     order.khachHang.email && `Email: ${order.khachHang.email}`,
   ].filter((l): l is string => Boolean(l))
   const rowSlots = Math.max(storeLines.length, customerLines.length)
@@ -189,7 +160,7 @@ export async function renderInvoicePdf(invoice: InvoicePdfData, res: Response) {
 
   const HEADER_ROW_HEIGHT = 22
   const ITEM_ROW_HEIGHT = 32
-  const FOOTER_RESERVE = 230 // GHI CHÚ + tổng tiền + thanh toán/giao hàng + lời cảm ơn
+  const FOOTER_RESERVE = 140 // GHI CHÚ + tổng tiền + lời cảm ơn
 
   function drawTableHeader(y: number) {
     doc.rect(PAGE_MARGIN, y, contentWidth, HEADER_ROW_HEIGHT).fill(NAVY)
@@ -270,37 +241,7 @@ export async function renderInvoicePdf(invoice: InvoicePdfData, res: Response) {
   const notesHeight = doc.font(bodyFont).fontSize(8.5).heightOfString(notesText, { width: notesWidth })
   y = Math.max(y + 15 + notesHeight, ty) + 20
 
-  // ─── Thông tin thanh toán + giao hàng ──────────────────────────────────────
-  const infoLines: string[] = [
-    `Phương thức: ${PAYMENT_METHOD_LABEL[order.phuongThucThanhToan] ?? order.phuongThucThanhToan}`,
-    `Kênh bán: ${SALES_CHANNEL_LABEL[order.kenhBan] ?? order.kenhBan}`,
-  ]
-  const matchedTxn = (order.paymentTransactions ?? [])[0]
-  if (matchedTxn) infoLines.push(`Mã giao dịch: ${matchedTxn.maGiaoDichNganHang}`)
-
-  const deliveryLines: string[] = [`Hình thức nhận hàng: ${DELIVERY_METHOD_LABEL[order.phuongThucNhanHang] ?? order.phuongThucNhanHang}`]
-  if (order.phuongThucNhanHang === "SHIP") {
-    if (order.donViVanChuyen) deliveryLines.push(`Đơn vị vận chuyển: ${SHIPPING_CARRIER_LABEL[order.donViVanChuyen] ?? order.donViVanChuyen}`)
-    deliveryLines.push(`Mã vận đơn: ${order.maVanDon ?? "Chưa có"}`)
-  }
-
-  const boxPad = 14
-  const boxRows = Math.max(infoLines.length, deliveryLines.length)
-  const boxHeight = boxPad * 2 + 14 + 4 + boxRows * 13
-  doc.roundedRect(PAGE_MARGIN, y, contentWidth, boxHeight, 4).fill(GRAY_BG)
-
-  function drawBoxColumn(x: number, width: number, heading: string, lines: string[]) {
-    doc.font(boldFont).fontSize(9.5).fillColor(NAVY).text(heading, x, y + boxPad, { width, lineBreak: false })
-    let ly = y + boxPad + 18
-    lines.forEach((line) => {
-      doc.font(bodyFont).fontSize(9).fillColor(MUTED).text(line, x, ly, { width, lineBreak: false })
-      ly += 13
-    })
-  }
-  drawBoxColumn(PAGE_MARGIN + boxPad, panelWidth - boxPad, "THÔNG TIN THANH TOÁN", infoLines)
-  drawBoxColumn(PAGE_MARGIN + panelWidth + panelGap, panelWidth - boxPad, "THÔNG TIN GIAO HÀNG", deliveryLines)
-
-  y += boxHeight + 24
+  y += 12
 
   // ─── Kết nối với HDH Toys (QR Facebook/Zalo) ───────────────────────────────
   if (socialLinks.length > 0) {
