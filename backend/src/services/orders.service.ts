@@ -1,4 +1,4 @@
-import type { DonViVanChuyen, Order, OrderItem, OrderStatus, PaymentMethod, PhuongThucNhanHang, Prisma, SalesChannel } from "@prisma/client"
+import type { DonViVanChuyen, IncomeExpenseCategory, Order, OrderItem, OrderStatus, PaymentMethod, PhuongThucNhanHang, Prisma, SalesChannel } from "@prisma/client"
 import { prisma } from "../lib/prisma.js"
 import { canTransition, formatOrderCode } from "../lib/orderCode.js"
 import { formatInvoiceCode } from "../lib/invoiceCode.js"
@@ -320,7 +320,7 @@ export async function create(params: {
  */
 async function applyOrderCompletion(
   tx: Prisma.TransactionClient,
-  order: Pick<Order, "id" | "ma"> & { items: Pick<OrderItem, "productId" | "soLuong">[] },
+  order: Pick<Order, "id" | "ma" | "tongCong" | "tienCoc"> & { items: Pick<OrderItem, "productId" | "soLuong" | "giaVon">[] },
   nguoiThucHienId: string,
 ) {
   for (const item of order.items) {
@@ -337,6 +337,52 @@ async function applyOrderCompletion(
   await tx.invoice.update({
     where: { id: createdInvoice.id },
     data: { soHoaDon: formatInvoiceCode(createdInvoice.soThuTu, createdInvoice.createdAt) },
+  })
+
+  // Ghi nhận dòng tiền thật vào sổ Thu/Chi khi đơn hoàn thành — trước đây sổ
+  // quỹ chỉ có tiền cọc (nếu có), không có doanh thu/giá vốn thật của đơn,
+  // khiến "Lợi nhuận" tính từ sổ quỹ (accounting.service.ts) và "Lợi nhuận
+  // gộp" tính từ đơn hàng (revenue.service.ts) ra 2 số khác nhau (BUG-017).
+  // Không ghi lại phần tiền cọc — đã lên sổ Thu từ lúc tạo đơn/đặt trước rồi.
+  const giaVonDon = order.items.reduce((sum, i) => sum + i.soLuong * i.giaVon, 0)
+  const doanhThuConLai = order.tongCong - order.tienCoc
+  if (doanhThuConLai > 0) {
+    await createLedgerEntry(tx, {
+      loai: "THU",
+      danhMuc: "BAN_HANG",
+      noiDung: `Doanh thu bán hàng đơn ${order.ma}`,
+      soTien: doanhThuConLai,
+      nguoiTaoId: nguoiThucHienId,
+    })
+  }
+  if (giaVonDon > 0) {
+    await createLedgerEntry(tx, {
+      loai: "CHI",
+      danhMuc: "NHAP_HANG",
+      noiDung: `Giá vốn hàng bán đơn ${order.ma}`,
+      soTien: giaVonDon,
+      nguoiTaoId: nguoiThucHienId,
+    })
+  }
+}
+
+async function createLedgerEntry(
+  tx: Prisma.TransactionClient,
+  params: { loai: "THU" | "CHI"; danhMuc: IncomeExpenseCategory; noiDung: string; soTien: number; nguoiTaoId: string },
+) {
+  const created = await tx.incomeExpense.create({
+    data: {
+      maPhieu: `TEMP-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      loai: params.loai,
+      danhMuc: params.danhMuc,
+      noiDung: params.noiDung,
+      soTien: params.soTien,
+      nguoiTaoId: params.nguoiTaoId,
+    },
+  })
+  await tx.incomeExpense.update({
+    where: { id: created.id },
+    data: { maPhieu: `${params.loai === "THU" ? "PT" : "PC"}-${String(created.soThuTu).padStart(5, "0")}` },
   })
 }
 
@@ -381,6 +427,30 @@ export async function updateStatus(params: { orderId: string; trangThai: OrderSt
           nguoiThucHienId,
           thamChieu: current.ma,
           ghiChu: "Hoàn kho do hoàn tiền đơn hàng",
+        })
+      }
+
+      // Đảo ngược đúng 2 bút toán đã ghi lúc Hoàn thành (applyOrderCompletion)
+      // — nếu không, doanh thu/giá vốn của đơn đã hoàn tiền vẫn còn nằm trong
+      // sổ Thu/Chi dù đơn không còn tính vào doanh thu/lợi nhuận nữa (BUG-017).
+      const giaVonDon = current.items.reduce((sum, i) => sum + i.soLuong * i.giaVon, 0)
+      const doanhThuDaGhi = current.tongCong - current.tienCoc
+      if (doanhThuDaGhi > 0) {
+        await createLedgerEntry(tx, {
+          loai: "CHI",
+          danhMuc: "BAN_HANG",
+          noiDung: `Hoàn tiền đơn hàng ${current.ma}`,
+          soTien: doanhThuDaGhi,
+          nguoiTaoId: nguoiThucHienId,
+        })
+      }
+      if (giaVonDon > 0) {
+        await createLedgerEntry(tx, {
+          loai: "THU",
+          danhMuc: "NHAP_HANG",
+          noiDung: `Hoàn giá vốn do hoàn tiền đơn hàng ${current.ma}`,
+          soTien: giaVonDon,
+          nguoiTaoId: nguoiThucHienId,
         })
       }
     }
