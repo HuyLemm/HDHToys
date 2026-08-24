@@ -20,6 +20,15 @@ async function getInventoryValue() {
   return products.reduce((sum, p) => sum + p.tonKho * (p.giaVon + p.phiVanChuyen), 0)
 }
 
+/** Lợi nhuận lũy kế từ trước tới nay = tổng Thu - tổng Chi toàn bộ sổ quỹ (không lọc theo kỳ). */
+async function getAllTimeNetIncome() {
+  const [thu, chi] = await Promise.all([
+    prisma.incomeExpense.aggregate({ where: { loai: "THU" }, _sum: { soTien: true } }),
+    prisma.incomeExpense.aggregate({ where: { loai: "CHI" }, _sum: { soTien: true } }),
+  ])
+  return (thu._sum.soTien ?? 0) - (chi._sum.soTien ?? 0)
+}
+
 async function getGrossProfitForRange(tuNgay: Date, denNgay: Date) {
   const orders = await prisma.order.findMany({
     where: { trangThai: "HOAN_THANH", createdAt: { gte: tuNgay, lte: denNgay } },
@@ -93,7 +102,12 @@ export async function updateBalance(data: Partial<{
 }
 
 export async function getBalanceSheet() {
-  const [balance, debtTotals, giaTriTonKho] = await Promise.all([getOrCreateBalance(), getDebtTotals(), getInventoryValue()])
+  const [balance, debtTotals, giaTriTonKho, loiNhuanGiuLai] = await Promise.all([
+    getOrCreateBalance(),
+    getDebtTotals(),
+    getInventoryValue(),
+    getAllTimeNetIncome(),
+  ])
 
   const taiSanNganHan = {
     tienMat: balance.tienMat,
@@ -111,17 +125,20 @@ export async function getBalanceSheet() {
   }
   const tongNoPhaiTra = Object.values(noPhaiTra).reduce((a, b) => a + b, 0)
 
-  // Lợi nhuận giữ lại là số dư cân đối để đảm bảo Tổng tài sản = Nợ phải trả + Vốn chủ sở hữu,
-  // do hệ thống chưa có sổ cái đầy đủ để tính lợi nhuận lũy kế một cách độc lập.
-  const loiNhuanGiuLai = tongTaiSan - tongNoPhaiTra - balance.vonChuSoHuu
+  // Lợi nhuận giữ lại = lợi nhuận lũy kế thật từ sổ Thu/Chi (getAllTimeNetIncome),
+  // KHÔNG còn là số chêm cho khớp bảng như trước — nếu tienMat/tienNganHang/
+  // taiSanKhac (nhập tay ở Cân đối kế toán) không khớp thực tế, canDoi sẽ ra
+  // false và lệch đúng bằng phần nhập tay sai, giúp phát hiện sai sót thật.
   const vonChuSoHuuGroup = { vonChuSoHuu: balance.vonChuSoHuu, loiNhuanGiuLai }
   const tongVonChuSoHuu = balance.vonChuSoHuu + loiNhuanGiuLai
   const tongNguonVon = tongNoPhaiTra + tongVonChuSoHuu
+  const chenhLech = tongTaiSan - tongNguonVon
 
   return {
     thoiDiem: new Date(),
     taiSan: { taiSanNganHan, tongTaiSan },
     nguonVon: { noPhaiTra, vonChuSoHuu: vonChuSoHuuGroup, tongNoPhaiTra, tongVonChuSoHuu, tongNguonVon },
-    canDoi: tongTaiSan === tongNguonVon,
+    canDoi: chenhLech === 0,
+    chenhLech,
   }
 }

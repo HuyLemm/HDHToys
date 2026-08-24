@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import { CircleCheck, RefreshCw } from 'lucide-react'
+import { CircleCheck, CircleAlert, RefreshCw } from 'lucide-react'
 import { SectionHeader, Tabs, Table, Badge, Spinner, Btn, Field, Input, ErrorBox, TinyBtn } from '../components/ui'
 import { api, type Debt, type DebtType, type PaymentTransaction, ApiError } from '../lib/api'
 import { debtStatusLabel, debtTypeLabel, reverseLookup, paymentReconciliationStatusLabel } from '../lib/labels'
@@ -318,16 +318,35 @@ function BalanceSheetTab() {
         </div>
       </div>
 
-      {data.canDoi && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-center gap-3 text-sm">
-          <CircleCheck size={20} className="text-emerald-500 flex-shrink-0" strokeWidth={1.75} />
-          <div className="text-emerald-700 text-center">
-            <div className="font-semibold">Bảng cân đối kế toán cân bằng</div>
-            <div className="text-xs mt-0.5">Tổng tài sản = Nợ phải trả + Vốn chủ sở hữu</div>
-            <div className="font-bold mt-0.5">{taiSan.tongTaiSan.toLocaleString('vi-VN')} VNĐ = {nguonVon.tongNguonVon.toLocaleString('vi-VN')} VNĐ</div>
-          </div>
+      <BalanceSheetStatus canDoi={data.canDoi} chenhLech={data.chenhLech} tongTaiSan={taiSan.tongTaiSan} tongNguonVon={nguonVon.tongNguonVon} />
+    </div>
+  )
+}
+
+/** Tách riêng khỏi BalanceSheetTab để test được không cần mock api.accounting.balanceSheet(). */
+export function BalanceSheetStatus({ canDoi, chenhLech, tongTaiSan, tongNguonVon }: { canDoi: boolean; chenhLech: number; tongTaiSan: number; tongNguonVon: number }) {
+  if (canDoi) {
+    return (
+      <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-center gap-3 text-sm">
+        <CircleCheck size={20} className="text-emerald-500 flex-shrink-0" strokeWidth={1.75} />
+        <div className="text-emerald-700 text-center">
+          <div className="font-semibold">Bảng cân đối kế toán cân bằng</div>
+          <div className="text-xs mt-0.5">Tổng tài sản = Nợ phải trả + Vốn chủ sở hữu</div>
+          <div className="font-bold mt-0.5">{tongTaiSan.toLocaleString('vi-VN')} VNĐ = {tongNguonVon.toLocaleString('vi-VN')} VNĐ</div>
         </div>
-      )}
+      </div>
+    )
+  }
+  return (
+    <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-center gap-3 text-sm">
+      <CircleAlert size={20} className="text-amber-500 flex-shrink-0" strokeWidth={1.75} />
+      <div className="text-amber-700 text-center">
+        <div className="font-semibold">Bảng cân đối kế toán đang lệch {Math.abs(chenhLech).toLocaleString('vi-VN')} VNĐ</div>
+        <div className="text-xs mt-0.5">
+          Tổng tài sản ({tongTaiSan.toLocaleString('vi-VN')} VNĐ) {chenhLech > 0 ? '>' : '<'} Nợ phải trả + Vốn chủ sở hữu ({tongNguonVon.toLocaleString('vi-VN')} VNĐ)
+        </div>
+        <div className="text-xs mt-0.5">Kiểm tra lại Tiền mặt/Tiền gửi/Tài sản khác/Vốn chủ sở hữu đã nhập tay ở dưới có đúng thực tế chưa.</div>
+      </div>
     </div>
   )
 }

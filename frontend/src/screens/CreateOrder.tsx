@@ -3,6 +3,7 @@ import { Search } from 'lucide-react'
 import { BackBtn, Btn, Table, TinyBtn, Badge, Modal, Field, Input, ErrorBox } from '../components/ui'
 import { api, ApiError, type Customer, type Product, type PaymentMethod, type SalesChannel, type DeliveryMethod, type ShippingCarrier } from '../lib/api'
 import { customerTierLabel, paymentMethodLabel, salesChannelLabel, deliveryMethodLabel, shippingCarrierLabel } from '../lib/labels'
+import { computeOrderTotals } from '../lib/orderMath'
 
 interface CartLine { product: Product; soLuong: number; giamGia: number }
 
@@ -60,10 +61,12 @@ export function CreateOrderScreen({ onBack, onCreated }: { onBack: () => void; o
     setCart(prev => prev.filter(l => l.product.id !== productId))
   }
 
-  const tamTinh = cart.reduce((sum, l) => sum + l.soLuong * l.product.giaBan, 0)
-  const giamGiaTong = cart.reduce((sum, l) => sum + l.giamGia, 0)
-  const phiShipApDung = phuongThucNhanHang === 'SHIP' ? phiShip : 0
-  const tongCong = tamTinh - giamGiaTong + phiShipApDung
+  const { tamTinh, giamGiaTong, phiShipApDung, tongCong } = computeOrderTotals(
+    cart.map(l => ({ soLuong: l.soLuong, giaBan: l.product.giaBan, giamGia: l.giamGia })),
+    phiShip,
+    phuongThucNhanHang === 'SHIP',
+    tienCoc,
+  )
 
   async function handleSubmit() {
     if (!customer) { setError('Vui lòng chọn khách hàng.'); return }

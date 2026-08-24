@@ -668,6 +668,7 @@ export const api = {
           tongNguonVon: number
         }
         canDoi: boolean
+        chenhLech: number
       }>('/accounting/balance-sheet'),
   },
 }
