@@ -46,6 +46,8 @@ const SALES_CHANNEL_LABEL: Record<string, string> = {
 export interface InvoicePdfData {
   soHoaDon: string
   createdAt: Date
+  /** true = đơn chưa Hoàn thành, đây chỉ là phiếu tạm tính in trước — không phải hóa đơn chính thức (chưa có số hóa đơn thật). */
+  provisional?: boolean
   order: {
     ma: string
     kenhBan: string
@@ -62,14 +64,15 @@ export interface InvoicePdfData {
     khachHang: { hoTen: string; sdt: string; email: string | null; diaChi: string | null }
     nhanVien: { hoTen: string }
     items: { soLuong: number; donGia: number; thanhTien: number; product: { sku: string; ten: string; loaiSanPham: string } }[]
-    preorder: { ma: string } | null
-    paymentTransactions: { maGiaoDichNganHang: string }[]
+    preorder?: { ma: string } | null
+    paymentTransactions?: { maGiaoDichNganHang: string }[]
   }
 }
 
 const PAGE_MARGIN = 40
 const NAVY = "#1e3a5f"
 const ACCENT = "#2563eb"
+const PROVISIONAL_ACCENT = "#b45309"
 const TEXT = "#0f172a"
 const MUTED = "#64748b"
 const BORDER = "#e2e8f0"
@@ -101,8 +104,9 @@ export async function renderInvoicePdf(invoice: InvoicePdfData, res: Response) {
   const contentWidth = pageWidth - PAGE_MARGIN * 2
   const rightEdge = pageWidth - PAGE_MARGIN
 
+  const filenameSlug = invoice.provisional ? `Tam-tinh-${invoice.order.ma}` : invoice.soHoaDon
   res.setHeader("Content-Type", "application/pdf")
-  res.setHeader("Content-Disposition", `inline; filename="${invoice.soHoaDon}.pdf"`)
+  res.setHeader("Content-Disposition", `inline; filename="${filenameSlug}.pdf"`)
   doc.pipe(res)
 
   // ─── Header: logo + tên cửa hàng bên trái, "HÓA ĐƠN ĐIỆN TỬ" bên phải ─────
@@ -128,13 +132,14 @@ export async function renderInvoicePdf(invoice: InvoicePdfData, res: Response) {
     doc.font(bodyFont).fontSize(8).fillColor(MUTED).text(contactLine, textX, PAGE_MARGIN + 36, { lineBreak: false })
   }
 
-  doc.font(boldFont).fontSize(15).fillColor(ACCENT).text("HÓA ĐƠN ĐIỆN TỬ", PAGE_MARGIN, PAGE_MARGIN + 2, { width: contentWidth, align: "right" })
+  const docAccent = invoice.provisional ? PROVISIONAL_ACCENT : ACCENT
+  doc.font(boldFont).fontSize(15).fillColor(docAccent).text(invoice.provisional ? "PHIẾU TẠM TÍNH" : "HÓA ĐƠN ĐIỆN TỬ", PAGE_MARGIN, PAGE_MARGIN + 2, { width: contentWidth, align: "right" })
   doc.font(bodyFont).fontSize(9).fillColor(MUTED)
   doc.text(`Mã đơn: ${invoice.order.ma}`, PAGE_MARGIN, PAGE_MARGIN + 22, { width: contentWidth, align: "right" })
   doc.text(`Ngày lập: ${formatDate(invoice.createdAt)} · ${formatTime(invoice.createdAt)}`, PAGE_MARGIN, PAGE_MARGIN + 34, { width: contentWidth, align: "right" })
 
   const headerBottom = PAGE_MARGIN + 58
-  doc.moveTo(PAGE_MARGIN, headerBottom).lineTo(rightEdge, headerBottom).lineWidth(1.5).strokeColor(ACCENT).stroke()
+  doc.moveTo(PAGE_MARGIN, headerBottom).lineTo(rightEdge, headerBottom).lineWidth(1.5).strokeColor(docAccent).stroke()
 
   // ─── Hai ô: thông tin cửa hàng / thông tin khách hàng ─────────────────────
   function drawInfoPanel(x: number, y: number, width: number, heading: string, lines: string[], rowSlots: number) {
@@ -257,10 +262,10 @@ export async function renderInvoicePdf(invoice: InvoicePdfData, res: Response) {
   totalsRow("Tạm tính", formatMoney(order.tamTinh))
   totalsRow("Giảm giá", order.giamGia > 0 ? `-${formatMoney(order.giamGia)}` : formatMoney(0))
   totalsRow("Phí vận chuyển", formatMoney(order.phiShip))
-  totalsRow("Tổng cộng", formatMoney(order.tongCong), { bold: true, color: ACCENT, divider: true })
+  totalsRow("Tổng cộng", formatMoney(order.tongCong), { bold: true, color: docAccent, divider: true })
   const nguon = order.preorder ? ` (${order.preorder.ma})` : ""
   totalsRow(`Tiền đã cọc${nguon}`, order.tienCoc > 0 ? `-${formatMoney(order.tienCoc)}` : formatMoney(0))
-  totalsRow("THANH TOÁN CUỐI CÙNG", formatMoney(order.tongCong - order.tienCoc), { bold: true, color: ACCENT, divider: true })
+  totalsRow("THANH TOÁN CUỐI CÙNG", formatMoney(order.tongCong - order.tienCoc), { bold: true, color: docAccent, divider: true })
 
   const notesHeight = doc.font(bodyFont).fontSize(8.5).heightOfString(notesText, { width: notesWidth })
   y = Math.max(y + 15 + notesHeight, ty) + 20
@@ -270,7 +275,7 @@ export async function renderInvoicePdf(invoice: InvoicePdfData, res: Response) {
     `Phương thức: ${PAYMENT_METHOD_LABEL[order.phuongThucThanhToan] ?? order.phuongThucThanhToan}`,
     `Kênh bán: ${SALES_CHANNEL_LABEL[order.kenhBan] ?? order.kenhBan}`,
   ]
-  const matchedTxn = order.paymentTransactions[0]
+  const matchedTxn = (order.paymentTransactions ?? [])[0]
   if (matchedTxn) infoLines.push(`Mã giao dịch: ${matchedTxn.maGiaoDichNganHang}`)
 
   const deliveryLines: string[] = [`Hình thức nhận hàng: ${DELIVERY_METHOD_LABEL[order.phuongThucNhanHang] ?? order.phuongThucNhanHang}`]
@@ -321,7 +326,9 @@ export async function renderInvoicePdf(invoice: InvoicePdfData, res: Response) {
   // ─── Lời cảm ơn ─────────────────────────────────────────────────────────────
   doc.font(boldFont).fontSize(10).fillColor(NAVY).text("Cảm ơn quý khách đã tin tưởng HDH Toys!", PAGE_MARGIN, y, { width: contentWidth, align: "center" })
   doc.font(bodyFont).fontSize(8).fillColor(MUTED).text(
-    "Hóa đơn này được tạo điện tử và có giá trị xác nhận thông tin mua hàng.",
+    invoice.provisional
+      ? "Đây là phiếu tạm tính theo đơn hàng hiện tại (chưa Hoàn thành), có thể thay đổi và không phải hóa đơn chính thức."
+      : "Hóa đơn này được tạo điện tử và có giá trị xác nhận thông tin mua hàng.",
     PAGE_MARGIN,
     y + 15,
     { width: contentWidth, align: "center" },

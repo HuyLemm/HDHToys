@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Eye, FileDown, Trash2 } from 'lucide-react'
 import { FilterBar, SearchInput, Table, Pagination, TinyBtn, Spinner, ErrorBox } from '../components/ui'
 import { api, ApiError, type Invoice } from '../lib/api'
 import { paymentMethodLabel } from '../lib/labels'
@@ -51,10 +52,15 @@ export function InvoicesScreen({ onDetail }: { onDetail: (id: string) => void })
           <div className="text-xs text-slate-400 py-12 text-center">Chưa có hóa đơn nào</div>
         ) : (
           <Table
-            cols={['Số hóa đơn', 'Ngày', 'Giờ', 'Khách hàng', 'Mã đơn', 'Tổng tiền', 'Phương thức', 'Mã vận đơn', 'Người tạo', 'Thao tác']}
+            cols={['Thao tác', 'Số hóa đơn', 'Ngày', 'Giờ', 'Khách hàng', 'Mã đơn', 'Tổng tiền', 'Phương thức', 'Mã vận đơn', 'Người tạo']}
             rows={items.map(inv => {
               const d = new Date(inv.createdAt)
               return [
+                <div className="flex gap-1">
+                  <TinyBtn title="Xem" onClick={() => onDetail(inv.id)}><Eye size={12} strokeWidth={1.75} /></TinyBtn>
+                  <TinyBtn title="Xuất PDF" onClick={() => api.invoices.openPdf(inv.id).catch(err => dialog.alert(err instanceof ApiError ? err.message : 'Không thể tải hóa đơn.'))}><FileDown size={12} strokeWidth={1.75} /></TinyBtn>
+                  {staff?.vaiTro === 'ADMIN' && <TinyBtn danger title="Xóa" onClick={() => handleDelete(inv)}><Trash2 size={12} strokeWidth={1.75} /></TinyBtn>}
+                </div>,
                 <span className="font-mono text-[10px] font-semibold" style={{ color: '#1a56db' }}>{inv.soHoaDon}</span>,
                 d.toLocaleDateString('vi-VN'), d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
                 <span className="font-medium text-slate-800">{inv.order.khachHang.hoTen}</span>,
@@ -68,11 +74,6 @@ export function InvoicesScreen({ onDetail }: { onDetail: (id: string) => void })
                   </div>
                 ) : <span className="text-slate-300">—</span>,
                 inv.nguoiTao.hoTen,
-                <div className="flex gap-1">
-                  <TinyBtn onClick={() => onDetail(inv.id)}>Xem</TinyBtn>
-                  <TinyBtn onClick={() => api.invoices.openPdf(inv.id).catch(err => dialog.alert(err instanceof ApiError ? err.message : 'Không thể tải hóa đơn.'))}>PDF</TinyBtn>
-                  {staff?.vaiTro === 'ADMIN' && <TinyBtn danger onClick={() => handleDelete(inv)}>Xóa</TinyBtn>}
-                </div>,
               ]
             })}
           />

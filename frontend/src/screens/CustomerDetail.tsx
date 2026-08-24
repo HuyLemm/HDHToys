@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { FileDown } from 'lucide-react'
 import { BackBtn, Badge, Btn, KpiCard, Tabs, Table, Spinner, Field, Input, ErrorBox, TinyBtn, Modal } from '../components/ui'
 import { api, ApiError, type Customer, type CustomerNote, type Order, type Invoice, type SalesChannel } from '../lib/api'
 import { customerTierLabel, orderStatusLabel, paymentMethodLabel, salesChannelLabel } from '../lib/labels'
@@ -219,12 +220,12 @@ function InvoicesTab({ customerId }: { customerId: string }) {
   if (items.length === 0) return <div className="text-xs text-slate-400 py-8 text-center">Chưa có hóa đơn nào</div>
   return (
     <Table
-      cols={['Số hóa đơn', 'Ngày', 'Mã đơn', 'Tổng tiền', 'Phương thức', 'Thao tác']}
+      cols={['Thao tác', 'Số hóa đơn', 'Ngày', 'Mã đơn', 'Tổng tiền', 'Phương thức']}
       rows={items.map(inv => [
+        <TinyBtn title="Xuất PDF" onClick={() => api.invoices.openPdf(inv.id).catch(err => dialog.alert(err instanceof ApiError ? err.message : 'Không thể tải hóa đơn.'))}><FileDown size={12} strokeWidth={1.75} /></TinyBtn>,
         <span className="font-mono text-[10px] font-semibold" style={{ color: '#1a56db' }}>{inv.soHoaDon}</span>,
         new Date(inv.createdAt).toLocaleDateString('vi-VN'), inv.order.ma, `${inv.order.tongCong.toLocaleString('vi-VN')} VNĐ`,
         paymentMethodLabel[inv.order.phuongThucThanhToan],
-        <button onClick={() => api.invoices.openPdf(inv.id).catch(err => dialog.alert(err instanceof ApiError ? err.message : 'Không thể tải hóa đơn.'))} className="text-[10px] px-1.5 py-0.5 rounded border border-slate-200 hover:bg-slate-50 cursor-pointer">Xem</button>,
       ])}
     />
   )
@@ -307,11 +308,14 @@ function EditCustomerModal({ customer, onClose, onSaved }: { customer: Customer;
     try {
       await api.customers.update(customer.id, {
         hoTen: hoTen.trim(),
-        email: email || undefined,
-        ngaySinh: ngaySinh || undefined,
-        diaChi: diaChi || undefined,
-        linkFacebook: linkFacebook || undefined,
-        luuY: luuY || undefined,
+        // null (không phải undefined) khi ô bị xóa trắng — undefined bị
+        // JSON.stringify bỏ qua nên backend hiểu là "không đổi", còn null mới
+        // thực sự xóa được giá trị cũ đã lưu (xem customers.service.ts#update).
+        email: email || null,
+        ngaySinh: ngaySinh || null,
+        diaChi: diaChi || null,
+        linkFacebook: linkFacebook || null,
+        luuY: luuY || null,
         nguonKhachHang,
       })
       onSaved()

@@ -56,7 +56,7 @@ export function HdhLogo({ compact = false }: { compact?: boolean }) {
       {!compact && (
         <div>
           <div className="text-white font-bold text-sm leading-tight tracking-wide">HDH Toys</div>
-          <div className="text-[10px] leading-tight" style={{ color: '#7ba7d4' }}>Management System</div>
+          <div className="text-[10px] leading-tight whitespace-nowrap" style={{ color: '#7ba7d4' }}>Management System</div>
         </div>
       )}
     </div>
@@ -97,7 +97,7 @@ export function LinkBtn({ children, onClick }: { children: React.ReactNode; onCl
 export function Btn({ children, variant = 'primary', small, onClick, disabled }: {
   children: React.ReactNode; variant?: 'primary' | 'secondary' | 'danger' | 'ghost'; small?: boolean; onClick?: () => void; disabled?: boolean
 }) {
-  const base = `inline-flex items-center gap-1 font-medium rounded cursor-pointer transition-colors ${small ? 'text-xs px-2.5 py-1.5' : 'text-sm px-3 py-1.5'}`
+  const base = `inline-flex items-center gap-1 font-medium rounded cursor-pointer transition-colors whitespace-nowrap flex-shrink-0 ${small ? 'text-xs px-2.5 py-1.5' : 'text-sm px-3 py-1.5'}`
   const v = {
     primary: 'text-white hover:opacity-90',
     secondary: 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50',
@@ -111,11 +111,13 @@ export function Btn({ children, variant = 'primary', small, onClick, disabled }:
   )
 }
 
-export function TinyBtn({ children, danger, onClick }: { children: React.ReactNode; danger?: boolean; onClick?: () => void }) {
+export function TinyBtn({ children, danger, title, onClick }: { children: React.ReactNode; danger?: boolean; title?: string; onClick?: () => void }) {
   return (
     <button
       onClick={onClick}
-      className={`text-[10px] px-1.5 py-0.5 rounded border cursor-pointer whitespace-nowrap transition-colors
+      title={title}
+      aria-label={title}
+      className={`text-[10px] px-1.5 py-1 rounded border cursor-pointer whitespace-nowrap transition-colors inline-flex items-center justify-center
         ${danger ? 'border-red-200 text-red-600 hover:bg-red-50' : 'border-slate-200 hover:bg-slate-50 text-slate-600'}`}
     >
       {children}
@@ -129,13 +131,13 @@ export function Table({ cols, rows }: { cols: string[]; rows: React.ReactNode[][
       <table className="w-full text-xs">
         <thead>
           <tr className="border-b border-slate-200">
-            {cols.map((c, i) => <th key={i} className="text-left py-2 px-3 font-semibold text-slate-500 whitespace-nowrap">{c}</th>)}
+            {cols.map((c, i) => <th key={i} className="text-left py-1.5 px-2 font-semibold text-slate-500 whitespace-nowrap">{c}</th>)}
           </tr>
         </thead>
         <tbody>
           {rows.map((row, ri) => (
             <tr key={ri} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-              {row.map((cell, ci) => <td key={ci} className="py-2 px-3 text-slate-700 whitespace-nowrap">{cell}</td>)}
+              {row.map((cell, ci) => <td key={ci} className="py-1.5 px-2 text-slate-700 whitespace-nowrap">{cell}</td>)}
             </tr>
           ))}
         </tbody>
@@ -145,7 +147,7 @@ export function Table({ cols, rows }: { cols: string[]; rows: React.ReactNode[][
 }
 
 export function FilterBar({ children }: { children: React.ReactNode }) {
-  return <div className="flex items-center gap-2 flex-wrap mb-3">{children}</div>
+  return <div className="flex items-center gap-1.5 flex-wrap mb-3">{children}</div>
 }
 
 export function SearchInput({ placeholder, width = 'w-56', value, onChange }: {
@@ -164,14 +166,14 @@ export function SearchInput({ placeholder, width = 'w-56', value, onChange }: {
   )
 }
 
-export function Select({ placeholder, options, value, onChange }: {
-  placeholder: string; options: string[]; value?: string; onChange?: (v: string) => void
+export function Select({ placeholder, options, value, onChange, width }: {
+  placeholder: string; options: string[]; value?: string; onChange?: (v: string) => void; width?: string
 }) {
   return (
     <select
       value={value ?? ''}
       onChange={e => onChange?.(e.target.value)}
-      className="text-xs px-2.5 py-1.5 border border-slate-200 rounded-md bg-white text-slate-600 focus:outline-none focus:border-blue-400"
+      className={`text-xs px-2.5 py-1.5 border border-slate-200 rounded-md bg-white text-slate-600 focus:outline-none focus:border-blue-400 overflow-hidden text-ellipsis whitespace-nowrap ${width ?? ''}`}
     >
       <option value="">{placeholder}</option>
       {options.map(o => <option key={o}>{o}</option>)}

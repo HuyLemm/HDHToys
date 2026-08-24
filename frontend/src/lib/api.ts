@@ -263,6 +263,7 @@ export type Order = {
   items: OrderItem[]
   khachHang: { id: string; hoTen: string; sdt: string; email?: string | null }
   nhanVien: { id: string; hoTen: string }
+  invoice?: { id: string; soHoaDon: string } | null
   /** Chỉ có trên GET /orders/:id (không có ở danh sách) — null nếu không áp dụng (không phải QR/đã xử lý xong). */
   qrCode?: QrPaymentInfo | null
   createdAt: string
@@ -492,8 +493,11 @@ export const api = {
       patch<Order>(`/orders/${id}/delivery`, { phuongThucNhanHang, donViVanChuyen }),
     updateTrackingCode: (id: string, maVanDon: string) => patch<Order>(`/orders/${id}/tracking-code`, { maVanDon }),
     updateShippingFee: (id: string, phiShip: number) => patch<Order>(`/orders/${id}/shipping-fee`, { phiShip }),
+    updateDeposit: (id: string, tienCoc: number) => patch<Order>(`/orders/${id}/deposit`, { tienCoc }),
     /** Ảnh QR VietQR (PNG) của đơn hàng — dùng với URL.createObjectURL để hiển thị inline. */
     qrImageBlob: (id: string) => fetchAuthenticatedBlob(`/orders/${id}/qr.png`),
+    /** Phiếu tạm tính (PDF) cho đơn chưa Hoàn thành — chưa có Hóa đơn chính thức, xem invoice trên Order. */
+    openPreviewPdf: (id: string) => openAuthenticatedPdf(`/orders/${id}/preview-pdf`),
     /** Chỉ Admin — chỉ xóa được đơn chưa có hóa đơn (chưa từng Hoàn thành). */
     delete: (id: string) => del<void>(`/orders/${id}`),
   },

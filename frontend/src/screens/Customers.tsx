@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, Eye, Trash2 } from 'lucide-react'
 import { Btn, FilterBar, SearchInput, Select, Table, Pagination, TinyBtn, Badge, Spinner, ErrorBox } from '../components/ui'
 import { api, ApiError, type Customer, type CustomerTier, type SalesChannel } from '../lib/api'
 import { customerTierLabel, salesChannelLabel, reverseLookup } from '../lib/labels'
@@ -63,17 +63,17 @@ export function CustomersScreen({ onDetail }: { onDetail: (id: string) => void }
         </FilterBar>
         {loading ? <Spinner /> : (
           <Table
-            cols={['Khách hàng', 'SĐT', 'Email', 'Điểm tích lũy', 'Hạng', 'Nguồn khách', 'Thao tác']}
+            cols={['Thao tác', 'Khách hàng', 'SĐT', 'Email', 'Điểm tích lũy', 'Hạng', 'Nguồn khách']}
             rows={items.map(c => [
+              <div className="flex gap-1">
+                <TinyBtn title="Xem" onClick={() => onDetail(c.id)}><Eye size={12} strokeWidth={1.75} /></TinyBtn>
+                <TinyBtn danger title="Xóa" onClick={() => handleDelete(c)}><Trash2 size={12} strokeWidth={1.75} /></TinyBtn>
+              </div>,
               <button onClick={() => onDetail(c.id)} className="font-semibold text-slate-800 hover:underline cursor-pointer text-left">{c.hoTen}</button>,
               c.sdt, c.email || '—',
               <span className="font-semibold" style={{ color: '#1a56db' }}>{c.diemTichLuy}</span>,
               <Badge label={customerTierLabel[c.hangKhachHang]} />,
               <Badge label={salesChannelLabel[c.nguonKhachHang]} />,
-              <div className="flex gap-1">
-                <TinyBtn onClick={() => onDetail(c.id)}>Xem hồ sơ</TinyBtn>
-                <TinyBtn danger onClick={() => handleDelete(c)}>Xóa</TinyBtn>
-              </div>,
             ])}
           />
         )}

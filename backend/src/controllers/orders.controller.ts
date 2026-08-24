@@ -3,6 +3,7 @@ import { z } from "zod"
 import QRCode from "qrcode"
 import { badRequest } from "../errors/HttpError.js"
 import * as ordersService from "../services/orders.service.js"
+import { renderInvoicePdf } from "../lib/invoicePdf.js"
 
 const listQuerySchema = z.object({
   q: z.string().optional(),
@@ -42,6 +43,12 @@ export async function topCustomers(req: Request, res: Response) {
 export async function get(req: Request, res: Response) {
   const order = await ordersService.get(req.params.id)
   res.json({ ...order, qrCode: ordersService.getQrPaymentInfo(order) })
+}
+
+/** Phiếu tạm tính (PDF) cho đơn chưa Hoàn thành — xem invoicePdf.ts#renderInvoicePdf provisional. */
+export async function getPreviewPdf(req: Request, res: Response) {
+  const order = await ordersService.getForPreviewPdf(req.params.id)
+  await renderInvoicePdf({ soHoaDon: order.ma, createdAt: order.createdAt, provisional: true, order }, res)
 }
 
 /** Ảnh QR VietQR (PNG) cho một đơn hàng đang chờ thanh toán qua QR — xem SDS mục 4.14. */
@@ -152,5 +159,15 @@ export async function updateShippingFee(req: Request, res: Response) {
   if (!parsed.success) throw badRequest("Phí vận chuyển không hợp lệ.")
 
   const order = await ordersService.updateShippingFee(req.params.id, parsed.data.phiShip)
+  res.json(order)
+}
+
+const depositSchema = z.object({ tienCoc: z.number().int().min(0) })
+
+export async function updateDeposit(req: Request, res: Response) {
+  const parsed = depositSchema.safeParse(req.body)
+  if (!parsed.success) throw badRequest("Tiền cọc không hợp lệ.")
+
+  const order = await ordersService.updateDeposit(req.params.id, parsed.data.tienCoc, req.auth!.sub)
   res.json(order)
 }

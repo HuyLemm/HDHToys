@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import {
   LayoutDashboard, ClipboardList, Boxes, Package, Users,
   ReceiptText, ChartColumn, Wallet, Calculator, FileText, Settings,
-  Search, Bell, Menu, LogOut, CalendarClock,
+  Search, Bell, Menu, LogOut, CalendarClock, PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react'
 import { HdhLogo, Badge } from './ui'
+import logoUrl from '../assets/logo.jpg'
 import { api } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { staffRoleLabel } from '../lib/labels'
@@ -25,8 +26,8 @@ const navItems = [
   { key: 'cai-dat', Icon: Settings, label: 'Cài đặt' },
 ]
 
-export function Sidebar({ active, onNav, collapsed, mobileOpen, onCloseMobile }: {
-  active: Screen; onNav: (s: Screen) => void; collapsed: boolean; mobileOpen: boolean; onCloseMobile: () => void
+export function Sidebar({ active, onNav, collapsed, onToggleCollapsed, mobileOpen, onCloseMobile }: {
+  active: Screen; onNav: (s: Screen) => void; collapsed: boolean; onToggleCollapsed: () => void; mobileOpen: boolean; onCloseMobile: () => void
 }) {
   const { staff, logout } = useAuth()
   const activeKey = (['order-detail', 'create-order'].includes(active) ? 'orders' :
@@ -45,13 +46,28 @@ export function Sidebar({ active, onNav, collapsed, mobileOpen, onCloseMobile }:
         className={`flex flex-col h-screen flex-shrink-0 transition-transform md:transition-[width] duration-200
           fixed inset-y-0 left-0 z-40 md:static md:translate-x-0
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}
-        style={{ width: collapsed ? 56 : 220, background: '#0f2952' }}
+        style={{ width: collapsed ? 56 : 208, background: '#0f2952' }}
       >
-        <div className="flex items-center gap-2 px-3 py-4 border-b border-white/10">
+        <div className={`flex items-center gap-2 px-3 py-4 border-b border-white/10 ${collapsed ? 'flex-col' : ''}`}>
           {collapsed ? (
-            <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="7" fill="#f97316" /><rect x="7" y="8" width="4" height="16" rx="1" fill="white" /><rect x="14" y="13" width="4" height="6" rx="1" fill="white" /><rect x="21" y="8" width="4" height="16" rx="1" fill="white" /></svg>
+            <button onClick={onToggleCollapsed} title="Mở rộng thanh bên"
+              className="relative w-8 h-8 flex-shrink-0 rounded-full group cursor-pointer">
+              <img src={logoUrl} alt="HDH Toys" width={32} height={32}
+                className="w-8 h-8 rounded-full object-cover transition-opacity group-hover:opacity-0" />
+              <span className="absolute inset-0 rounded-full flex items-center justify-center bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{ color: '#94b8d4' }}>
+                <PanelLeftOpen size={18} strokeWidth={1.75} />
+              </span>
+            </button>
           ) : (
-            <HdhLogo />
+            <>
+              <HdhLogo />
+              <button onClick={onToggleCollapsed} title="Thu gọn thanh bên"
+                className="ml-auto w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 active:bg-white/15 transition-colors cursor-pointer flex-shrink-0"
+                style={{ color: '#94b8d4' }}>
+                <PanelLeftClose size={18} strokeWidth={1.75} />
+              </button>
+            </>
           )}
         </div>
 
@@ -190,7 +206,7 @@ export function Header({ title, onToggleSidebar, onNav }: {
 
   return (
     <header className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4 h-14 border-b border-slate-200 bg-white flex-shrink-0 z-10">
-      <button onClick={onToggleSidebar} className="p-1.5 rounded hover:bg-slate-100 text-slate-500 cursor-pointer flex-shrink-0"><Menu size={18} strokeWidth={1.75} /></button>
+      <button onClick={onToggleSidebar} className="md:hidden p-1.5 rounded hover:bg-slate-100 text-slate-500 cursor-pointer flex-shrink-0"><Menu size={18} strokeWidth={1.75} /></button>
       <span className="font-semibold text-slate-800 text-sm truncate max-w-[30vw] sm:max-w-none flex-shrink-0">{title}</span>
 
       <div className="flex-1 mx-1 sm:mx-4 relative min-w-0" ref={wrapRef}>

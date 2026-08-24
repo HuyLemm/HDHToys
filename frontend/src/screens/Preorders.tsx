@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, Eye, Trash2 } from 'lucide-react'
 import { Btn, FilterBar, SearchInput, Select, Table, Pagination, TinyBtn, Badge, Spinner, KpiCard, Modal, Field, Input, ErrorBox } from '../components/ui'
 import { api, ApiError, type Customer, type Preorder, type PreorderStatus, type Product } from '../lib/api'
 import { preorderStatusLabel, reverseLookup } from '../lib/labels'
@@ -76,8 +76,12 @@ export function PreordersScreen({ onDetail }: { onDetail: (id: string) => void }
           <div className="text-xs text-slate-400 py-8 text-center">Chưa có đơn đặt trước nào</div>
         ) : (
           <Table
-            cols={['Mã', 'Khách hàng', 'Sản phẩm', 'SL', 'Giá dự kiến', 'Tiền cọc', 'Trạng thái', 'Ngày tạo', 'Thao tác']}
+            cols={['Thao tác', 'Mã', 'Khách hàng', 'Sản phẩm', 'SL', 'Giá dự kiến', 'Tiền cọc', 'Trạng thái', 'Ngày tạo']}
             rows={items.map(p => [
+              <div className="flex gap-1">
+                <TinyBtn title="Xem" onClick={() => onDetail(p.id)}><Eye size={12} strokeWidth={1.75} /></TinyBtn>
+                <TinyBtn danger title="Xóa" onClick={() => handleDelete(p)}><Trash2 size={12} strokeWidth={1.75} /></TinyBtn>
+              </div>,
               <span className="font-mono text-xs font-semibold text-slate-700">{p.ma}</span>,
               <div><div className="font-medium text-slate-800">{p.khachHang.hoTen}</div><div className="text-[10px] text-slate-400">{p.khachHang.sdt}</div></div>,
               p.product ? p.product.ten : <span>{p.tenSanPhamMoi} <span className="text-[10px] text-blue-500">(SP mới)</span></span>,
@@ -86,10 +90,6 @@ export function PreordersScreen({ onDetail }: { onDetail: (id: string) => void }
               p.tienCoc > 0 ? `${p.tienCoc.toLocaleString('vi-VN')} VNĐ` : '—',
               <Badge label={preorderStatusLabel[p.trangThai]} />,
               new Date(p.createdAt).toLocaleDateString('vi-VN'),
-              <div className="flex gap-1">
-                <TinyBtn onClick={() => onDetail(p.id)}>Xem</TinyBtn>
-                <TinyBtn danger onClick={() => handleDelete(p)}>Xóa</TinyBtn>
-              </div>,
             ])}
           />
         )}

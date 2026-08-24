@@ -11,6 +11,7 @@ export const orderInclude = {
   khachHang: { select: { id: true, hoTen: true, sdt: true, email: true } },
   nhanVien: { select: { id: true, hoTen: true } },
   items: { include: { product: { select: { id: true, sku: true, ten: true, loaiSanPham: true } } } },
+  invoice: { select: { id: true, soHoaDon: true } },
 } satisfies Prisma.OrderInclude
 
 export async function list(params: {
@@ -110,6 +111,27 @@ export async function getTopCustomers(limit: number) {
 
 export async function get(id: string) {
   const order = await prisma.order.findUnique({ where: { id }, include: orderInclude, relationLoadStrategy: "join" })
+  if (!order) throw notFound("Không tìm thấy đơn hàng.")
+  return order
+}
+
+/**
+ * Dữ liệu cho phiếu tạm tính (xem invoicePdf.ts#renderInvoicePdf provisional) —
+ * in trước khi đơn Hoàn thành, không phải Hóa đơn chính thức nên không dùng
+ * orderInclude (thiếu diaChi/preorder/paymentTransactions mà mẫu PDF cần).
+ */
+export async function getForPreviewPdf(id: string) {
+  const order = await prisma.order.findUnique({
+    where: { id },
+    include: {
+      khachHang: { select: { hoTen: true, sdt: true, email: true, diaChi: true } },
+      nhanVien: { select: { hoTen: true } },
+      items: { include: { product: { select: { sku: true, ten: true, loaiSanPham: true } } } },
+      preorder: { select: { ma: true } },
+      paymentTransactions: { select: { maGiaoDichNganHang: true }, orderBy: { createdAt: "desc" }, take: 1 },
+    },
+    relationLoadStrategy: "join",
+  })
   if (!order) throw notFound("Không tìm thấy đơn hàng.")
   return order
 }
@@ -533,6 +555,33 @@ export async function updateShippingFee(orderId: string, phiShip: number) {
   if (order.tienCoc > tongCongMoi) throw badRequest("Phí vận chuyển làm tổng tiền đơn nhỏ hơn tiền cọc đã nhận — vui lòng kiểm tra lại.")
 
   return prisma.order.update({ where: { id: orderId }, data: { phiShip, tongCong: tongCongMoi }, include: orderInclude })
+}
+
+/**
+ * Sửa tiền cọc sau khi tạo đơn — khách có thể đặt cọc muộn hơn lúc tạo đơn
+ * (hoặc staff nhập nhầm số cọc ban đầu). Chỉ cho sửa khi đơn CHƯA Hoàn thành,
+ * cùng lý do với updateShippingFee: applyOrderCompletion đã dùng tienCoc để
+ * chốt doanh thu còn lại vào Hóa đơn + sổ Thu/Chi, sửa sau đó sẽ làm 2 nơi lệch
+ * nhau (BUG-017). Phần chênh lệch (tăng/giảm) được ghi luôn vào sổ Thu/Chi,
+ * giống cách tiền cọc lúc tạo đơn được ghi nhận (xem create()).
+ */
+export async function updateDeposit(orderId: string, tienCoc: number, nguoiThucHienId: string) {
+  const order = await prisma.order.findUnique({ where: { id: orderId } })
+  if (!order) throw notFound("Không tìm thấy đơn hàng.")
+  if (order.trangThai !== "MOI" && order.trangThai !== "DANG_XU_LY") {
+    throw badRequest("Đơn hàng đã Hoàn thành/Hủy/Hoàn tiền — không thể sửa tiền cọc.")
+  }
+  if (tienCoc > order.tongCong) throw badRequest("Tiền cọc không được vượt quá tổng tiền đơn hàng.")
+
+  const delta = tienCoc - order.tienCoc
+  return prisma.$transaction(async (tx) => {
+    if (delta > 0) {
+      await createLedgerEntry(tx, { loai: "THU", danhMuc: "BAN_HANG", noiDung: `Đặt cọc thêm đơn hàng ${order.ma}`, soTien: delta, nguoiTaoId: nguoiThucHienId })
+    } else if (delta < 0) {
+      await createLedgerEntry(tx, { loai: "CHI", danhMuc: "BAN_HANG", noiDung: `Hoàn một phần tiền cọc đơn hàng ${order.ma}`, soTien: -delta, nguoiTaoId: nguoiThucHienId })
+    }
+    return tx.order.update({ where: { id: orderId }, data: { tienCoc }, include: orderInclude })
+  })
 }
 
 /**

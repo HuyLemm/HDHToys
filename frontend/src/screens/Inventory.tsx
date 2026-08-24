@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { History, PackagePlus, PackageMinus } from 'lucide-react'
+import { History, PackagePlus, PackageMinus, SlidersHorizontal } from 'lucide-react'
 import { Btn, FilterBar, SearchInput, Select, Table, Pagination, TinyBtn, Badge, Spinner, Modal, Field, Input, ErrorBox } from '../components/ui'
 import { api, ApiError, type Product, type ProductStatus } from '../lib/api'
 import { productStatusLabel, reverseLookup } from '../lib/labels'
@@ -66,18 +66,18 @@ export function InventoryScreen({ onHistory }: { onHistory: () => void; onNav?: 
         </div>
         {loading ? <Spinner /> : (
           <Table
-            cols={['SKU', 'Sản phẩm', 'Danh mục', 'Tồn kho', 'Giá vốn', 'Giá bán', 'Giá trị tồn', 'Trạng thái', 'Thao tác']}
+            cols={['Thao tác', 'SKU', 'Sản phẩm', 'Danh mục', 'Tồn kho', 'Giá vốn', 'Giá bán', 'Giá trị tồn', 'Trạng thái']}
             rows={items.map(i => [
+              <div className="flex gap-1">
+                <TinyBtn title="Nhập kho" onClick={() => setModal({ mode: 'in', product: i })}><PackagePlus size={12} strokeWidth={1.75} /></TinyBtn>
+                <TinyBtn title="Điều chỉnh tồn kho" onClick={() => setModal({ mode: 'adjust', product: i })}><SlidersHorizontal size={12} strokeWidth={1.75} /></TinyBtn>
+              </div>,
               <span className="font-mono text-[10px] font-semibold text-slate-600">{i.sku}</span>,
               <span className="font-medium text-slate-800">{i.ten}</span>,
               i.danhMuc,
               <span className={`font-bold ${i.tonKho === 0 ? 'text-red-500' : i.tonKho <= i.tonKhoToiThieu ? 'text-amber-600' : 'text-slate-800'}`}>{i.tonKho}</span>,
               `${i.giaVon.toLocaleString('vi-VN')} VNĐ`, `${i.giaBan.toLocaleString('vi-VN')} VNĐ`, `${i.giaTriTon.toLocaleString('vi-VN')} VNĐ`,
               <Badge label={productStatusLabel[i.trangThai]} />,
-              <div className="flex gap-1">
-                <TinyBtn onClick={() => setModal({ mode: 'in', product: i })}>Nhập</TinyBtn>
-                <TinyBtn onClick={() => setModal({ mode: 'adjust', product: i })}>Điều chỉnh</TinyBtn>
-              </div>,
             ])}
           />
         )}

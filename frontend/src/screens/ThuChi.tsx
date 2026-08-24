@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Trash2 } from 'lucide-react'
 import { Btn, FilterBar, SearchInput, Select, Table, Pagination, Spinner, Modal, Field, Input, ErrorBox, TinyBtn } from '../components/ui'
 import { api, ApiError, type IncomeExpense, type RangeKey, type TransactionKind, type IncomeExpenseCategory } from '../lib/api'
 import { incomeExpenseCategoryLabel, transactionKindLabel, reverseLookup } from '../lib/labels'
@@ -92,15 +93,15 @@ export function ThuChiScreen() {
           <div className="text-xs text-slate-400 py-12 text-center">Chưa có phiếu thu/chi nào</div>
         ) : (
           <Table
-            cols={['Ngày', 'Mã phiếu', 'Loại', 'Danh mục', 'Nội dung', 'Số tiền', 'Người tạo', 'Thao tác']}
+            cols={['Thao tác', 'Ngày', 'Mã phiếu', 'Loại', 'Danh mục', 'Nội dung', 'Số tiền', 'Người tạo']}
             rows={items.map(t => [
+              <TinyBtn danger title="Xóa" onClick={() => handleDelete(t)}><Trash2 size={12} strokeWidth={1.75} /></TinyBtn>,
               new Date(t.createdAt).toLocaleDateString('vi-VN'),
               <span className="font-mono text-[10px] font-semibold text-slate-700">{t.maPhieu}</span>,
               <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold border ${t.loai === 'THU' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}`}>{transactionKindLabel[t.loai]}</span>,
               incomeExpenseCategoryLabel[t.danhMuc], t.noiDung,
               <span className={`font-bold text-xs ${t.loai === 'THU' ? 'text-emerald-600' : 'text-red-500'}`}>{t.loai === 'THU' ? '+' : '-'}{t.soTien.toLocaleString('vi-VN')} VNĐ</span>,
               t.nguoiTao.hoTen,
-              <TinyBtn danger onClick={() => handleDelete(t)}>Xóa</TinyBtn>,
             ])}
           />
         )}

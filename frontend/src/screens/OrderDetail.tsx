@@ -10,6 +10,12 @@ import { useDialog } from '../lib/dialog'
 // thanh toán QR (SRS FR-PAY.4) — không có push/websocket nên dùng polling đơn giản.
 const QR_POLL_INTERVAL_MS = 4000
 
+// Hiển thị dấu phân cách nghìn khi gõ số tiền (input type="number" không cho
+// hiển thị dấu phân cách) — state vẫn giữ chuỗi chỉ gồm chữ số, chỉ format lúc render.
+function formatDigitsAsMoney(digits: string) {
+  return digits ? Number(digits).toLocaleString('vi-VN') : ''
+}
+
 const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus[]>> = {
   MOI: ['DANG_XU_LY', 'DA_HUY'],
   DANG_XU_LY: ['HOAN_THANH', 'DA_HUY'],
@@ -20,22 +26,13 @@ export function OrderDetailScreen({ orderId, onBack }: { orderId: string; onBack
   const dialog = useDialog()
   const { staff } = useAuth()
   const [order, setOrder] = useState<Order | null>(null)
-  const [invoiceId, setInvoiceId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [updating, setUpdating] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [updatingPayment, setUpdatingPayment] = useState(false)
 
   useEffect(() => {
-    api.orders.get(orderId).then(o => {
-      setOrder(o)
-      if (o.trangThai === 'HOAN_THANH' || o.trangThai === 'HOAN_TIEN') {
-        api.invoices.list({ q: o.ma }).then(res => {
-          const match = res.items.find(inv => inv.order.id === o.id)
-          if (match) setInvoiceId(match.id)
-        })
-      }
-    })
+    api.orders.get(orderId).then(setOrder)
   }, [orderId])
 
   // Đơn đang chờ thanh toán QR: poll để phát hiện webhook đối soát tự hoàn
@@ -50,11 +47,6 @@ export function OrderDetailScreen({ orderId, onBack }: { orderId: string; onBack
         const fresh = await api.orders.get(orderId)
         if (fresh.trangThai !== order.trangThai) {
           setOrder(fresh)
-          if (fresh.trangThai === 'HOAN_THANH') {
-            const res = await api.invoices.list({ q: fresh.ma })
-            const match = res.items.find(inv => inv.order.id === fresh.id)
-            if (match) setInvoiceId(match.id)
-          }
         }
       } catch {
         // bỏ qua lỗi poll lẻ tẻ (mất mạng tạm thời...), thử lại ở lượt sau
@@ -109,11 +101,6 @@ export function OrderDetailScreen({ orderId, onBack }: { orderId: string; onBack
     try {
       const updated = await api.orders.updateStatus(orderId, next)
       setOrder(updated)
-      if (next === 'HOAN_THANH') {
-        const res = await api.invoices.list({ q: updated.ma })
-        const match = res.items.find(inv => inv.order.id === updated.id)
-        if (match) setInvoiceId(match.id)
-      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Không thể cập nhật trạng thái.')
     } finally {
@@ -137,9 +124,13 @@ export function OrderDetailScreen({ orderId, onBack }: { orderId: string; onBack
           <Btn variant={order.daThanhToan ? 'secondary' : 'primary'} small disabled={updatingPayment} onClick={handleTogglePaymentStatus}>
             {updatingPayment ? 'Đang lưu...' : order.daThanhToan ? 'Đánh dấu chưa thanh toán' : 'Đánh dấu đã thanh toán'}
           </Btn>
-          {invoiceId && (
-            <Btn variant="secondary" small onClick={() => api.invoices.openPdf(invoiceId).catch(err => dialog.alert(err instanceof ApiError ? err.message : 'Không thể tải hóa đơn.'))}>
+          {order.invoice ? (
+            <Btn variant="secondary" small onClick={() => api.invoices.openPdf(order.invoice!.id).catch(err => dialog.alert(err instanceof ApiError ? err.message : 'Không thể tải hóa đơn.'))}>
               <FileDown size={13} strokeWidth={1.75} /> Xuất PDF
+            </Btn>
+          ) : order.trangThai === 'DANG_XU_LY' && (
+            <Btn variant="secondary" small onClick={() => api.orders.openPreviewPdf(order.id).catch(err => dialog.alert(err instanceof ApiError ? err.message : 'Không thể tải phiếu tạm tính.'))}>
+              <FileDown size={13} strokeWidth={1.75} /> Phiếu tạm tính
             </Btn>
           )}
           {nextOptions.length > 0 && (
@@ -201,6 +192,10 @@ export function OrderDetailScreen({ orderId, onBack }: { orderId: string; onBack
                   <ShippingFeeField order={order} onSaved={setOrder} />
                 </div>
               )}
+              <div>
+                <div className="text-slate-400 mb-0.5">Tiền cọc</div>
+                <DepositField order={order} onSaved={setOrder} />
+              </div>
               {order.phuongThucNhanHang === 'SHIP' && (
                 <div className="col-span-3">
                   <div className="text-slate-400 mb-0.5">Mã vận đơn</div>
@@ -396,9 +391,55 @@ function ShippingFeeField({ order, onSaved }: { order: Order; onSaved: (o: Order
 
   return (
     <div>
-      <div className="flex gap-2 items-center">
-        <input type="number" min={0} value={value} onChange={e => setValue(e.target.value)}
-          className="text-xs px-2 py-1.5 border border-slate-200 rounded-md focus:outline-none focus:border-blue-400 max-w-32" placeholder="0" />
+      <div className="flex gap-1.5 items-center flex-wrap">
+        <input type="text" inputMode="numeric" value={formatDigitsAsMoney(value)} onChange={e => setValue(e.target.value.replace(/\D/g, ''))}
+          className="text-xs px-2 py-1.5 border border-slate-200 rounded-md focus:outline-none focus:border-blue-400 w-24" placeholder="0" />
+        <span className="text-[10px] text-slate-400">VNĐ</span>
+        <Btn small disabled={saving || !dirty} onClick={handleSave}>{saving ? 'Đang lưu...' : 'Lưu'}</Btn>
+      </div>
+      {error && <div className="text-[10px] text-red-500 mt-1">{error}</div>}
+    </div>
+  )
+}
+
+/**
+ * Tiền cọc — khách có thể đặt cọc muộn hơn lúc tạo đơn, nên vẫn sửa được sau
+ * khi tạo, chỉ đến khi đơn Hoàn thành (tiền cọc lúc đó đã chốt vào Hóa đơn +
+ * sổ Thu/Chi, xem orders.service.ts#updateDeposit).
+ */
+function DepositField({ order, onSaved }: { order: Order; onSaved: (o: Order) => void }) {
+  const editable = order.trangThai === 'MOI' || order.trangThai === 'DANG_XU_LY'
+  const [value, setValue] = useState(order.tienCoc === 0 ? '' : String(order.tienCoc))
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => { setValue(order.tienCoc === 0 ? '' : String(order.tienCoc)) }, [order.id, order.tienCoc])
+
+  if (!editable) {
+    return <div className="text-xs font-semibold text-slate-800 py-1.5">{order.tienCoc.toLocaleString('vi-VN')} VNĐ</div>
+  }
+
+  async function handleSave() {
+    setError(null)
+    setSaving(true)
+    try {
+      const updated = await api.orders.updateDeposit(order.id, Number(value) || 0)
+      onSaved(updated)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Không thể lưu tiền cọc.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const dirty = (Number(value) || 0) !== order.tienCoc
+
+  return (
+    <div>
+      <div className="flex gap-1.5 items-center flex-wrap">
+        <input type="text" inputMode="numeric" value={formatDigitsAsMoney(value)} onChange={e => setValue(e.target.value.replace(/\D/g, ''))}
+          className="text-xs px-2 py-1.5 border border-slate-200 rounded-md focus:outline-none focus:border-blue-400 w-24" placeholder="0" />
+        <span className="text-[10px] text-slate-400">VNĐ</span>
         <Btn small disabled={saving || !dirty} onClick={handleSave}>{saving ? 'Đang lưu...' : 'Lưu'}</Btn>
       </div>
       {error && <div className="text-[10px] text-red-500 mt-1">{error}</div>}

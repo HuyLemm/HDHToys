@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Btn, Table, Badge, Spinner, Modal, Field, Input, ErrorBox } from '../components/ui'
+import { Lock, LockOpen, Trash2 } from 'lucide-react'
+import { Btn, Table, Badge, Spinner, Modal, Field, Input, ErrorBox, TinyBtn } from '../components/ui'
 import { api, ApiError, type Staff, type StaffRole } from '../lib/api'
 import { staffRoleLabel, staffStatusLabel } from '../lib/labels'
 import { useAuth } from '../lib/auth'
@@ -85,19 +86,19 @@ export function CaiDatScreen() {
           {deleteError && <ErrorBox message={deleteError} />}
           {loading ? <Spinner /> : (
             <Table
-              cols={['Họ tên', 'Email', 'Vai trò', 'Trạng thái', 'Thao tác']}
+              cols={['Thao tác', 'Họ tên', 'Email', 'Vai trò', 'Trạng thái']}
               rows={users.map(u => [
+                u.id === currentStaff?.id ? '—' : (
+                  <div className="flex gap-1">
+                    <TinyBtn danger={u.trangThai === 'ACTIVE'} title={u.trangThai === 'ACTIVE' ? 'Khóa' : 'Mở khóa'} onClick={() => toggleLock(u)}>
+                      {u.trangThai === 'ACTIVE' ? <Lock size={12} strokeWidth={1.75} /> : <LockOpen size={12} strokeWidth={1.75} />}
+                    </TinyBtn>
+                    <TinyBtn danger title="Xóa" onClick={() => handleDelete(u)}><Trash2 size={12} strokeWidth={1.75} /></TinyBtn>
+                  </div>
+                ),
                 <span className="font-semibold text-slate-800">{u.hoTen}</span>,
                 u.email, staffRoleLabel[u.vaiTro],
                 <Badge label={staffStatusLabel[u.trangThai ?? 'ACTIVE']} />,
-                u.id === currentStaff?.id ? '—' : (
-                  <div className="flex gap-1">
-                    <button onClick={() => toggleLock(u)} className={`text-[10px] px-1.5 py-0.5 rounded border cursor-pointer ${u.trangThai === 'ACTIVE' ? 'border-red-200 text-red-600 hover:bg-red-50' : 'border-slate-200 hover:bg-slate-50 text-slate-600'}`}>
-                      {u.trangThai === 'ACTIVE' ? 'Khóa' : 'Mở khóa'}
-                    </button>
-                    <button onClick={() => handleDelete(u)} className="text-[10px] px-1.5 py-0.5 rounded border border-red-200 text-red-600 hover:bg-red-50 cursor-pointer">Xóa</button>
-                  </div>
-                ),
               ])}
             />
           )}

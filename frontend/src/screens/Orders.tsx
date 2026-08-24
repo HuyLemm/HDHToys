@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Plus, Trophy } from 'lucide-react'
+import { Plus, Trophy, Eye, FileDown } from 'lucide-react'
 import { Btn, FilterBar, SearchInput, Select, Table, Pagination, TinyBtn, Badge, Spinner } from '../components/ui'
-import { api, type Order, type OrderStatus, type PaymentMethod, type DeliveryMethod } from '../lib/api'
+import { api, ApiError, type Order, type OrderStatus, type PaymentMethod, type DeliveryMethod } from '../lib/api'
 import { orderStatusLabel, paymentMethodLabel, deliveryMethodLabel, shippingCarrierLabel, reverseLookup } from '../lib/labels'
+import { useDialog } from '../lib/dialog'
 
 const SORT_OPTIONS = {
   'Ngày mới nhất': { sortBy: 'createdAt', sortOrder: 'desc' },
@@ -47,6 +48,7 @@ function TopCustomersPanel({ onSelectCustomer }: { onSelectCustomer: (customerId
 export function OrdersScreen({ onDetail, onCreate, onViewCustomer }: {
   onDetail: (id: string) => void; onCreate: () => void; onViewCustomer?: (customerId: string) => void
 }) {
+  const dialog = useDialog()
   const [items, setItems] = useState<Order[]>([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
@@ -96,20 +98,32 @@ export function OrdersScreen({ onDetail, onCreate, onViewCustomer }: {
 
       <div className="bg-white rounded-lg border border-slate-200 p-4">
         <FilterBar>
-          <SearchInput placeholder="Tìm theo mã đơn, tên khách hàng hoặc SĐT..." width="w-64" value={q} onChange={v => { setQ(v); setPage(1) }} />
-          <Select placeholder="Trạng thái" options={Object.values(orderStatusLabel)} value={trangThai} onChange={v => { setTrangThai(v); setPage(1) }} />
-          <Select placeholder="Thanh toán" options={Object.values(paymentMethodLabel)} value={phuongThuc} onChange={v => { setPhuongThuc(v); setPage(1) }} />
-          <Select placeholder="Đã thanh toán?" options={['Đã thanh toán', 'Chưa thanh toán']} value={thanhToan} onChange={v => { setThanhToan(v); setPage(1) }} />
-          <Select placeholder="Nhận hàng" options={Object.values(deliveryMethodLabel)} value={nhanHang} onChange={v => { setNhanHang(v); setPage(1) }} />
-          <Select placeholder="Mã vận đơn" options={['Đã có mã', 'Chưa có mã']} value={maVanDonFilter} onChange={v => { setMaVanDonFilter(v); setPage(1) }} />
-          <Select placeholder="Sắp xếp" options={Object.keys(SORT_OPTIONS)} value={sort} onChange={v => { setSort(v as keyof typeof SORT_OPTIONS); setPage(1) }} />
+          <SearchInput placeholder="Tìm theo mã đơn, tên khách hàng hoặc SĐT..." width="w-48" value={q} onChange={v => { setQ(v); setPage(1) }} />
+          <Select placeholder="Trạng thái" width="w-28" options={Object.values(orderStatusLabel)} value={trangThai} onChange={v => { setTrangThai(v); setPage(1) }} />
+          <Select placeholder="Thanh toán" width="w-28" options={Object.values(paymentMethodLabel)} value={phuongThuc} onChange={v => { setPhuongThuc(v); setPage(1) }} />
+          <Select placeholder="Đã thanh toán?" width="w-32" options={['Đã thanh toán', 'Chưa thanh toán']} value={thanhToan} onChange={v => { setThanhToan(v); setPage(1) }} />
+          <Select placeholder="Nhận hàng" width="w-28" options={Object.values(deliveryMethodLabel)} value={nhanHang} onChange={v => { setNhanHang(v); setPage(1) }} />
+          <Select placeholder="Mã vận đơn" width="w-28" options={['Đã có mã', 'Chưa có mã']} value={maVanDonFilter} onChange={v => { setMaVanDonFilter(v); setPage(1) }} />
+          <Select placeholder="Sắp xếp" width="w-36" options={Object.keys(SORT_OPTIONS)} value={sort} onChange={v => { setSort(v as keyof typeof SORT_OPTIONS); setPage(1) }} />
         </FilterBar>
         {loading ? <Spinner /> : items.length === 0 ? (
           <div className="text-xs text-slate-400 py-12 text-center">Không có đơn hàng nào</div>
         ) : (
           <Table
-            cols={['Mã đơn', 'Ngày tạo', 'Khách hàng', 'SĐT', 'Số SP', 'Tổng tiền', 'Thanh toán', 'Trạng thái', 'Đã thu tiền', 'Nhận hàng', 'Mã vận đơn', 'Nhân viên', 'Thao tác']}
+            cols={['Thao tác', 'Mã đơn', 'Ngày tạo', 'Khách hàng', 'SĐT', 'Số SP', 'Tổng tiền', 'Thanh toán', 'Trạng thái', 'Đã thu tiền', 'Nhận hàng', 'Mã vận đơn', 'Nhân viên']}
             rows={items.map(o => [
+              <div className="flex gap-1">
+                <TinyBtn title="Xem" onClick={() => onDetail(o.id)}><Eye size={12} strokeWidth={1.75} /></TinyBtn>
+                {o.invoice ? (
+                  <TinyBtn title="Xuất PDF" onClick={() => api.invoices.openPdf(o.invoice!.id).catch(err => dialog.alert(err instanceof ApiError ? err.message : 'Không thể tải hóa đơn.'))}>
+                    <FileDown size={12} strokeWidth={1.75} />
+                  </TinyBtn>
+                ) : o.trangThai === 'DANG_XU_LY' && (
+                  <TinyBtn title="Phiếu tạm tính" onClick={() => api.orders.openPreviewPdf(o.id).catch(err => dialog.alert(err instanceof ApiError ? err.message : 'Không thể tải phiếu tạm tính.'))}>
+                    <FileDown size={12} strokeWidth={1.75} />
+                  </TinyBtn>
+                )}
+              </div>,
               <button onClick={() => onDetail(o.id)} className="font-mono text-[10px] font-semibold hover:underline cursor-pointer" style={{ color: '#1a56db' }}>{o.ma}</button>,
               new Date(o.createdAt).toLocaleDateString('vi-VN'), o.khachHang.hoTen, o.khachHang.sdt,
               <span className="font-semibold">{o.items.length}</span>,
@@ -119,7 +133,6 @@ export function OrdersScreen({ onDetail, onCreate, onViewCustomer }: {
               <Badge label={o.phuongThucNhanHang === 'SHIP' && o.donViVanChuyen ? shippingCarrierLabel[o.donViVanChuyen] : deliveryMethodLabel[o.phuongThucNhanHang]} />,
               o.maVanDon ? <span className="font-mono text-[10px] text-slate-700">{o.maVanDon}</span> : <span className="text-slate-300">—</span>,
               o.nhanVien.hoTen,
-              <TinyBtn onClick={() => onDetail(o.id)}>Xem</TinyBtn>,
             ])}
           />
         )}

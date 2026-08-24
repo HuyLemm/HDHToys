@@ -43,11 +43,14 @@ export async function create(req: Request, res: Response) {
 
 const updateSchema = z.object({
   hoTen: z.string().min(1).optional(),
-  email: z.string().email().optional(),
-  ngaySinh: z.coerce.date().optional(),
-  diaChi: z.string().optional(),
-  luuY: z.string().optional(),
-  linkFacebook: z.string().optional(),
+  // .nullable() (không chỉ .optional()) — cho phép gửi null để XÓA giá trị đã
+  // lưu (khác với bỏ hẳn field, nghĩa là "không đổi"). Không cho gửi "" vì
+  // email rỗng vẫn phải qua .email(), frontend gửi null khi người dùng xóa hết ô.
+  email: z.string().email().nullable().optional(),
+  ngaySinh: z.coerce.date().nullable().optional(),
+  diaChi: z.string().nullable().optional(),
+  luuY: z.string().nullable().optional(),
+  linkFacebook: z.string().nullable().optional(),
   nguonKhachHang: z.enum(["TAI_CUA_HANG", "DIEN_THOAI", "FACEBOOK", "ZALO", "TIKTOK", "KHAC"]).optional(),
   hangKhachHang: z.enum(["NEW", "MEMBER", "VIP"]).optional(),
   diemTichLuy: z.number().int().min(0).optional(),

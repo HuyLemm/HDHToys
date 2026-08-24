@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, Eye, Trash2 } from 'lucide-react'
 import { Btn, FilterBar, SearchInput, Select, Table, Pagination, TinyBtn, Badge, Spinner, Modal, Field, Input, ErrorBox } from '../components/ui'
 import { api, ApiError, type LoaiSanPham, type Product, type ProductStatus } from '../lib/api'
 import { loaiSanPhamLabel, productStatusLabel, reverseLookup } from '../lib/labels'
@@ -69,18 +69,18 @@ export function ProductsScreen({ onDetail }: { onDetail: (id: string) => void })
         </FilterBar>
         {loading ? <Spinner /> : (
           <Table
-            cols={['Ảnh', 'SKU', 'Tên sản phẩm', 'Danh mục', 'Nhà cung cấp', 'Giá vốn', 'Giá bán', 'Tồn kho', 'Đã bán', 'Loại', 'Trạng thái', 'Thao tác']}
+            cols={['Thao tác', 'Ảnh', 'SKU', 'Tên sản phẩm', 'Danh mục', 'Nhà cung cấp', 'Giá vốn', 'Giá bán', 'Tồn kho', 'Đã bán', 'Loại', 'Trạng thái']}
             rows={items.map(p => [
+              <div className="flex gap-1">
+                <TinyBtn title="Xem" onClick={() => onDetail(p.id)}><Eye size={12} strokeWidth={1.75} /></TinyBtn>
+                <TinyBtn danger title="Xóa" onClick={() => handleDelete(p)}><Trash2 size={12} strokeWidth={1.75} /></TinyBtn>
+              </div>,
               <ProductThumb productId={p.id} />,
               <span className="font-mono text-[10px] font-semibold text-slate-600">{p.sku}</span>,
               <button onClick={() => onDetail(p.id)} className="font-medium text-slate-800 hover:underline cursor-pointer text-left max-w-36 truncate block">{p.ten}</button>,
               p.danhMuc, p.nhaCungCap, `${p.giaVon.toLocaleString('vi-VN')} VNĐ`, `${p.giaBan.toLocaleString('vi-VN')} VNĐ`,
               <span className={`font-bold ${p.tonKho === 0 ? 'text-red-500' : p.tonKho <= p.tonKhoToiThieu ? 'text-amber-600' : 'text-slate-800'}`}>{p.tonKho}</span>,
               p.daBan, <Badge label={loaiSanPhamLabel[p.loaiSanPham]} />, <Badge label={productStatusLabel[p.trangThai]} />,
-              <div className="flex gap-1">
-                <TinyBtn onClick={() => onDetail(p.id)}>Xem</TinyBtn>
-                <TinyBtn danger onClick={() => handleDelete(p)}>Xóa</TinyBtn>
-              </div>,
             ])}
           />
         )}

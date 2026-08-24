@@ -125,6 +125,58 @@ describe("orders.service order lifecycle (integration)", () => {
     await expect(ordersService.updateShippingFee(order.id, 99_999)).rejects.toThrow()
   })
 
+  it("lets a customer deposit after order creation, booking the increase as THU", async () => {
+    const order = await ordersService.create({
+      khachHangId: customerId,
+      kenhBan: "TAI_CUA_HANG",
+      phuongThucThanhToan: "TIEN_MAT",
+      items: [{ productId, soLuong: 1, giamGia: 0 }],
+      fallbackNhanVienId: staffId,
+    })
+    orderIds.push(order.id)
+    expect(order.tienCoc).toBe(0)
+
+    const updated = await ordersService.updateDeposit(order.id, 40_000, staffId)
+    expect(updated.tienCoc).toBe(40_000)
+
+    const entries = await prisma.incomeExpense.findMany({ where: { noiDung: { contains: order.ma }, loai: "THU" } })
+    expect(entries.reduce((s, e) => s + e.soTien, 0)).toBe(40_000)
+  })
+
+  it("books a CHI when the deposit is corrected downward", async () => {
+    const order = await ordersService.create({
+      khachHangId: customerId,
+      kenhBan: "TAI_CUA_HANG",
+      phuongThucThanhToan: "TIEN_MAT",
+      tienCoc: 60_000,
+      items: [{ productId, soLuong: 1, giamGia: 0 }],
+      fallbackNhanVienId: staffId,
+    })
+    orderIds.push(order.id)
+
+    const updated = await ordersService.updateDeposit(order.id, 25_000, staffId)
+    expect(updated.tienCoc).toBe(25_000)
+
+    const entries = await prisma.incomeExpense.findMany({ where: { noiDung: { contains: order.ma } } })
+    const net = entries.reduce((s, e) => s + (e.loai === "THU" ? e.soTien : -e.soTien), 0)
+    expect(net).toBe(25_000) // 60k cọc ban đầu - 35k hoàn lại phần chênh lệch
+  })
+
+  it("locks the deposit once the order has completed", async () => {
+    const order = await ordersService.create({
+      khachHangId: customerId,
+      kenhBan: "TAI_CUA_HANG",
+      phuongThucThanhToan: "TIEN_MAT",
+      items: [{ productId, soLuong: 1, giamGia: 0 }],
+      fallbackNhanVienId: staffId,
+    })
+    orderIds.push(order.id)
+    await ordersService.updateStatus({ orderId: order.id, trangThai: "DANG_XU_LY", nguoiThucHienId: staffId })
+    await ordersService.updateStatus({ orderId: order.id, trangThai: "HOAN_THANH", nguoiThucHienId: staffId })
+
+    await expect(ordersService.updateDeposit(order.id, 50_000, staffId)).rejects.toThrow()
+  })
+
   it("rejects a per-item discount larger than that line's own total (no free-via-discount loophole)", async () => {
     await expect(
       ordersService.create({

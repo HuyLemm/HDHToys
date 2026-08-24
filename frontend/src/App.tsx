@@ -135,7 +135,7 @@ function AppShell() {
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: '#f0f2f7' }}>
-      <Sidebar active={nav.screen} onNav={go} collapsed={collapsed} mobileOpen={mobileNavOpen} onCloseMobile={() => setMobileNavOpen(false)} />
+      <Sidebar active={nav.screen} onNav={go} collapsed={collapsed} onToggleCollapsed={toggleSidebar} mobileOpen={mobileNavOpen} onCloseMobile={() => setMobileNavOpen(false)} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header title={titles[nav.screen] ?? ''} onToggleSidebar={toggleSidebar} onNav={go} />
         <main className="flex-1 overflow-y-auto">

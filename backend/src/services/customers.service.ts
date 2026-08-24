@@ -61,11 +61,11 @@ export function update(
   id: string,
   data: Partial<{
     hoTen: string
-    email: string
-    ngaySinh: Date
-    diaChi: string
-    luuY: string
-    linkFacebook: string
+    email: string | null
+    ngaySinh: Date | null
+    diaChi: string | null
+    luuY: string | null
+    linkFacebook: string | null
     nguonKhachHang: SalesChannel
     hangKhachHang: CustomerTier
     diemTichLuy: number

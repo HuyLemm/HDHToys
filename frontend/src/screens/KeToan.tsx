@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import { CircleCheck, CircleAlert, RefreshCw } from 'lucide-react'
+import { CircleCheck, CircleAlert, RefreshCw, Wallet, Trash2 } from 'lucide-react'
 import { SectionHeader, Tabs, Table, Badge, Spinner, Btn, Field, Input, ErrorBox, TinyBtn } from '../components/ui'
 import { api, type Debt, type DebtType, type PaymentTransaction, ApiError } from '../lib/api'
 import { debtStatusLabel, debtTypeLabel, reverseLookup, paymentReconciliationStatusLabel } from '../lib/labels'
@@ -156,18 +156,18 @@ function DebtsTab() {
       <ErrorBox message={deleteError} />
       {items.length === 0 ? <div className="text-xs text-slate-400 py-8 text-center">Chưa có công nợ nào</div> : (
         <Table
-          cols={['Đối tượng', 'Loại', 'Ngày phát sinh', 'Ngày đến hạn', 'Tổng tiền', 'Đã thanh toán', 'Còn lại', 'Trạng thái', 'Thao tác']}
+          cols={['Thao tác', 'Đối tượng', 'Loại', 'Ngày phát sinh', 'Ngày đến hạn', 'Tổng tiền', 'Đã thanh toán', 'Còn lại', 'Trạng thái']}
           rows={items.map(d => [
+            <div className="flex gap-1">
+              {d.conLai > 0 && <PaymentButton debt={d} onDone={reload} />}
+              <TinyBtn danger title="Xóa" onClick={() => handleDelete(d)}><Trash2 size={12} strokeWidth={1.75} /></TinyBtn>
+            </div>,
             <span className="font-medium text-slate-800">{d.doiTuong}</span>,
             <span className={`text-xs font-semibold ${d.loai === 'PHAI_THU' ? 'text-emerald-600' : 'text-red-500'}`}>{debtTypeLabel[d.loai]}</span>,
             new Date(d.ngayPhatSinh).toLocaleDateString('vi-VN'), new Date(d.ngayDenHan).toLocaleDateString('vi-VN'),
             <span className="font-semibold">{d.soTien.toLocaleString('vi-VN')} VNĐ</span>,
             `${d.daThanhToan.toLocaleString('vi-VN')} VNĐ`, `${d.conLai.toLocaleString('vi-VN')} VNĐ`,
             <Badge label={debtStatusLabel[d.trangThai]} />,
-            <div className="flex gap-1 items-center">
-              {d.conLai > 0 && <PaymentButton debt={d} onDone={reload} />}
-              <TinyBtn danger onClick={() => handleDelete(d)}>Xóa</TinyBtn>
-            </div>,
           ])}
         />
       )}
@@ -182,7 +182,11 @@ function PaymentButton({ debt, onDone }: { debt: Debt; onDone: () => void }) {
   const [error, setError] = useState<string | null>(null)
 
   if (amount === null) {
-    return <button onClick={() => setAmount(debt.conLai)} className="text-[10px] px-1.5 py-0.5 rounded border border-slate-200 hover:bg-slate-50 cursor-pointer">Thanh toán</button>
+    return (
+      <TinyBtn onClick={() => setAmount(debt.conLai)} title="Thanh toán">
+        <Wallet size={12} strokeWidth={1.75} />
+      </TinyBtn>
+    )
   }
 
   async function submit() {

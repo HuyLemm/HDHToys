@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Trash2 } from 'lucide-react'
 import { BackBtn, FilterBar, SearchInput, Select, Table, Pagination, Spinner, TinyBtn, ErrorBox } from '../components/ui'
 import { api, ApiError, type InventoryTransaction, type InventoryTransactionType } from '../lib/api'
 import { inventoryTransactionTypeLabel, reverseLookup } from '../lib/labels'
@@ -72,8 +73,9 @@ export function InventoryHistoryScreen({ onBack }: { onBack: () => void }) {
           <div className="text-xs text-slate-400 py-12 text-center">Chưa có giao dịch kho nào</div>
         ) : (
           <Table
-            cols={['Thời gian', 'Mã GD', 'SKU', 'Sản phẩm', 'Loại', 'Thay đổi', 'Tồn trước', 'Tồn sau', 'Người thực hiện', 'Tham chiếu', 'Ghi chú', ...(staff?.vaiTro === 'ADMIN' ? ['Thao tác'] : [])]}
+            cols={[...(staff?.vaiTro === 'ADMIN' ? ['Thao tác'] : []), 'Thời gian', 'Mã GD', 'SKU', 'Sản phẩm', 'Loại', 'Thay đổi', 'Tồn trước', 'Tồn sau', 'Người thực hiện', 'Tham chiếu', 'Ghi chú']}
             rows={items.map(h => [
+              ...(staff?.vaiTro === 'ADMIN' ? [<TinyBtn danger title="Xóa" onClick={() => handleDelete(h)}><Trash2 size={12} strokeWidth={1.75} /></TinyBtn>] : []),
               <span className="text-[10px] text-slate-500">{new Date(h.createdAt).toLocaleString('vi-VN')}</span>,
               <span className="font-mono text-[10px] font-semibold text-slate-700">{h.maGiaoDich}</span>,
               <span className="font-mono text-[10px] text-slate-500">{h.product.sku}</span>,
@@ -83,7 +85,6 @@ export function InventoryHistoryScreen({ onBack }: { onBack: () => void }) {
               String(h.tonTruoc), String(h.tonSau), h.nguoiThucHien.hoTen,
               <span className="font-mono text-[10px]" style={{ color: '#1a56db' }}>{h.thamChieu ?? '—'}</span>,
               <span className="text-[10px] text-slate-500">{h.ghiChu ?? '—'}</span>,
-              ...(staff?.vaiTro === 'ADMIN' ? [<TinyBtn danger onClick={() => handleDelete(h)}>Xóa</TinyBtn>] : []),
             ])}
           />
         )}
