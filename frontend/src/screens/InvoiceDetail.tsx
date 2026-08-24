@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { FileDown, Printer } from 'lucide-react'
+import { FileDown } from 'lucide-react'
 import { BackBtn, Badge, Btn, HdhLogo, Spinner, ErrorBox } from '../components/ui'
 import { api, ApiError, type Invoice } from '../lib/api'
 import { paymentMethodLabel, loaiSanPhamLabel, deliveryMethodLabel, shippingCarrierLabel, salesChannelLabel } from '../lib/labels'
@@ -39,9 +39,6 @@ export function InvoiceDetailScreen({ invoiceId, onBack, onViewOrder }: {
         <div className="ml-auto flex gap-2">
           <Btn variant="secondary" small onClick={() => api.invoices.openPdf(invoice.id).catch(err => dialog.alert(err instanceof ApiError ? err.message : 'Không thể tải hóa đơn.'))}>
             <FileDown size={13} strokeWidth={1.75} /> Xuất PDF
-          </Btn>
-          <Btn variant="secondary" small onClick={() => api.invoices.openPdf(invoice.id).catch(err => dialog.alert(err instanceof ApiError ? err.message : 'Không thể tải hóa đơn.'))}>
-            <Printer size={13} strokeWidth={1.75} /> In hóa đơn
           </Btn>
           <Btn small onClick={() => onViewOrder(order.id)}>Xem đơn hàng</Btn>
           {staff?.vaiTro === 'ADMIN' && <Btn variant="danger" small onClick={handleDelete}>Xóa hóa đơn</Btn>}

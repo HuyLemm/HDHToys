@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { FileDown, Printer } from 'lucide-react'
+import { FileDown } from 'lucide-react'
 import { BackBtn, Badge, Btn, Table, Spinner, ErrorBox, Input } from '../components/ui'
 import { api, ApiError, type Order, type OrderStatus, type DeliveryMethod, type ShippingCarrier } from '../lib/api'
 import { orderStatusLabel, paymentMethodLabel, salesChannelLabel, deliveryMethodLabel, shippingCarrierLabel, loaiSanPhamLabel } from '../lib/labels'
@@ -138,14 +138,9 @@ export function OrderDetailScreen({ orderId, onBack }: { orderId: string; onBack
             {updatingPayment ? 'Đang lưu...' : order.daThanhToan ? 'Đánh dấu chưa thanh toán' : 'Đánh dấu đã thanh toán'}
           </Btn>
           {invoiceId && (
-            <>
-              <Btn variant="secondary" small onClick={() => api.invoices.openPdf(invoiceId).catch(err => dialog.alert(err instanceof ApiError ? err.message : 'Không thể tải hóa đơn.'))}>
-                <FileDown size={13} strokeWidth={1.75} /> Xuất PDF
-              </Btn>
-              <Btn variant="secondary" small onClick={() => api.invoices.openPdf(invoiceId).catch(err => dialog.alert(err instanceof ApiError ? err.message : 'Không thể tải hóa đơn.'))}>
-                <Printer size={13} strokeWidth={1.75} /> In hóa đơn
-              </Btn>
-            </>
+            <Btn variant="secondary" small onClick={() => api.invoices.openPdf(invoiceId).catch(err => dialog.alert(err instanceof ApiError ? err.message : 'Không thể tải hóa đơn.'))}>
+              <FileDown size={13} strokeWidth={1.75} /> Xuất PDF
+            </Btn>
           )}
           {nextOptions.length > 0 && (
             <select
