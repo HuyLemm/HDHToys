@@ -1,6 +1,12 @@
 services:
+  # Đổi tên + thêm region so với service cũ ("hdhtoys-backend") vì Render
+  # KHÔNG cho đổi vùng của service đã tạo — dùng tên mới để Render tạo service
+  # THẬT MỚI ở Singapore (cùng vùng với Neon, ap-southeast-1) thay vì cố sửa
+  # tại chỗ. Service cũ vẫn chạy bình thường tới khi bạn tự xóa sau khi đã
+  # chuyển VITE_API_URL trên Vercel sang service mới và xác nhận ổn.
   - type: web
-    name: hdhtoys-backend
+    name: hdhtoys-backend-sg
+    region: singapore
     runtime: node
     rootDir: backend
     plan: free
