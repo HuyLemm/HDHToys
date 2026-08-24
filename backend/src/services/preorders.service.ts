@@ -169,13 +169,28 @@ export async function remove(id: string) {
   await prisma.preorder.delete({ where: { id } })
 }
 
-export async function cancel(id: string) {
+export async function cancel(id: string, nguoiThucHienId: string) {
   const current = await prisma.preorder.findUnique({ where: { id } })
   if (!current) throw notFound("Không tìm thấy đơn đặt trước.")
   if (current.trangThai === "DA_CHUYEN_DON") throw badRequest("Đơn đặt trước đã chuyển thành đơn hàng, không thể hủy.")
   if (current.trangThai === "DA_HUY") throw badRequest("Đơn đặt trước đã hủy trước đó.")
 
-  return prisma.preorder.update({ where: { id }, data: { trangThai: "DA_HUY" }, include: preorderInclude })
+  return prisma.$transaction(async (tx) => {
+    // Hoàn cọc luôn cho khách khi hủy đặt trước — tiền cọc đã ghi Thu lúc tạo
+    // đơn đặt trước (create()), nếu không đảo ngược sẽ mãi nằm trong sổ quỹ
+    // dù đơn đặt trước không còn thành hiện thực nữa.
+    if (current.tienCoc > 0) {
+      await ordersService.createLedgerEntry(tx, {
+        loai: "CHI",
+        danhMuc: "BAN_HANG",
+        noiDung: `Hoàn cọc đơn đặt trước ${current.ma}`,
+        soTien: current.tienCoc,
+        nguoiTaoId: nguoiThucHienId,
+      })
+    }
+
+    return tx.preorder.update({ where: { id }, data: { trangThai: "DA_HUY" }, include: preorderInclude })
+  })
 }
 
 /**

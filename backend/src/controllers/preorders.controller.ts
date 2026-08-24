@@ -65,7 +65,7 @@ export async function update(req: Request, res: Response) {
 }
 
 export async function cancel(req: Request, res: Response) {
-  res.json(await preordersService.cancel(req.params.id))
+  res.json(await preordersService.cancel(req.params.id, req.auth!.sub))
 }
 
 export async function remove(req: Request, res: Response) {

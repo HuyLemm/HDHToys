@@ -373,7 +373,8 @@ async function applyOrderCompletion(
   }
 }
 
-async function createLedgerEntry(
+/** Dùng chung với preorders.service.ts#cancel (hoàn cọc khi hủy đặt trước). */
+export async function createLedgerEntry(
   tx: Prisma.TransactionClient,
   params: { loai: "THU" | "CHI"; danhMuc: IncomeExpenseCategory; noiDung: string; soTien: number; nguoiTaoId: string },
 ) {
@@ -457,6 +458,17 @@ export async function updateStatus(params: { orderId: string; trangThai: OrderSt
           danhMuc: "NHAP_HANG",
           noiDung: `Hoàn giá vốn do hoàn tiền đơn hàng ${current.ma}`,
           soTien: giaVonDon,
+          nguoiTaoId: nguoiThucHienId,
+        })
+      }
+      // Hoàn cọc luôn cho khách khi đơn bị Hoàn tiền — tiền cọc là một phần
+      // của cùng giao dịch đã bị hủy, không tách riêng khỏi 2 bút toán trên.
+      if (current.tienCoc > 0) {
+        await createLedgerEntry(tx, {
+          loai: "CHI",
+          danhMuc: "BAN_HANG",
+          noiDung: `Hoàn cọc đơn hàng ${current.ma}`,
+          soTien: current.tienCoc,
           nguoiTaoId: nguoiThucHienId,
         })
       }

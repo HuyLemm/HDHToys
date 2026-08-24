@@ -578,9 +578,9 @@ export const api = {
       ),
     byTime: (params?: { range?: RangeKey }) => get<{ items: { ngay: string; doanhThu: number; soDon: number }[] }>(`/revenue/by-time${qs(params)}`),
     byCategory: (params?: { range?: RangeKey }) =>
-      get<{ items: { danhMuc: string; doanhThu: number }[] }>(`/revenue/by-category${qs(params)}`),
+      get<{ items: { danhMuc: string; doanhThu: number; giaVon: number; loiNhuan: number }[] }>(`/revenue/by-category${qs(params)}`),
     byProduct: (params?: { range?: RangeKey }) =>
-      get<{ items: { ten: string; sku: string; soLuong: number; doanhThu: number }[] }>(`/revenue/by-product${qs(params)}`),
+      get<{ items: { ten: string; sku: string; soLuong: number; doanhThu: number; giaVon: number; loiNhuan: number }[] }>(`/revenue/by-product${qs(params)}`),
     byStaff: (params?: { range?: RangeKey }) =>
       get<{ items: { hoTen: string; doanhThu: number; soDon: number }[] }>(`/revenue/by-staff${qs(params)}`),
     byPaymentMethod: (params?: { range?: RangeKey }) =>
@@ -589,6 +589,14 @@ export const api = {
       get<
         Paginated<{ ngay: string; soDon: number; doanhThu: number; giamGia: number; hoanTien: number; giaVon: number; loiNhuanGop: number }>
       >(`/revenue/detail${qs(params)}`),
+    inventoryTurnover: (params?: { range?: RangeKey }) =>
+      get<{ items: { productId: string; sku: string; ten: string; tonKho: number; soLuongBan: number; vongQuay: number | null }[] }>(
+        `/revenue/inventory-turnover${qs(params)}`,
+      ),
+    repeatCustomers: (params?: { range?: RangeKey }) =>
+      get<{ tongKhachHang: number; khachMuaLai: number; tyLeMuaLai: number; items: { hoTen: string; sdt: string; soDon: number; tongChiTieu: number }[] }>(
+        `/revenue/repeat-customers${qs(params)}`,
+      ),
     exportUrl: (params?: { range?: RangeKey }) => `${API_BASE}/revenue/export${qs(params)}`,
   },
 

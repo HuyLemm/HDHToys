@@ -46,6 +46,16 @@ export async function getByPaymentMethod(req: Request, res: Response) {
   res.json(await revenueService.getByPaymentMethod(tuNgay, denNgay))
 }
 
+export async function getInventoryTurnover(req: Request, res: Response) {
+  const { tuNgay, denNgay } = parseRange(req.query)
+  res.json(await revenueService.getInventoryTurnover(tuNgay, denNgay))
+}
+
+export async function getRepeatCustomers(req: Request, res: Response) {
+  const { tuNgay, denNgay } = parseRange(req.query)
+  res.json(await revenueService.getRepeatCustomers(tuNgay, denNgay))
+}
+
 const detailQuerySchema = rangeSchema.extend({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),

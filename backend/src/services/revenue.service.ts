@@ -58,11 +58,18 @@ export async function getByCategory(tuNgay: Date, denNgay: Date) {
     include: { product: { select: { danhMuc: true } } },
   })
 
-  const byCategory = new Map<string, number>()
-  for (const i of items) byCategory.set(i.product.danhMuc, (byCategory.get(i.product.danhMuc) ?? 0) + i.thanhTien)
+  const byCategory = new Map<string, { doanhThu: number; giaVon: number }>()
+  for (const i of items) {
+    const bucket = byCategory.get(i.product.danhMuc) ?? { doanhThu: 0, giaVon: 0 }
+    bucket.doanhThu += i.thanhTien
+    bucket.giaVon += i.soLuong * i.giaVon
+    byCategory.set(i.product.danhMuc, bucket)
+  }
 
   return {
-    items: [...byCategory.entries()].map(([danhMuc, doanhThu]) => ({ danhMuc, doanhThu })).sort((a, b) => b.doanhThu - a.doanhThu),
+    items: [...byCategory.entries()]
+      .map(([danhMuc, v]) => ({ danhMuc, doanhThu: v.doanhThu, giaVon: v.giaVon, loiNhuan: v.doanhThu - v.giaVon }))
+      .sort((a, b) => b.doanhThu - a.doanhThu),
   }
 }
 
@@ -72,18 +79,93 @@ export async function getByProduct(tuNgay: Date, denNgay: Date) {
     include: { product: { select: { id: true, sku: true, ten: true } } },
   })
 
-  const byProduct = new Map<string, { ten: string; sku: string; soLuong: number; doanhThu: number }>()
+  const byProduct = new Map<string, { ten: string; sku: string; soLuong: number; doanhThu: number; giaVon: number }>()
   for (const i of items) {
     const existing = byProduct.get(i.productId)
     if (existing) {
       existing.soLuong += i.soLuong
       existing.doanhThu += i.thanhTien
+      existing.giaVon += i.soLuong * i.giaVon
     } else {
-      byProduct.set(i.productId, { ten: i.product.ten, sku: i.product.sku, soLuong: i.soLuong, doanhThu: i.thanhTien })
+      byProduct.set(i.productId, { ten: i.product.ten, sku: i.product.sku, soLuong: i.soLuong, doanhThu: i.thanhTien, giaVon: i.soLuong * i.giaVon })
     }
   }
 
-  return { items: [...byProduct.values()].sort((a, b) => b.doanhThu - a.doanhThu) }
+  return {
+    items: [...byProduct.values()]
+      .map((p) => ({ ...p, loiNhuan: p.doanhThu - p.giaVon }))
+      .sort((a, b) => b.doanhThu - a.doanhThu),
+  }
+}
+
+/**
+ * Vòng quay tồn kho theo sản phẩm — ước tính đơn giản (số lượng bán trong kỳ
+ * / tồn kho hiện tại), KHÔNG phải công thức chuẩn (thường dùng tồn kho trung
+ * bình theo từng mốc thời gian, nhưng hệ thống chưa lưu lịch sử tồn kho theo
+ * ngày). Chỉ dùng để so sánh tương đối sản phẩm nào bán nhanh/chậm, không
+ * phải số liệu kế toán chính xác.
+ */
+export async function getInventoryTurnover(tuNgay: Date, denNgay: Date) {
+  const [soldItems, products] = await Promise.all([
+    prisma.orderItem.findMany({
+      where: { order: { trangThai: "HOAN_THANH", createdAt: { gte: tuNgay, lte: denNgay } } },
+      select: { productId: true, soLuong: true },
+    }),
+    prisma.product.findMany({
+      where: { trangThai: { not: "NGUNG_KINH_DOANH" } },
+      select: { id: true, sku: true, ten: true, tonKho: true },
+    }),
+  ])
+
+  const soldByProduct = new Map<string, number>()
+  for (const i of soldItems) soldByProduct.set(i.productId, (soldByProduct.get(i.productId) ?? 0) + i.soLuong)
+
+  const items = products.map((p) => {
+    const soLuongBan = soldByProduct.get(p.id) ?? 0
+    return {
+      productId: p.id,
+      sku: p.sku,
+      ten: p.ten,
+      tonKho: p.tonKho,
+      soLuongBan,
+      // null = hết hàng (tonKho = 0) — không chia được, không phải "0 vòng quay".
+      vongQuay: p.tonKho > 0 ? Number((soLuongBan / p.tonKho).toFixed(2)) : null,
+    }
+  })
+
+  return {
+    // Bán chậm nhất trước (vongQuay thấp = tồn lâu) — sản phẩm hết hàng (null) xếp cuối vì không phải "chậm".
+    items: items.sort((a, b) => (a.vongQuay ?? Infinity) - (b.vongQuay ?? Infinity)),
+  }
+}
+
+/**
+ * Khách mua lại trong kỳ — đếm theo số đơn Hoàn thành, không phải số lượt
+ * tương tác (nhắn hỏi, đặt trước...). soDon >= 2 mới tính là "mua lại".
+ */
+export async function getRepeatCustomers(tuNgay: Date, denNgay: Date) {
+  const orders = await prisma.order.findMany({
+    where: { trangThai: "HOAN_THANH", createdAt: { gte: tuNgay, lte: denNgay } },
+    select: { khachHangId: true, tongCong: true, khachHang: { select: { hoTen: true, sdt: true } } },
+  })
+
+  const byCustomer = new Map<string, { hoTen: string; sdt: string; soDon: number; tongChiTieu: number }>()
+  for (const o of orders) {
+    const bucket = byCustomer.get(o.khachHangId) ?? { hoTen: o.khachHang.hoTen, sdt: o.khachHang.sdt, soDon: 0, tongChiTieu: 0 }
+    bucket.soDon += 1
+    bucket.tongChiTieu += o.tongCong
+    byCustomer.set(o.khachHangId, bucket)
+  }
+
+  const all = [...byCustomer.values()]
+  const repeat = all.filter((c) => c.soDon >= 2).sort((a, b) => b.soDon - a.soDon || b.tongChiTieu - a.tongChiTieu)
+
+  return {
+    tongKhachHang: all.length,
+    khachMuaLai: repeat.length,
+    tyLeMuaLai: all.length > 0 ? Number(((repeat.length / all.length) * 100).toFixed(1)) : 0,
+    items: repeat,
+  }
 }
 
 export async function getByStaff(tuNgay: Date, denNgay: Date) {

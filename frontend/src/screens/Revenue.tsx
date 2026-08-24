@@ -26,6 +26,9 @@ export function RevenueScreen() {
   const [summary, setSummary] = useState<Awaited<ReturnType<typeof api.revenue.summary>> | null>(null)
   const [byTime, setByTime] = useState<{ ngay: string; doanhThu: number; soDon: number }[]>([])
   const [byPayment, setByPayment] = useState<{ phuongThuc: string; doanhThu: number; soDon: number }[]>([])
+  const [byProduct, setByProduct] = useState<Awaited<ReturnType<typeof api.revenue.byProduct>>['items']>([])
+  const [turnover, setTurnover] = useState<Awaited<ReturnType<typeof api.revenue.inventoryTurnover>>['items']>([])
+  const [repeatCustomers, setRepeatCustomers] = useState<Awaited<ReturnType<typeof api.revenue.repeatCustomers>> | null>(null)
   const [detail, setDetail] = useState<Awaited<ReturnType<typeof api.revenue.detail>> | null>(null)
   const pageSize = 10
 
@@ -35,8 +38,11 @@ export function RevenueScreen() {
       api.revenue.summary({ range }),
       api.revenue.byTime({ range }),
       api.revenue.byPaymentMethod({ range }),
-    ]).then(([s, t, p]) => {
-      setSummary(s); setByTime(t.items); setByPayment(p.items); setLoading(false)
+      api.revenue.byProduct({ range }),
+      api.revenue.inventoryTurnover({ range }),
+      api.revenue.repeatCustomers({ range }),
+    ]).then(([s, t, p, bp, inv, rc]) => {
+      setSummary(s); setByTime(t.items); setByPayment(p.items); setByProduct(bp.items); setTurnover(inv.items); setRepeatCustomers(rc); setLoading(false)
     })
     setPage(1)
   }, [range])
@@ -118,6 +124,58 @@ export function RevenueScreen() {
               />
             )}
             {detail && <Pagination total={detail.total} page={page} pageSize={pageSize} onChange={setPage} />}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-white rounded-lg border border-slate-200 p-4">
+              <SectionHeader title="Lợi nhuận theo sản phẩm" />
+              {byProduct.length === 0 ? <div className="text-xs text-slate-400 py-8 text-center">Chưa có dữ liệu</div> : (
+                <Table
+                  cols={['Sản phẩm', 'SL bán', 'Doanh thu', 'Giá vốn', 'Lợi nhuận']}
+                  rows={[...byProduct].sort((a, b) => b.loiNhuan - a.loiNhuan).slice(0, 10).map(p => [
+                    <span className="font-medium text-slate-800">{p.ten}</span>, String(p.soLuong),
+                    `${p.doanhThu.toLocaleString('vi-VN')} VNĐ`, `${p.giaVon.toLocaleString('vi-VN')} VNĐ`,
+                    <span className="font-semibold text-emerald-600">{p.loiNhuan.toLocaleString('vi-VN')} VNĐ</span>,
+                  ])}
+                />
+              )}
+            </div>
+
+            <div className="bg-white rounded-lg border border-slate-200 p-4">
+              <SectionHeader title="Vòng quay tồn kho (sản phẩm bán chậm nhất)" />
+              <div className="text-[11px] text-slate-400 mb-2">Ước tính = số lượng bán trong kỳ / tồn kho hiện tại — chỉ để so sánh tương đối, không phải số liệu kế toán.</div>
+              {turnover.length === 0 ? <div className="text-xs text-slate-400 py-8 text-center">Chưa có dữ liệu</div> : (
+                <Table
+                  cols={['Sản phẩm', 'Tồn kho', 'Đã bán', 'Vòng quay']}
+                  rows={turnover.filter(t => t.vongQuay !== null).slice(0, 10).map(t => [
+                    <span className="font-medium text-slate-800">{t.ten}</span>, String(t.tonKho), String(t.soLuongBan),
+                    <span className={t.vongQuay! < 0.2 ? 'font-semibold text-red-500' : 'text-slate-700'}>{t.vongQuay}</span>,
+                  ])}
+                />
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg border border-slate-200 p-4">
+            <SectionHeader title="Khách mua lại" />
+            {!repeatCustomers ? <Spinner /> : (
+              <>
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  <div className="bg-slate-50 rounded-lg px-4 py-3"><div className="text-xs text-slate-500">Tổng khách có đơn</div><div className="text-sm font-bold mt-1">{repeatCustomers.tongKhachHang}</div></div>
+                  <div className="bg-slate-50 rounded-lg px-4 py-3"><div className="text-xs text-slate-500">Khách mua lại (≥2 đơn)</div><div className="text-sm font-bold mt-1">{repeatCustomers.khachMuaLai}</div></div>
+                  <div className="bg-slate-50 rounded-lg px-4 py-3"><div className="text-xs text-slate-500">Tỷ lệ mua lại</div><div className="text-sm font-bold mt-1">{repeatCustomers.tyLeMuaLai}%</div></div>
+                </div>
+                {repeatCustomers.items.length === 0 ? <div className="text-xs text-slate-400 py-8 text-center">Chưa có khách mua lại trong kỳ này</div> : (
+                  <Table
+                    cols={['Khách hàng', 'SĐT', 'Số đơn', 'Tổng chi tiêu']}
+                    rows={repeatCustomers.items.slice(0, 10).map(c => [
+                      <span className="font-medium text-slate-800">{c.hoTen}</span>, c.sdt, `${c.soDon} đơn`,
+                      `${c.tongChiTieu.toLocaleString('vi-VN')} VNĐ`,
+                    ])}
+                  />
+                )}
+              </>
+            )}
           </div>
         </>
       )}
