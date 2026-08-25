@@ -95,7 +95,12 @@ export function OrderDetailScreen({ orderId, onBack }: { orderId: string; onBack
     }
   }
 
-  async function handleStatusChange(next: OrderStatus) {
+  async function handleStatusChange(next: OrderStatus, selectEl: HTMLSelectElement) {
+    if (!order) return
+    if (!(await dialog.confirm(`Chuyển đơn hàng "${order.ma}" sang trạng thái "${orderStatusLabel[next]}"? Không thể hoàn tác.`))) {
+      selectEl.value = ''
+      return
+    }
     setError(null)
     setUpdating(true)
     try {
@@ -137,7 +142,7 @@ export function OrderDetailScreen({ orderId, onBack }: { orderId: string; onBack
             <select
               disabled={updating}
               defaultValue=""
-              onChange={e => e.target.value && handleStatusChange(e.target.value as OrderStatus)}
+              onChange={e => e.target.value && handleStatusChange(e.target.value as OrderStatus, e.target)}
               className="text-xs px-2.5 py-1.5 border border-slate-200 rounded-md bg-white cursor-pointer disabled:opacity-50"
             >
               <option value="" disabled>Cập nhật trạng thái</option>

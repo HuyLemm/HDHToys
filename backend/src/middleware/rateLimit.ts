@@ -1,4 +1,5 @@
 import rateLimit from "express-rate-limit"
+import { logSecurityEvent } from "../lib/securityLog.js"
 
 /**
  * Chặn brute-force mật khẩu ở /auth/login — giới hạn theo IP. Nhiều nhân
@@ -11,6 +12,10 @@ export const loginLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Đăng nhập sai quá nhiều lần, vui lòng thử lại sau 15 phút." },
+  handler: (req, res, _next, options) => {
+    logSecurityEvent("rate_limit_login", { ip: req.ip })
+    res.status(options.statusCode).json(options.message)
+  },
 })
 
 /**
@@ -25,4 +30,8 @@ export const apiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Quá nhiều yêu cầu, vui lòng thử lại sau." },
+  handler: (req, res, _next, options) => {
+    logSecurityEvent("rate_limit_api", { ip: req.ip, path: req.path })
+    res.status(options.statusCode).json(options.message)
+  },
 })

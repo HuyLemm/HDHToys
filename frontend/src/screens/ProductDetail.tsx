@@ -134,6 +134,18 @@ export function ProductDetailScreen({ productId, onBack }: { productId: string; 
     }
   }
 
+  async function handleDiscontinue() {
+    if (!product) return
+    if (!(await dialog.confirm(`Ngừng kinh doanh sản phẩm "${product.ten}"? Sản phẩm sẽ không thể bán tiếp cho tới khi mở bán lại.`, { danger: false, confirmLabel: 'Ngừng kinh doanh' }))) return
+    setDeleteError(null)
+    try {
+      await api.products.discontinue(product.id)
+      reload()
+    } catch (err) {
+      setDeleteError(err instanceof ApiError ? err.message : 'Không thể ngừng kinh doanh sản phẩm.')
+    }
+  }
+
   useEffect(() => {
     if (tab === 'Lịch sử kho') {
       api.inventory.history({ productId, pageSize: 50 }).then(res => setHistory(res.items))
@@ -154,7 +166,7 @@ export function ProductDetailScreen({ productId, onBack }: { productId: string; 
           {product.trangThai === 'NGUNG_KINH_DOANH' ? (
             <Btn small onClick={() => api.products.reactivate(product.id).then(reload)}>Mở bán lại</Btn>
           ) : (
-            <Btn variant="danger" small onClick={() => api.products.discontinue(product.id).then(reload)}>Ngừng kinh doanh</Btn>
+            <Btn variant="danger" small onClick={handleDiscontinue}>Ngừng kinh doanh</Btn>
           )}
           <Btn small onClick={() => setShowEdit(true)}>Chỉnh sửa</Btn>
           <Btn variant="danger" small onClick={handleDelete}>Xóa sản phẩm</Btn>

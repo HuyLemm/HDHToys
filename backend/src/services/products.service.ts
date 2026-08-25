@@ -3,6 +3,7 @@ import { fileTypeFromBuffer } from "file-type"
 import { prisma } from "../lib/prisma.js"
 import { resolveStockStatus } from "../lib/productStatus.js"
 import { badRequest, conflict, notFound } from "../errors/HttpError.js"
+import * as imageStorage from "../lib/imageStorage.js"
 
 export async function list(params: {
   q?: string
@@ -167,10 +168,15 @@ export async function remove(id: string) {
 const MAX_IMAGE_BYTES = 3 * 1024 * 1024
 const ALLOWED_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"]
 
+/** Trả về { data: Buffer, mimeType } bất kể ảnh đang lưu ở Postgres hay S3 — controller không cần biết/đổi gì. */
 export async function getImage(productId: string) {
   const image = await prisma.productImage.findUnique({ where: { productId } })
   if (!image) throw notFound("Sản phẩm này chưa có ảnh.")
-  return image
+  if (image.storageKey) {
+    const data = await imageStorage.getImageBuffer(image.storageKey)
+    return { data, mimeType: image.mimeType }
+  }
+  return { data: Buffer.from(image.data!), mimeType: image.mimeType }
 }
 
 /** Tham số mimeType không còn dùng để lưu — giữ lại chữ ký để controller không đổi, nhưng KHÔNG tin giá trị client khai; xem bên trong. */
@@ -190,17 +196,35 @@ export async function uploadImage(productId: string, data: Buffer, _declaredMime
   }
   const mimeType = detected.mime
 
+  // Nếu đã cấu hình object storage (S3_* env vars), lưu ở đó thay vì Postgres
+  // (tránh phình DB — xem lib/imageStorage.ts). Không thì giữ nguyên cách cũ.
+  if (imageStorage.isS3Configured) {
+    const storageKey = await imageStorage.putImage(productId, data, mimeType)
+    await prisma.productImage.upsert({
+      where: { productId },
+      create: { productId, storageKey, mimeType, data: null },
+      update: { storageKey, mimeType, data: null },
+    })
+    return
+  }
+
   // Buffer (Node) là Uint8Array<ArrayBufferLike> — Prisma's Bytes field kiểu
   // Uint8Array<ArrayBuffer> chặt hơn (loại trừ SharedArrayBuffer). Copy sang
   // Uint8Array thường để khớp kiểu, không ảnh hưởng nội dung dữ liệu.
   const bytes = new Uint8Array(data)
   await prisma.productImage.upsert({
     where: { productId },
-    create: { productId, data: bytes, mimeType },
-    update: { data: bytes, mimeType },
+    create: { productId, data: bytes, mimeType, storageKey: null },
+    update: { data: bytes, mimeType, storageKey: null },
   })
 }
 
 export async function deleteImage(productId: string) {
+  const existing = await prisma.productImage.findUnique({ where: { productId }, select: { storageKey: true } })
+  if (existing?.storageKey) {
+    // Không để lỗi xóa ở object storage (VD key đã mất từ trước) chặn luôn
+    // việc xóa bản ghi DB — thà còn rác mồ côi ở S3 còn hơn kẹt không xóa được nữa.
+    await imageStorage.deleteImage(existing.storageKey).catch(() => {})
+  }
   await prisma.productImage.deleteMany({ where: { productId } })
 }

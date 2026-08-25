@@ -3,6 +3,7 @@ import { z } from "zod"
 import { badRequest, unauthorized } from "../errors/HttpError.js"
 import { verifyWebhookSecret } from "../lib/webhookAuth.js"
 import { webhookAllowedIps } from "../lib/paymentConfig.js"
+import { logSecurityEvent } from "../lib/securityLog.js"
 import * as paymentsService from "../services/payments.service.js"
 
 const webhookSchema = z.object({
@@ -26,11 +27,13 @@ export async function webhook(req: Request, res: Response) {
   // chưa cấu hình. Dùng cùng thông báo lỗi với secret sai để không lộ cho
   // bên ngoài biết đã chặn ở lớp nào (IP hay secret).
   if (webhookAllowedIps.length > 0 && !webhookAllowedIps.includes(req.ip ?? "")) {
+    logSecurityEvent("webhook_rejected", { reason: "ip_not_allowed", ip: req.ip })
     throw unauthorized("Webhook secret không hợp lệ.")
   }
 
   const provided = extractSePayApiKey(req.header("Authorization"))
   if (!verifyWebhookSecret(provided)) {
+    logSecurityEvent("webhook_rejected", { reason: "bad_secret", ip: req.ip })
     throw unauthorized("Webhook secret không hợp lệ.")
   }
 

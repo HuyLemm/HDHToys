@@ -126,18 +126,25 @@ export function TinyBtn({ children, danger, title, onClick }: { children: React.
 }
 
 export function Table({ cols, rows }: { cols: string[]; rows: React.ReactNode[][] }) {
+  // Cột đầu tiên (luôn là "Thao tác" theo quy ước toàn app) được ghim lại khi
+  // cuộn ngang — bảng nào cũng có nhiều cột nên vẫn bấm được nút thao tác mà
+  // không phải cuộn ngược về đầu bảng.
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-xs">
         <thead>
           <tr className="border-b border-slate-200">
-            {cols.map((c, i) => <th key={i} className="text-left py-1.5 px-2 font-semibold text-slate-500 whitespace-nowrap">{c}</th>)}
+            {cols.map((c, i) => (
+              <th key={i} className={`text-left py-1.5 px-2 font-semibold text-slate-500 whitespace-nowrap ${i === 0 ? 'sticky left-0 z-20 bg-white' : ''}`}>{c}</th>
+            ))}
           </tr>
         </thead>
         <tbody>
           {rows.map((row, ri) => (
-            <tr key={ri} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-              {row.map((cell, ci) => <td key={ci} className="py-1.5 px-2 text-slate-700 whitespace-nowrap">{cell}</td>)}
+            <tr key={ri} className="group border-b border-slate-100 hover:bg-slate-50 transition-colors">
+              {row.map((cell, ci) => (
+                <td key={ci} className={`py-1.5 px-2 text-slate-700 whitespace-nowrap ${ci === 0 ? 'sticky left-0 z-10 bg-white group-hover:bg-slate-50' : ''}`}>{cell}</td>
+              ))}
             </tr>
           ))}
         </tbody>

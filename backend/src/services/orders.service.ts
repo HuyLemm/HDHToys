@@ -2,7 +2,7 @@ import type { DonViVanChuyen, IncomeExpenseCategory, Order, OrderItem, OrderStat
 import { prisma } from "../lib/prisma.js"
 import { canTransition, formatOrderCode } from "../lib/orderCode.js"
 import { formatInvoiceCode } from "../lib/invoiceCode.js"
-import { applyInventoryTransaction } from "./inventory.service.js"
+import { applyInventoryTransaction, getReservedQuantities } from "./inventory.service.js"
 import { badRequest, notFound } from "../errors/HttpError.js"
 import { buildVietQrPayload } from "../lib/vietqr.js"
 import { vietQrConfig, isVietQrConfigured } from "../lib/paymentConfig.js"
@@ -213,6 +213,8 @@ export async function create(params: {
   fallbackNhanVienId: string
   /** false khi được gọi từ preorders.service.ts#convertToOrder — tiền cọc đó đã được ghi Thu/Chi lúc tạo đơn đặt trước, không ghi lại lần nữa. */
   recordDepositIncome?: boolean
+  /** Chỉ truyền khi gọi từ preorders.service.ts#convertToOrder — loại trừ chính Preorder đang chuyển đổi khỏi phần tồn kho "đã giữ chỗ cho đặt trước" (mục kiểm tra bên dưới), tránh nó tự chặn chính mình. */
+  excludePreorderIdFromReservation?: string
 }) {
   const { khachHangId, nhanVienId, kenhBan, phuongThucThanhToan, ghiChu, items, fallbackNhanVienId } = params
   const tienCoc = params.tienCoc ?? 0
@@ -299,6 +301,29 @@ export async function create(params: {
     // đơn có nhiều dòng cùng một sản phẩm.
     const qtyByProduct = new Map<string, number>()
     for (const l of lines) qtyByProduct.set(l.productId, (qtyByProduct.get(l.productId) ?? 0) + l.soLuong)
+
+    // Không được bán vượt phần tồn kho đã "giữ chỗ" cho khách đặt trước đã
+    // Sẵn sàng giao (trước đây SAN_SANG chỉ là nhãn hiển thị, ai cũng bán mất
+    // được — xem SRS/SDS mục "Preorder không giữ hàng thật"). Chỉ kiểm tra
+    // thêm cho sản phẩm thực sự đang có phần giữ chỗ, để không tốn thêm
+    // round-trip cho trường hợp phổ biến là không có đặt trước liên quan. Đây
+    // là kiểm tra "mềm" (không khóa dòng) — an toàn tuyệt đối trước tranh
+    // chấp đồng thời do compare-and-swap ở applyInventoryTransaction đảm nhiệm.
+    const reserved = await getReservedQuantities(tx, Array.from(qtyByProduct.keys()), params.excludePreorderIdFromReservation)
+    for (const [productId, soLuong] of qtyByProduct) {
+      const reservedQty = reserved.get(productId) ?? 0
+      if (reservedQty > 0) {
+        const current = await tx.product.findUnique({ where: { id: productId }, select: { tonKho: true } })
+        const khaDung = (current?.tonKho ?? 0) - reservedQty
+        if (khaDung < soLuong) {
+          const product = productMap.get(productId)!
+          throw badRequest(
+            `Sản phẩm ${product.ten} chỉ còn ${Math.max(khaDung, 0)} khả dụng để bán (${reservedQty} đang giữ cho đơn đặt trước Sẵn sàng giao) — cần ${soLuong}.`,
+          )
+        }
+      }
+    }
+
     for (const [productId, soLuong] of qtyByProduct) {
       await applyInventoryTransaction(tx, {
         productId,

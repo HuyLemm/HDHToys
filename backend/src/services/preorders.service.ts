@@ -239,6 +239,7 @@ export async function convertToOrder(params: {
     ghiChu,
     items: [{ productId, soLuong: current.soLuong, giaOverride: current.donGiaDuKien, giamGia: 0 }],
     fallbackNhanVienId: params.nguoiThucHienId,
+    excludePreorderIdFromReservation: current.id,
   })
 
   const preorder = await prisma.preorder.update({

@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express"
 import type { StaffRole } from "@prisma/client"
 import { verifyToken, type AuthTokenPayload } from "../lib/auth.js"
 import { prisma } from "../lib/prisma.js"
+import { logSecurityEvent } from "../lib/securityLog.js"
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -24,6 +25,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   const header = req.headers.authorization
   const token = header?.startsWith("Bearer ") ? header.slice(7) : undefined
   if (!token) {
+    logSecurityEvent("auth_missing_token", { ip: req.ip, path: req.path })
     res.status(401).json({ error: "Thiếu token xác thực." })
     return
   }
@@ -34,12 +36,15 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
       select: { trangThai: true, tokenVersion: true },
     })
     if (!staff || staff.trangThai === "LOCKED" || staff.tokenVersion !== payload.tokenVersion) {
+      const reason = !staff ? "staff_not_found" : staff.trangThai === "LOCKED" ? "locked" : "token_version_mismatch"
+      logSecurityEvent("auth_rejected", { ip: req.ip, path: req.path, staffId: payload.sub, reason })
       res.status(401).json({ error: "Token không hợp lệ hoặc đã hết hạn." })
       return
     }
     req.auth = payload
     next()
   } catch {
+    logSecurityEvent("auth_invalid_token", { ip: req.ip, path: req.path })
     res.status(401).json({ error: "Token không hợp lệ hoặc đã hết hạn." })
   }
 }
@@ -47,6 +52,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 export function requireRole(...roles: StaffRole[]) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (!req.auth || !roles.includes(req.auth.vaiTro)) {
+      logSecurityEvent("auth_forbidden", { ip: req.ip, path: req.path, staffId: req.auth?.sub, vaiTro: req.auth?.vaiTro, requiredRoles: roles })
       res.status(403).json({ error: "Bạn không có quyền thực hiện thao tác này." })
       return
     }

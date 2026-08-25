@@ -46,8 +46,18 @@ export function CaiDatScreen() {
   useEffect(reload, [isAdmin])
 
   async function toggleLock(u: Staff) {
-    await api.staff.update(u.id, { trangThai: u.trangThai === 'ACTIVE' ? 'LOCKED' : 'ACTIVE' })
-    reload()
+    const locking = u.trangThai === 'ACTIVE'
+    const message = locking
+      ? `Khóa tài khoản "${u.hoTen}"? Nhân viên này sẽ không đăng nhập được nữa và mọi phiên đang mở của họ sẽ bị vô hiệu hóa ngay.`
+      : `Mở khóa tài khoản "${u.hoTen}"?`
+    if (!(await dialog.confirm(message, locking ? { confirmLabel: 'Khóa' } : { danger: false, confirmLabel: 'Mở khóa' }))) return
+    setDeleteError(null)
+    try {
+      await api.staff.update(u.id, { trangThai: locking ? 'LOCKED' : 'ACTIVE' })
+      reload()
+    } catch (err) {
+      setDeleteError(err instanceof ApiError ? err.message : 'Không thể cập nhật trạng thái tài khoản.')
+    }
   }
 
   async function handleDelete(u: Staff) {

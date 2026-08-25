@@ -1,7 +1,7 @@
 import type { InventoryTransactionType, Prisma } from "@prisma/client"
 import { prisma } from "../lib/prisma.js"
 import { resolveStockStatus } from "../lib/productStatus.js"
-import { badRequest, notFound } from "../errors/HttpError.js"
+import { badRequest, conflict, notFound } from "../errors/HttpError.js"
 
 const MA_PREFIX: Record<InventoryTransactionType, string> = {
   NHAP: "NK",
@@ -37,6 +37,24 @@ export async function applyInventoryTransaction(
     )
   }
 
+  // Cập nhật kiểu "so sánh rồi mới ghi" (optimistic concurrency): điều kiện
+  // `tonKho: product.tonKho` trong where nghĩa là chỉ ghi nếu không ai khác
+  // đã đổi tonKho của CHÍNH sản phẩm này kể từ lúc ta đọc ở trên — nếu 2 giao
+  // dịch kho cho cùng 1 sản phẩm chạy gần như đồng thời, giao dịch thứ 2 sẽ
+  // ảnh hưởng 0 dòng thay vì âm thầm ghi đè lên số liệu đã lỗi thời (race
+  // condition từng ghi nhận ở SRS 6.13/SDS 5.12 điểm 6). Đã thử
+  // `SELECT ... FOR UPDATE` trước đó nhưng gây treo transaction khi chạy qua
+  // connection pooler transaction-mode của Neon (PgBouncer) — cách so-sánh-
+  // rồi-ghi này chỉ dùng UPDATE...WHERE thường, không cần giữ lock phiên nên
+  // an toàn với mọi loại pooler.
+  const updateResult = await tx.product.updateMany({
+    where: { id: params.productId, tonKho: product.tonKho },
+    data: { tonKho: tonSau, trangThai: resolveStockStatus(tonSau, product.tonKhoToiThieu, product.trangThai) },
+  })
+  if (updateResult.count === 0) {
+    throw conflict(`Tồn kho sản phẩm ${product.ten} vừa được một thao tác khác thay đổi, vui lòng thử lại.`)
+  }
+
   const created = await tx.inventoryTransaction.create({
     data: {
       maGiaoDich: `TEMP-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -55,14 +73,6 @@ export async function applyInventoryTransaction(
     where: { id: created.id },
     data: { maGiaoDich: `${MA_PREFIX[params.loai]}-${String(created.soThuTu).padStart(5, "0")}` },
     include: { product: { select: { id: true, sku: true, ten: true } }, nguoiThucHien: { select: { id: true, hoTen: true } } },
-  })
-
-  await tx.product.update({
-    where: { id: params.productId },
-    data: {
-      tonKho: tonSau,
-      trangThai: resolveStockStatus(tonSau, product.tonKhoToiThieu, product.trangThai),
-    },
   })
 
   // Tồn kho vừa tăng (nhập/điều chỉnh tăng/trả hàng) — kiểm tra xem đã đủ hàng
@@ -95,6 +105,34 @@ async function matchPendingPreorders(tx: Prisma.TransactionClient, productId: st
   if (readyIds.length > 0) {
     await tx.preorder.updateMany({ where: { id: { in: readyIds } }, data: { trangThai: "SAN_SANG" } })
   }
+}
+
+/**
+ * Tổng số lượng đang "giữ chỗ" cho khách đặt trước — các Preorder đã đánh
+ * dấu Sẵn sàng giao (SAN_SANG) cho từng sản phẩm. Dùng để đơn hàng thường
+ * (orders.service.ts#create) không được bán vượt phần tồn kho đã hứa cho
+ * khách đặt trước (trước đây SAN_SANG chỉ là nhãn hiển thị, không thực sự
+ * giữ hàng — một nhân viên khác vẫn có thể bán hết số đó cho khách vãng lai).
+ * `excludePreorderId`: khi gọi từ chính bước chuyển Preorder đó thành Order
+ * (convertToOrder), phải loại trừ chính nó khỏi phần "đang giữ chỗ" — nếu
+ * không, đơn đặt trước sẽ tự chặn chính việc chuyển đổi của nó.
+ */
+export async function getReservedQuantities(
+  client: Prisma.TransactionClient | typeof prisma,
+  productIds: string[],
+  excludePreorderId?: string,
+): Promise<Map<string, number>> {
+  if (productIds.length === 0) return new Map()
+  const grouped = await client.preorder.groupBy({
+    by: ["productId"],
+    where: {
+      productId: { in: productIds },
+      trangThai: "SAN_SANG",
+      ...(excludePreorderId ? { id: { not: excludePreorderId } } : {}),
+    },
+    _sum: { soLuong: true },
+  })
+  return new Map(grouped.filter((g): g is typeof g & { productId: string } => g.productId !== null).map((g) => [g.productId, g._sum.soLuong ?? 0]))
 }
 
 export async function getSummary() {
