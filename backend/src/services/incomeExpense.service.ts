@@ -6,6 +6,7 @@ import { notFound } from "../errors/HttpError.js"
 const MA_PREFIX = { THU: "PT", CHI: "PC" } as const
 
 interface FilterParams {
+  q?: string
   loai?: TransactionKind
   danhMuc?: IncomeExpenseCategory
   nguoiTaoId?: string
@@ -26,6 +27,12 @@ function buildWhere(params: FilterParams): Prisma.IncomeExpenseWhereInput {
     ...(params.danhMuc ? { danhMuc: params.danhMuc } : {}),
     ...(params.nguoiTaoId ? { nguoiTaoId: params.nguoiTaoId } : {}),
     ...(dateRange ? { createdAt: { gte: dateRange.tuNgay, lte: dateRange.denNgay } } : {}),
+    // Lọc theo nội dung/mã phiếu ngay ở tầng SQL (sửa 2026-08-25) — trước đây
+    // frontend tự lọc trên dữ liệu của TRANG hiện tại sau khi đã phân trang,
+    // nên bỏ lọt kết quả nằm ở trang khác.
+    ...(params.q
+      ? { OR: [{ noiDung: { contains: params.q, mode: "insensitive" } }, { maPhieu: { contains: params.q, mode: "insensitive" } }] }
+      : {}),
   }
 }
 

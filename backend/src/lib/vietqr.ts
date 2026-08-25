@@ -11,7 +11,14 @@ const NAPAS_GUID = "A000000727"
 const SERVICE_CODE_TRANSFER_TO_ACCOUNT = "QRIBFTTA"
 
 function tlv(id: string, value: string): string {
-  return `${id}${String(value.length).padStart(2, "0")}${value}`
+  // Độ dài trường TLV phải tính theo SỐ BYTE UTF-8 thật của value (chuẩn
+  // EMVCo/NAPAS), không phải value.length (số code unit UTF-16 của JS) — hai
+  // số này chỉ trùng nhau khi value thuần ASCII. Mọi giá trị hiện tại đều là
+  // ASCII (accountName ép .toUpperCase() không dấu, các mã cố định...) nên
+  // chưa từng lộ ra, nhưng nếu VIETQR_ACCOUNT_NAME sau này có dấu tiếng Việt,
+  // dùng .length sẽ khai sai độ dài và làm hỏng mọi trường TLV phía sau.
+  const byteLength = Buffer.byteLength(value, "utf8")
+  return `${id}${String(byteLength).padStart(2, "0")}${value}`
 }
 
 function crc16Ccitt(input: string): string {

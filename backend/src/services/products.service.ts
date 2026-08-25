@@ -195,10 +195,11 @@ export async function uploadImage(productId: string, data: Buffer, _declaredMime
     throw badRequest("Chỉ hỗ trợ ảnh JPEG, PNG, WEBP hoặc GIF (nội dung file không khớp định dạng ảnh hợp lệ).")
   }
   const mimeType = detected.mime
+  const existing = await prisma.productImage.findUnique({ where: { productId }, select: { storageKey: true } })
 
   // Nếu đã cấu hình object storage (S3_* env vars), lưu ở đó thay vì Postgres
   // (tránh phình DB — xem lib/imageStorage.ts). Không thì giữ nguyên cách cũ.
-  if (imageStorage.isS3Configured) {
+  if (imageStorage.isS3Configured()) {
     const storageKey = await imageStorage.putImage(productId, data, mimeType)
     await prisma.productImage.upsert({
       where: { productId },
@@ -206,6 +207,16 @@ export async function uploadImage(productId: string, data: Buffer, _declaredMime
       update: { storageKey, mimeType, data: null },
     })
     return
+  }
+
+  // Đang ở nhánh lưu Postgres nhưng ảnh CŨ (nếu có) lại đang nằm ở object
+  // storage (S3_* vừa bị gỡ cấu hình, hoặc đổi provider) — dọn luôn object cũ
+  // để không rác vĩnh viễn trên bucket. An toàn xóa trước vì ảnh mới đã ghi
+  // xong xuống Postgres ở dưới, không phụ thuộc gì vào object cũ nữa.
+  if (existing?.storageKey) {
+    await imageStorage.deleteImage(existing.storageKey).catch((err) => {
+      console.warn(`Không xóa được ảnh cũ trên object storage (key: ${existing.storageKey}):`, err)
+    })
   }
 
   // Buffer (Node) là Uint8Array<ArrayBufferLike> — Prisma's Bytes field kiểu
@@ -222,9 +233,13 @@ export async function uploadImage(productId: string, data: Buffer, _declaredMime
 export async function deleteImage(productId: string) {
   const existing = await prisma.productImage.findUnique({ where: { productId }, select: { storageKey: true } })
   if (existing?.storageKey) {
-    // Không để lỗi xóa ở object storage (VD key đã mất từ trước) chặn luôn
-    // việc xóa bản ghi DB — thà còn rác mồ côi ở S3 còn hơn kẹt không xóa được nữa.
-    await imageStorage.deleteImage(existing.storageKey).catch(() => {})
+    // Không để lỗi xóa ở object storage (VD key đã mất từ trước, hoặc
+    // credentials hết hạn) chặn luôn việc xóa bản ghi DB — thà còn rác mồ côi
+    // ở S3 còn hơn kẹt không xóa được nữa. Vẫn log lại để không âm thầm che
+    // mất một sự cố thật (VD key S3 hết hạn) đằng sau case vô hại "đã xóa từ trước".
+    await imageStorage.deleteImage(existing.storageKey).catch((err) => {
+      console.warn(`Không xóa được ảnh trên object storage (key: ${existing.storageKey}), vẫn tiếp tục xóa bản ghi DB:`, err)
+    })
   }
   await prisma.productImage.deleteMany({ where: { productId } })
 }

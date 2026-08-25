@@ -21,7 +21,19 @@ export async function applyInventoryTransaction(
   params: {
     productId: string
     loai: InventoryTransactionType
-    soLuongThayDoi: number
+    /** Cộng/trừ so với tồn kho hiện tại. Bỏ qua nếu có tonKhoTuyetDoi. */
+    soLuongThayDoi?: number
+    /**
+     * Đặt tồn kho về ĐÚNG giá trị này thay vì cộng/trừ một lượng cố định —
+     * dùng cho kiểm kho (inventory.service.ts#adjust). Độ lệch thật sự áp
+     * dụng luôn được tính từ tonKho vừa đọc NGAY TRONG transaction này, tránh
+     * việc gọi hàm tính sẵn một độ lệch từ số liệu đọc TRƯỚC khi mở
+     * transaction rồi áp lên một tonKho có thể đã đổi khác do một giao dịch
+     * kho khác chen vào giữa hai thời điểm đó (kết quả kiểm kho sẽ sai mà
+     * không có lỗi/cảnh báo gì, vì compare-and-swap bên dưới chỉ đảm bảo ghi
+     * đúng tonKho vừa đọc, không biết độ lệch truyền vào đã lỗi thời).
+     */
+    tonKhoTuyetDoi?: number
     nguoiThucHienId: string
     thamChieu?: string
     ghiChu?: string
@@ -30,10 +42,11 @@ export async function applyInventoryTransaction(
   const product = await tx.product.findUnique({ where: { id: params.productId } })
   if (!product) throw notFound("Không tìm thấy sản phẩm.")
 
-  const tonSau = product.tonKho + params.soLuongThayDoi
+  const tonSau = params.tonKhoTuyetDoi !== undefined ? params.tonKhoTuyetDoi : product.tonKho + (params.soLuongThayDoi ?? 0)
+  const soLuongThayDoi = tonSau - product.tonKho
   if (tonSau < 0) {
     throw badRequest(
-      `Tồn kho không đủ cho sản phẩm ${product.ten} (hiện có ${product.tonKho}, cần ${-params.soLuongThayDoi}).`,
+      `Tồn kho không đủ cho sản phẩm ${product.ten} (hiện có ${product.tonKho}, cần ${-soLuongThayDoi}).`,
     )
   }
 
@@ -60,7 +73,7 @@ export async function applyInventoryTransaction(
       maGiaoDich: `TEMP-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       productId: params.productId,
       loai: params.loai,
-      soLuongThayDoi: params.soLuongThayDoi,
+      soLuongThayDoi,
       tonTruoc: product.tonKho,
       tonSau,
       nguoiThucHienId: params.nguoiThucHienId,
@@ -80,7 +93,7 @@ export async function applyInventoryTransaction(
   // trước (FIFO). Chỉ đánh dấu "sẵn sàng giao" để nhân viên xác nhận thủ
   // công — KHÔNG giữ/trừ tồn kho hộ (hệ thống chưa có khái niệm giữ hàng),
   // nên đây là gợi ý, không phải một chỗ đảm bảo chắc chắn còn hàng.
-  if (params.soLuongThayDoi > 0) {
+  if (soLuongThayDoi > 0) {
     await matchPendingPreorders(tx, params.productId, tonSau)
   }
 
@@ -239,14 +252,11 @@ export function stockOut(params: { productId: string; soLuong: number; thamChieu
 }
 
 export async function adjust(params: { productId: string; tonKhoMoi: number; ghiChu?: string; nguoiThucHienId: string }) {
-  const product = await prisma.product.findUnique({ where: { id: params.productId } })
-  if (!product) throw notFound("Không tìm thấy sản phẩm.")
-
   return prisma.$transaction((tx) =>
     applyInventoryTransaction(tx, {
       productId: params.productId,
       loai: "DIEU_CHINH",
-      soLuongThayDoi: params.tonKhoMoi - product.tonKho,
+      tonKhoTuyetDoi: params.tonKhoMoi,
       nguoiThucHienId: params.nguoiThucHienId,
       ghiChu: params.ghiChu ?? "Kiểm kho thực tế",
     }),
@@ -264,33 +274,48 @@ export async function removeTransaction(id: string) {
   const transaction = await prisma.inventoryTransaction.findUnique({ where: { id } })
   if (!transaction) throw notFound("Không tìm thấy giao dịch kho.")
 
-  const latest = await prisma.inventoryTransaction.findFirst({
-    where: { productId: transaction.productId },
-    orderBy: { soThuTu: "desc" },
-  })
-  if (latest?.id !== id) {
-    throw badRequest(
-      "Chỉ xóa được giao dịch kho gần nhất của sản phẩm này — xóa một giao dịch ở giữa lịch sử sẽ làm sai lệch số liệu tồn kho các giao dịch sau đó.",
-    )
-  }
-
   return prisma.$transaction(async (tx) => {
+    // Kiểm tra lại "là giao dịch gần nhất" NGAY TRONG transaction (không chỉ
+    // ở ngoài trước khi mở transaction) — tránh một giao dịch kho khác chen
+    // vào đúng lúc giữa hai thời điểm đó (TOCTOU), khiến điều kiện đã kiểm ở
+    // ngoài không còn đúng nữa lúc thật sự xóa/ghi tonKho bên dưới.
+    const latest = await tx.inventoryTransaction.findFirst({
+      where: { productId: transaction.productId },
+      orderBy: { soThuTu: "desc" },
+    })
+    if (latest?.id !== id) {
+      throw badRequest(
+        "Chỉ xóa được giao dịch kho gần nhất của sản phẩm này — xóa một giao dịch ở giữa lịch sử sẽ làm sai lệch số liệu tồn kho các giao dịch sau đó.",
+      )
+    }
+
     const product = await tx.product.findUnique({ where: { id: transaction.productId } })
     if (!product) throw notFound("Không tìm thấy sản phẩm.")
 
     const tonKhoSauKhiHoanTac = product.tonKho - transaction.soLuongThayDoi
-    await tx.product.update({
-      where: { id: transaction.productId },
+    const updateResult = await tx.product.updateMany({
+      where: { id: transaction.productId, tonKho: product.tonKho },
       data: {
         tonKho: tonKhoSauKhiHoanTac,
         trangThai: resolveStockStatus(tonKhoSauKhiHoanTac, product.tonKhoToiThieu, product.trangThai),
+        // Nếu giao dịch bị hoàn là một lượt Xuất kho cho SP Pre-order,
+        // stockOut() đã cộng daBan lúc tạo (giao hàng trực tiếp, không qua
+        // Order) — hoàn tác giao dịch đó cũng phải trừ lại daBan, không thì
+        // "đã bán" bị kẹt cao hơn thực tế mãi mãi sau khi undo.
+        ...(transaction.loai === "XUAT" && product.loaiSanPham === "PRE_ORDER"
+          ? { daBan: { decrement: -transaction.soLuongThayDoi } }
+          : {}),
       },
     })
+    if (updateResult.count === 0) {
+      throw conflict("Tồn kho sản phẩm vừa được một thao tác khác thay đổi, vui lòng thử lại.")
+    }
     await tx.inventoryTransaction.delete({ where: { id } })
   })
 }
 
 export async function getHistory(params: {
+  q?: string
   productId?: string
   loai?: InventoryTransactionType
   nguoiThucHienId?: string
@@ -299,7 +324,7 @@ export async function getHistory(params: {
   page: number
   pageSize: number
 }) {
-  const { productId, loai, nguoiThucHienId, tuNgay, denNgay, page, pageSize } = params
+  const { q, productId, loai, nguoiThucHienId, tuNgay, denNgay, page, pageSize } = params
 
   const where: Prisma.InventoryTransactionWhereInput = {
     ...(productId ? { productId } : {}),
@@ -307,6 +332,12 @@ export async function getHistory(params: {
     ...(nguoiThucHienId ? { nguoiThucHienId } : {}),
     ...(tuNgay || denNgay
       ? { createdAt: { ...(tuNgay ? { gte: tuNgay } : {}), ...(denNgay ? { lte: denNgay } : {}) } }
+      : {}),
+    // Lọc theo tên/SKU sản phẩm ngay ở tầng SQL (sửa 2026-08-25) — trước đây
+    // frontend tự lọc trên dữ liệu của TRANG hiện tại sau khi đã phân trang,
+    // nên bỏ lọt kết quả nằm ở trang khác.
+    ...(q
+      ? { product: { OR: [{ ten: { contains: q, mode: "insensitive" } }, { sku: { contains: q, mode: "insensitive" } }] } }
       : {}),
   }
 

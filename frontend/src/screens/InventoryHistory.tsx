@@ -28,13 +28,11 @@ export function InventoryHistoryScreen({ onBack }: { onBack: () => void }) {
   function reload() {
     setLoading(true)
     api.inventory.history({
+      q: q || undefined,
       loai: (reverseLookup(inventoryTransactionTypeLabel, loai) as InventoryTransactionType) || undefined,
       page, pageSize,
     }).then(res => {
-      const filtered = q
-        ? res.items.filter(h => h.product.ten.toLowerCase().includes(q.toLowerCase()) || h.product.sku.toLowerCase().includes(q.toLowerCase()))
-        : res.items
-      setItems(filtered)
+      setItems(res.items)
       setTotal(res.total)
       setLoading(false)
     })
@@ -82,7 +80,8 @@ export function InventoryHistoryScreen({ onBack }: { onBack: () => void }) {
               <span className="text-xs font-medium text-slate-800">{h.product.ten}</span>,
               <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${typeColor[inventoryTransactionTypeLabel[h.loai]] ?? ''}`}>{inventoryTransactionTypeLabel[h.loai]}</span>,
               <span className={`font-bold text-xs ${h.soLuongThayDoi > 0 ? 'text-emerald-600' : 'text-red-500'}`}>{h.soLuongThayDoi > 0 ? '+' : ''}{h.soLuongThayDoi}</span>,
-              String(h.tonTruoc), String(h.tonSau), h.nguoiThucHien.hoTen,
+              String(h.tonTruoc), String(h.tonSau),
+              <span className="block max-w-[140px] truncate" title={h.nguoiThucHien.hoTen}>{h.nguoiThucHien.hoTen}</span>,
               <span className="font-mono text-[10px]" style={{ color: '#1a56db' }}>{h.thamChieu ?? '—'}</span>,
               <span className="text-[10px] text-slate-500">{h.ghiChu ?? '—'}</span>,
             ])}

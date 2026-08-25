@@ -83,7 +83,10 @@ export function PreordersScreen({ onDetail }: { onDetail: (id: string) => void }
                 <TinyBtn danger title="Xóa" onClick={() => handleDelete(p)}><Trash2 size={12} strokeWidth={1.75} /></TinyBtn>
               </div>,
               <span className="font-mono text-xs font-semibold text-slate-700">{p.ma}</span>,
-              <div><div className="font-medium text-slate-800">{p.khachHang.hoTen}</div><div className="text-[10px] text-slate-400">{p.khachHang.sdt}</div></div>,
+              <div className="max-w-[140px]">
+                <div className="font-medium text-slate-800 truncate" title={p.khachHang.hoTen}>{p.khachHang.hoTen}</div>
+                <div className="text-[10px] text-slate-400 truncate" title={p.khachHang.sdt}>{p.khachHang.sdt}</div>
+              </div>,
               p.product ? p.product.ten : <span>{p.tenSanPhamMoi} <span className="text-[10px] text-blue-500">(SP mới)</span></span>,
               String(p.soLuong),
               `${p.donGiaDuKien.toLocaleString('vi-VN')} VNĐ`,

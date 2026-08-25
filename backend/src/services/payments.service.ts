@@ -1,12 +1,15 @@
-import type { Prisma, PaymentReconciliationStatus } from "@prisma/client"
+import { Prisma, type PaymentReconciliationStatus } from "@prisma/client"
 import { prisma } from "../lib/prisma.js"
 import { badRequest } from "../errors/HttpError.js"
 import { PAYMENT_SYSTEM_STAFF_EMAIL } from "../lib/paymentConfig.js"
 import * as ordersService from "./orders.service.js"
 
 // Mã đơn hàng dạng HDH-{năm}-{5 số} — dùng để trích mã đơn từ nội dung
-// chuyển khoản khi đối soát (SRS FR-PAY.3).
-const ORDER_CODE_PATTERN = /HDH-\d{4}-\d{5}/
+// chuyển khoản khi đối soát (SRS FR-PAY.3). Cờ "g" để phát hiện được nếu nội
+// dung chứa NHIỀU mã khác nhau (VD khách để lại ghi chú cũ trong app ngân
+// hàng) — khi đó không đoán bừa lấy mã đầu tiên mà coi là không đọc được,
+// tránh gán nhầm tiền cho sai đơn.
+const ORDER_CODE_PATTERN = /HDH-\d{4}-\d{5}/g
 
 let systemStaffIdCache: string | null = null
 
@@ -46,17 +49,21 @@ export async function recordAndReconcile(payload: WebhookPayload) {
     return { duplicate: true, transaction: existing }
   }
 
-  const orderCodeMatch = payload.content.match(ORDER_CODE_PATTERN)
-  const order = orderCodeMatch ? await prisma.order.findUnique({ where: { ma: orderCodeMatch[0] } }) : null
+  const distinctMatches = new Set(payload.content.match(ORDER_CODE_PATTERN) ?? [])
+  const orderCode = distinctMatches.size === 1 ? [...distinctMatches][0] : null
+  const order = orderCode ? await prisma.order.findUnique({ where: { ma: orderCode } }) : null
   const orderIsPending =
     !!order && (order.trangThai === "MOI" || order.trangThai === "DANG_XU_LY") && order.phuongThucThanhToan === "QR_CODE"
 
   let trangThaiDoiSoat: PaymentReconciliationStatus
   let matchedOrderId: string | null = null
 
+  // Số tiền cần khớp là phần CÒN LẠI sau khi trừ cọc đã nhận trước đó (giống
+  // hệt getQrPaymentInfo bên orders.service.ts) — không phải luôn tongCong,
+  // nếu không đơn có cọc sẽ không bao giờ khớp khi khách chuyển đúng phần còn thiếu.
   if (!order || !orderIsPending) {
     trangThaiDoiSoat = "KHONG_KHOP"
-  } else if (order.tongCong !== payload.transferAmount) {
+  } else if (order.tongCong - order.tienCoc !== payload.transferAmount) {
     trangThaiDoiSoat = "SAI_SO_TIEN"
     matchedOrderId = order.id
   } else {
@@ -65,16 +72,31 @@ export async function recordAndReconcile(payload: WebhookPayload) {
   }
 
   // Lưu vết mọi giao dịch nhận qua webhook, kể cả không đối soát được (FR-PAY.8).
-  const transaction = await prisma.paymentTransaction.create({
-    data: {
-      maGiaoDichNganHang: payload.referenceCode,
-      orderId: matchedOrderId,
-      soTienNhan: payload.transferAmount,
-      noiDungChuyenKhoan: payload.content,
-      trangThaiDoiSoat,
-      rawPayload: payload as unknown as Prisma.InputJsonValue,
-    },
-  })
+  let transaction: Awaited<ReturnType<typeof prisma.paymentTransaction.create>>
+  try {
+    transaction = await prisma.paymentTransaction.create({
+      data: {
+        maGiaoDichNganHang: payload.referenceCode,
+        orderId: matchedOrderId,
+        soTienNhan: payload.transferAmount,
+        noiDungChuyenKhoan: payload.content,
+        trangThaiDoiSoat,
+        rawPayload: payload as unknown as Prisma.InputJsonValue,
+      },
+    })
+  } catch (err) {
+    // Race hiếm: 2 lượt gửi webhook trùng referenceCode lọt qua check "đã tồn
+    // tại" ở trên gần như đồng thời (TOCTOU) — người thua cuộc vi phạm unique
+    // constraint (P2002) thay vì đọc được bản ghi người thắng vừa tạo. Không
+    // để lỗi này thoát ra thành 500 (SePay sẽ hiểu nhầm lỗi hạ tầng và retry
+    // vô hạn, đúng điều comment ở catch bên dưới đang cố tránh) — tra lại bản
+    // ghi vừa được tạo và xử lý như một lượt gửi trùng bình thường.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      const existingAfterRace = await prisma.paymentTransaction.findUnique({ where: { maGiaoDichNganHang: payload.referenceCode } })
+      if (existingAfterRace) return { duplicate: true, transaction: existingAfterRace }
+    }
+    throw err
+  }
 
   if (trangThaiDoiSoat !== "KHOP" || !matchedOrderId) {
     return { duplicate: false, transaction }

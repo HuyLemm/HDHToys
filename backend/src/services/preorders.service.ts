@@ -1,7 +1,7 @@
 import type { PaymentMethod, PreorderStatus, Prisma, SalesChannel } from "@prisma/client"
 import { prisma } from "../lib/prisma.js"
 import { formatPreorderCode } from "../lib/preorderCode.js"
-import { badRequest, notFound } from "../errors/HttpError.js"
+import { badRequest, conflict, notFound } from "../errors/HttpError.js"
 import * as ordersService from "./orders.service.js"
 
 export const preorderInclude = {
@@ -176,6 +176,14 @@ export async function cancel(id: string, nguoiThucHienId: string) {
   if (current.trangThai === "DA_HUY") throw badRequest("Đơn đặt trước đã hủy trước đó.")
 
   return prisma.$transaction(async (tx) => {
+    // So-sánh-rồi-ghi — chặn 2 lượt hủy cùng lúc cho cùng 1 đơn đặt trước
+    // (double-click, hoặc 2 request trùng) cùng hoàn cọc 2 lần cho một khoản
+    // cọc chỉ thu Thu một lần duy nhất lúc tạo.
+    const claim = await tx.preorder.updateMany({ where: { id, trangThai: current.trangThai }, data: { trangThai: "DA_HUY" } })
+    if (claim.count === 0) {
+      throw conflict("Đơn đặt trước vừa được xử lý ở nơi khác, vui lòng tải lại trang.")
+    }
+
     // Hoàn cọc luôn cho khách khi hủy đặt trước — tiền cọc đã ghi Thu lúc tạo
     // đơn đặt trước (create()), nếu không đảo ngược sẽ mãi nằm trong sổ quỹ
     // dù đơn đặt trước không còn thành hiện thực nữa.
@@ -189,7 +197,7 @@ export async function cancel(id: string, nguoiThucHienId: string) {
       })
     }
 
-    return tx.preorder.update({ where: { id }, data: { trangThai: "DA_HUY" }, include: preorderInclude })
+    return tx.preorder.findUniqueOrThrow({ where: { id }, include: preorderInclude, relationLoadStrategy: "join" })
   })
 }
 
@@ -224,29 +232,53 @@ export async function convertToOrder(params: {
       ? `Chuyển từ đơn đặt trước ${current.ma}. Đã đặt cọc ${current.tienCoc.toLocaleString("vi-VN")} VNĐ — cần thu thêm phần còn lại khi giao hàng.`
       : `Chuyển từ đơn đặt trước ${current.ma}.`
 
-  const order = await ordersService.create({
-    khachHangId: current.khachHangId,
-    nhanVienId: params.nguoiThucHienId,
-    kenhBan: params.kenhBan ?? "TAI_CUA_HANG",
-    phuongThucThanhToan: params.phuongThucThanhToan,
-    // Sao chép tiền cọc sang chính Order (không chỉ tham chiếu qua quan hệ
-    // Preorder) để hóa đơn vẫn hiển thị đúng số cọc dù sau này Preorder gốc
-    // bị xóa (xem preorders.service.ts#remove — nay xóa được ở mọi trạng thái).
-    tienCoc: current.tienCoc,
-    // Tiền cọc này đã được ghi Thu/Chi từ lúc tạo đơn đặt trước (create() ở
-    // trên) — không ghi lại lần nữa khi chuyển đổi, tránh tính trùng dòng tiền.
-    recordDepositIncome: false,
-    ghiChu,
-    items: [{ productId, soLuong: current.soLuong, giaOverride: current.donGiaDuKien, giamGia: 0 }],
-    fallbackNhanVienId: params.nguoiThucHienId,
-    excludePreorderIdFromReservation: current.id,
+  // "Khóa" mềm (so-sánh-rồi-ghi, cùng kiểu compare-and-swap của
+  // applyInventoryTransaction) TRƯỚC khi tạo Order — ordersService.create()
+  // tự quản lý transaction riêng của nó nên không thể gộp chung một
+  // transaction với bước cập nhật Preorder bên dưới; nếu không khóa trước,
+  // 2 lượt gọi convertToOrder cùng lúc cho cùng 1 đơn đặt trước đều đọc được
+  // trangThai còn hợp lệ và đều tạo Order xong, tạo ra 2 Order dùng chung một
+  // khoản cọc chỉ được ghi Thu một lần. Chỉ lượt gọi nào khớp đúng trangThai
+  // vừa đọc mới được đi tiếp — lượt còn lại nhận count=0 và dừng lại.
+  const claim = await prisma.preorder.updateMany({
+    where: { id: current.id, trangThai: current.trangThai },
+    data: { trangThai: "DA_CHUYEN_DON" },
   })
+  if (claim.count === 0) {
+    throw conflict("Đơn đặt trước vừa được xử lý ở nơi khác (đã chuyển đổi hoặc bị hủy), vui lòng tải lại trang.")
+  }
 
-  const preorder = await prisma.preorder.update({
-    where: { id: current.id },
-    data: { trangThai: "DA_CHUYEN_DON", orderId: order.id, productId },
-    include: preorderInclude,
-  })
+  try {
+    const order = await ordersService.create({
+      khachHangId: current.khachHangId,
+      nhanVienId: params.nguoiThucHienId,
+      kenhBan: params.kenhBan ?? "TAI_CUA_HANG",
+      phuongThucThanhToan: params.phuongThucThanhToan,
+      // Sao chép tiền cọc sang chính Order (không chỉ tham chiếu qua quan hệ
+      // Preorder) để hóa đơn vẫn hiển thị đúng số cọc dù sau này Preorder gốc
+      // bị xóa (xem preorders.service.ts#remove — nay xóa được ở mọi trạng thái).
+      tienCoc: current.tienCoc,
+      // Tiền cọc này đã được ghi Thu/Chi từ lúc tạo đơn đặt trước (create() ở
+      // trên) — không ghi lại lần nữa khi chuyển đổi, tránh tính trùng dòng tiền.
+      recordDepositIncome: false,
+      ghiChu,
+      items: [{ productId, soLuong: current.soLuong, giaOverride: current.donGiaDuKien, giamGia: 0 }],
+      fallbackNhanVienId: params.nguoiThucHienId,
+      excludePreorderIdFromReservation: current.id,
+    })
 
-  return { preorder, order }
+    const preorder = await prisma.preorder.update({
+      where: { id: current.id },
+      data: { orderId: order.id, productId },
+      include: preorderInclude,
+    })
+
+    return { preorder, order }
+  } catch (err) {
+    // Tạo Order thất bại (VD hết hàng) sau khi đã "khóa" đơn đặt trước ở
+    // trên — trả lại đúng trạng thái ban đầu để đơn đặt trước không bị kẹt ở
+    // DA_CHUYEN_DON mà không có Order thật đi kèm.
+    await prisma.preorder.update({ where: { id: current.id }, data: { trangThai: current.trangThai } }).catch(() => {})
+    throw err
+  }
 }

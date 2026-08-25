@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Lock, LockOpen, Trash2 } from 'lucide-react'
-import { Btn, Table, Badge, Spinner, Modal, Field, Input, ErrorBox, TinyBtn } from '../components/ui'
-import { api, ApiError, type Staff, type StaffRole } from '../lib/api'
+import { Btn, Table, Badge, Spinner, Modal, Field, Input, ErrorBox, TinyBtn, FilterBar, Select, Pagination } from '../components/ui'
+import { api, ApiError, type Staff, type StaffRole, type SecurityLog } from '../lib/api'
 import { staffRoleLabel, staffStatusLabel } from '../lib/labels'
 import { useAuth } from '../lib/auth'
 import { useDialog } from '../lib/dialog'
@@ -38,12 +38,32 @@ export function CaiDatScreen() {
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const isAdmin = currentStaff?.vaiTro === 'ADMIN'
 
+  const [securityLogs, setSecurityLogs] = useState<SecurityLog[]>([])
+  const [securityLogTotal, setSecurityLogTotal] = useState(0)
+  const [securityLogPage, setSecurityLogPage] = useState(1)
+  const [securityLogEvent, setSecurityLogEvent] = useState('')
+  const [securityLogEventTypes, setSecurityLogEventTypes] = useState<string[]>([])
+  const [securityLogLoading, setSecurityLogLoading] = useState(true)
+  const securityLogPageSize = 20
+
   function reload() {
     if (!isAdmin) { setLoading(false); return }
     setLoading(true)
     api.staff.list().then(res => { setUsers(res); setLoading(false) })
   }
   useEffect(reload, [isAdmin])
+
+  useEffect(() => {
+    if (!isAdmin) return
+    api.securityLogs.eventTypes().then(res => setSecurityLogEventTypes(res.items))
+  }, [isAdmin])
+
+  useEffect(() => {
+    if (!isAdmin) { setSecurityLogLoading(false); return }
+    setSecurityLogLoading(true)
+    api.securityLogs.list({ event: securityLogEvent || undefined, page: securityLogPage, pageSize: securityLogPageSize })
+      .then(res => { setSecurityLogs(res.items); setSecurityLogTotal(res.total); setSecurityLogLoading(false) })
+  }, [isAdmin, securityLogEvent, securityLogPage])
 
   async function toggleLock(u: Staff) {
     const locking = u.trangThai === 'ACTIVE'
@@ -106,7 +126,7 @@ export function CaiDatScreen() {
                     <TinyBtn danger title="Xóa" onClick={() => handleDelete(u)}><Trash2 size={12} strokeWidth={1.75} /></TinyBtn>
                   </div>
                 ),
-                <span className="font-semibold text-slate-800">{u.hoTen}</span>,
+                <span className="block max-w-[140px] truncate font-semibold text-slate-800" title={u.hoTen}>{u.hoTen}</span>,
                 u.email, staffRoleLabel[u.vaiTro],
                 <Badge label={staffStatusLabel[u.trangThai ?? 'ACTIVE']} />,
               ])}
@@ -142,6 +162,38 @@ export function CaiDatScreen() {
           </table>
         </div>
       </div>
+
+      {isAdmin && (
+        <div className="bg-white rounded-lg border border-slate-200 p-4">
+          <h2 className="text-sm font-semibold text-slate-800 mb-1">Nhật ký bảo mật</h2>
+          <p className="text-xs text-slate-400 mb-3">Các lượt bị từ chối vì sai token, hết quyền, vượt giới hạn request, hoặc sai secret/IP webhook thanh toán.</p>
+          <FilterBar>
+            <Select
+              placeholder="Loại sự kiện"
+              options={securityLogEventTypes}
+              value={securityLogEvent}
+              onChange={v => { setSecurityLogEvent(v); setSecurityLogPage(1) }}
+            />
+          </FilterBar>
+          {securityLogLoading ? <Spinner /> : securityLogs.length === 0 ? (
+            <div className="text-xs text-slate-400 py-8 text-center">Chưa có sự kiện bảo mật nào bị ghi nhận</div>
+          ) : (
+            <>
+              <Table
+                cols={['Thời gian', 'Sự kiện', 'Chi tiết']}
+                rows={securityLogs.map(log => [
+                  new Date(log.createdAt).toLocaleString('vi-VN'),
+                  <span className="font-mono text-[10px] font-semibold text-red-600">{log.event}</span>,
+                  <span className="text-[10px] text-slate-500">
+                    {Object.entries(log.detail ?? {}).map(([k, v]) => `${k}=${String(v)}`).join(' · ') || '—'}
+                  </span>,
+                ])}
+              />
+              <Pagination total={securityLogTotal} page={securityLogPage} pageSize={securityLogPageSize} onChange={setSecurityLogPage} />
+            </>
+          )}
+        </div>
+      )}
 
       {showCreate && <CreateStaffModal onClose={() => setShowCreate(false)} onCreated={() => { setShowCreate(false); reload() }} />}
     </div>

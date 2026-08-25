@@ -219,6 +219,11 @@ model Order {
   tienCoc             Int           @default(0)
   ghiChu              String?
   qrExpiresAt         DateTime?
+  // Mốc thời gian đơn thực sự chuyển sang Hoàn tiền (khác createdAt — ngày
+  // tạo đơn). Báo cáo doanh thu (revenue.service.ts) bó khoản hoàn tiền theo
+  // cột này, không phải createdAt, để một báo cáo ngày đã "chốt" không tự
+  // đổi số khi có đơn cũ bị hoàn tiền muộn hơn.
+  hoanTienAt          DateTime?
   items               OrderItem[]
   invoice             Invoice?
   paymentTransactions PaymentTransaction[]
@@ -435,4 +440,20 @@ model AccountingBalance {
   updatedAt           DateTime @updatedAt
 
   @@map("accounting_balance")
+}
+
+// Ghi lại các sự kiện bảo mật bị từ chối (sai token, hết quyền, vượt rate
+// limit, sai webhook secret/IP) để Admin xem lại được trong app (Cài đặt →
+// Nhật ký bảo mật) — trước đây chỉ có console.warn (log của Render), không
+// xem lại được từ giao diện. Ghi qua lib/securityLog.ts, fire-and-forget
+// (không chặn phản hồi 401/403/429 gốc nếu ghi log thất bại).
+model SecurityLog {
+  id        String   @id @default(cuid())
+  event     String
+  detail    Json?
+  createdAt DateTime @default(now())
+
+  @@index([event])
+  @@index([createdAt])
+  @@map("security_logs")
 }

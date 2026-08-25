@@ -16,7 +16,12 @@ export async function getSummary(tuNgay: Date, denNgay: Date) {
       include: { items: true },
     }),
     prisma.order.findMany({
-      where: { trangThai: "HOAN_TIEN", createdAt: { gte: tuNgay, lte: denNgay } },
+      // Bó theo hoanTienAt (mốc thời gian đơn thực sự chuyển sang Hoàn tiền),
+      // KHÔNG phải createdAt (ngày tạo đơn ban đầu) — nếu không, một đơn tạo
+      // hôm nay nhưng hoàn tiền nhiều tuần sau sẽ hiện sai (hoặc mất hẳn) ở cả
+      // 2 báo cáo, và báo cáo của ngày tạo đơn (đã "chốt" từ lâu) sẽ tự đổi số
+      // âm thầm khi chạy lại sau khi đơn đó bị hoàn tiền.
+      where: { trangThai: "HOAN_TIEN", hoanTienAt: { gte: tuNgay, lte: denNgay } },
       select: { tongCong: true },
     }),
   ])
@@ -222,8 +227,8 @@ async function getDetailRows(tuNgay: Date, denNgay: Date): Promise<DetailRow[]> 
       include: { items: true },
     }),
     prisma.order.findMany({
-      where: { trangThai: "HOAN_TIEN", createdAt: { gte: tuNgay, lte: denNgay } },
-      select: { createdAt: true, tongCong: true },
+      where: { trangThai: "HOAN_TIEN", hoanTienAt: { gte: tuNgay, lte: denNgay } },
+      select: { hoanTienAt: true, tongCong: true },
     }),
   ])
 
@@ -246,7 +251,7 @@ async function getDetailRows(tuNgay: Date, denNgay: Date): Promise<DetailRow[]> 
     bucket.giaVon += giaVonDon
     bucket.loiNhuanGop += o.tongCong - giaVonDon
   }
-  for (const o of refundedOrders) bucketFor(dayKey(o.createdAt)).hoanTien += o.tongCong
+  for (const o of refundedOrders) bucketFor(dayKey(o.hoanTienAt!)).hoanTien += o.tongCong
 
   return [...byDay.values()]
 }

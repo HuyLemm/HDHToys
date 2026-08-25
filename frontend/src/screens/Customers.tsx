@@ -69,7 +69,7 @@ export function CustomersScreen({ onDetail }: { onDetail: (id: string) => void }
                 <TinyBtn title="Xem" onClick={() => onDetail(c.id)}><Eye size={12} strokeWidth={1.75} /></TinyBtn>
                 <TinyBtn danger title="Xóa" onClick={() => handleDelete(c)}><Trash2 size={12} strokeWidth={1.75} /></TinyBtn>
               </div>,
-              <button onClick={() => onDetail(c.id)} className="font-semibold text-slate-800 hover:underline cursor-pointer text-left">{c.hoTen}</button>,
+              <button onClick={() => onDetail(c.id)} className="block max-w-[140px] truncate font-semibold text-slate-800 hover:underline cursor-pointer text-left" title={c.hoTen}>{c.hoTen}</button>,
               c.sdt, c.email || '—',
               <span className="font-semibold" style={{ color: '#1a56db' }}>{c.diemTichLuy}</span>,
               <Badge label={customerTierLabel[c.hangKhachHang]} />,

@@ -63,7 +63,7 @@ export function InvoicesScreen({ onDetail }: { onDetail: (id: string) => void })
                 </div>,
                 <span className="font-mono text-[10px] font-semibold" style={{ color: '#1a56db' }}>{inv.soHoaDon}</span>,
                 d.toLocaleDateString('vi-VN'), d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
-                <span className="font-medium text-slate-800">{inv.order.khachHang.hoTen}</span>,
+                <span className="block max-w-[140px] truncate font-medium text-slate-800" title={inv.order.khachHang.hoTen}>{inv.order.khachHang.hoTen}</span>,
                 <span className="font-mono text-[10px] text-slate-600">{inv.order.ma}</span>,
                 <span className="font-semibold">{inv.order.tongCong.toLocaleString('vi-VN')} VNĐ</span>,
                 paymentMethodLabel[inv.order.phuongThucThanhToan],
@@ -73,7 +73,7 @@ export function InvoicesScreen({ onDetail }: { onDetail: (id: string) => void })
                     <button onClick={() => navigator.clipboard.writeText(inv.order.maVanDon!)} className="text-[10px] text-blue-600 hover:underline cursor-pointer">Chép</button>
                   </div>
                 ) : <span className="text-slate-300">—</span>,
-                inv.nguoiTao.hoTen,
+                <span className="block max-w-[140px] truncate" title={inv.nguoiTao.hoTen}>{inv.nguoiTao.hoTen}</span>,
               ]
             })}
           />

@@ -56,6 +56,16 @@ export async function create(data: {
 }
 
 export async function update(id: string, data: Partial<{ doiTuong: string; ngayDenHan: Date; soTien: number }>) {
+  const current = await prisma.debt.findUnique({ where: { id } })
+  if (!current) throw notFound("Không tìm thấy khoản công nợ.")
+  // soTien không được sửa xuống thấp hơn phần đã thanh toán — nếu không,
+  // conLai (soTien - daThanhToan) âm sẽ làm sai tổng công nợ toàn hệ thống
+  // (getSummary/accounting.service.ts#getDebtTotals cộng dồn conLai không lọc âm).
+  if (data.soTien !== undefined && data.soTien < current.daThanhToan) {
+    throw badRequest(
+      `Không thể đặt tổng số tiền (${data.soTien.toLocaleString("vi-VN")} VNĐ) thấp hơn số đã thanh toán (${current.daThanhToan.toLocaleString("vi-VN")} VNĐ).`,
+    )
+  }
   const debt = await prisma.debt.update({ where: { id }, data })
   return serializeDebt(debt)
 }

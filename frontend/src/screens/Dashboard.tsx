@@ -213,8 +213,11 @@ export function DashboardScreen({ onNav }: { onNav: (s: Screen, id?: string) => 
             cols={['Mã đơn', 'Ngày', 'Khách hàng', 'Tổng tiền', 'Trạng thái', 'Nhân viên']}
             rows={recentOrders.map(o => [
               <button onClick={() => onNav('order-detail', o.id)} className="font-mono text-[10px] font-semibold hover:underline cursor-pointer" style={{ color: '#1a56db' }}>{o.ma}</button>,
-              new Date(o.createdAt).toLocaleDateString('vi-VN'), o.khachHang.hoTen, `${o.tongCong.toLocaleString('vi-VN')} VNĐ`,
-              <Badge label={orderStatusLabel[o.trangThai]} />, o.nhanVien.hoTen,
+              new Date(o.createdAt).toLocaleDateString('vi-VN'),
+              <span className="block max-w-[140px] truncate" title={o.khachHang.hoTen}>{o.khachHang.hoTen}</span>,
+              `${o.tongCong.toLocaleString('vi-VN')} VNĐ`,
+              <Badge label={orderStatusLabel[o.trangThai]} />,
+              <span className="block max-w-[140px] truncate" title={o.nhanVien.hoTen}>{o.nhanVien.hoTen}</span>,
             ])}
           />
         )}

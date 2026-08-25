@@ -125,14 +125,16 @@ export function OrdersScreen({ onDetail, onCreate, onViewCustomer }: {
                 )}
               </div>,
               <button onClick={() => onDetail(o.id)} className="font-mono text-[10px] font-semibold hover:underline cursor-pointer" style={{ color: '#1a56db' }}>{o.ma}</button>,
-              new Date(o.createdAt).toLocaleDateString('vi-VN'), o.khachHang.hoTen, o.khachHang.sdt,
+              new Date(o.createdAt).toLocaleDateString('vi-VN'),
+              <span className="block max-w-[140px] truncate" title={o.khachHang.hoTen}>{o.khachHang.hoTen}</span>,
+              <span className="block max-w-[110px] truncate" title={o.khachHang.sdt}>{o.khachHang.sdt}</span>,
               <span className="font-semibold">{o.items.length}</span>,
               <span className="font-semibold">{o.tongCong.toLocaleString('vi-VN')} VNĐ</span>,
               paymentMethodLabel[o.phuongThucThanhToan], <Badge label={orderStatusLabel[o.trangThai]} />,
               <Badge label={o.daThanhToan ? 'Đã thanh toán' : 'Chưa thanh toán'} />,
               <Badge label={o.phuongThucNhanHang === 'SHIP' && o.donViVanChuyen ? shippingCarrierLabel[o.donViVanChuyen] : deliveryMethodLabel[o.phuongThucNhanHang]} />,
               o.maVanDon ? <span className="font-mono text-[10px] text-slate-700">{o.maVanDon}</span> : <span className="text-slate-300">—</span>,
-              o.nhanVien.hoTen,
+              <span className="block max-w-[140px] truncate" title={o.nhanVien.hoTen}>{o.nhanVien.hoTen}</span>,
             ])}
           />
         )}

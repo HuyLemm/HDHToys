@@ -4,6 +4,7 @@ import { badRequest } from "../errors/HttpError.js"
 import * as incomeExpenseService from "../services/incomeExpense.service.js"
 
 const listQuerySchema = z.object({
+  q: z.string().optional(),
   loai: z.enum(["THU", "CHI"]).optional(),
   danhMuc: z.enum(["BAN_HANG", "NHAP_HANG", "VAN_CHUYEN", "LUONG", "DIEN_NUOC", "MARKETING", "KHAC"]).optional(),
   nguoiTaoId: z.string().optional(),

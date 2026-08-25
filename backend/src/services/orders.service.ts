@@ -3,7 +3,7 @@ import { prisma } from "../lib/prisma.js"
 import { canTransition, formatOrderCode } from "../lib/orderCode.js"
 import { formatInvoiceCode } from "../lib/invoiceCode.js"
 import { applyInventoryTransaction, getReservedQuantities } from "./inventory.service.js"
-import { badRequest, notFound } from "../errors/HttpError.js"
+import { badRequest, conflict, notFound } from "../errors/HttpError.js"
 import { buildVietQrPayload } from "../lib/vietqr.js"
 import { vietQrConfig, isVietQrConfigured } from "../lib/paymentConfig.js"
 
@@ -170,6 +170,20 @@ export async function remove(id: string) {
           nguoiThucHienId: order.nhanVienId,
           thamChieu: order.ma,
           ghiChu: "Hoàn tồn kho do xóa đơn hàng",
+        })
+      }
+
+      // Đơn ở MOI/DANG_XU_LY chưa từng bị hủy (nếu đã DA_HUY thì cọc đã được
+      // hoàn ở updateStatus rồi, không hoàn lại lần 2 ở đây) — nếu có cọc thì
+      // đó là tiền THU đã ghi sổ lúc tạo đơn, xóa đơn mà không hoàn lại sẽ
+      // khiến khoản cọc đó mãi mãi nằm trong sổ quỹ dù đơn không còn tồn tại.
+      if (order.tienCoc > 0) {
+        await createLedgerEntry(tx, {
+          loai: "CHI",
+          danhMuc: "BAN_HANG",
+          noiDung: `Hoàn cọc do xóa đơn hàng ${order.ma}`,
+          soTien: order.tienCoc,
+          nguoiTaoId: order.nhanVienId,
         })
       }
     }
@@ -452,6 +466,19 @@ export async function updateStatus(params: { orderId: string; trangThai: OrderSt
   }
 
   return prisma.$transaction(async (tx) => {
+    // So-sánh-rồi-ghi (cùng kiểu compare-and-swap của applyInventoryTransaction)
+    // — chặn 2 yêu cầu đổi trạng thái cùng lúc cho cùng 1 đơn (VD nhân viên
+    // bấm "Hoàn thành" tay đúng lúc webhook thanh toán QR cũng đang tự hoàn
+    // thành đơn đó) áp dụng side-effect (hóa đơn, sổ Thu/Chi, trừ/hoàn kho)
+    // hai lần. Chỉ request nào khớp đúng trạng thái vừa đọc mới được ghi.
+    const claim = await tx.order.updateMany({
+      where: { id: orderId, trangThai: current.trangThai },
+      data: { trangThai, ...(trangThai === "HOAN_TIEN" ? { hoanTienAt: new Date() } : {}) },
+    })
+    if (claim.count === 0) {
+      throw conflict("Đơn hàng vừa được thay đổi trạng thái ở nơi khác, vui lòng tải lại trang.")
+    }
+
     if (trangThai === "HOAN_THANH") {
       await applyOrderCompletion(tx, current, nguoiThucHienId)
     }
@@ -468,6 +495,21 @@ export async function updateStatus(params: { orderId: string; trangThai: OrderSt
           nguoiThucHienId,
           thamChieu: current.ma,
           ghiChu: "Hoàn tồn kho do hủy đơn hàng",
+        })
+      }
+
+      // Tiền cọc là tiền thật đã thu (ghi Thu lúc tạo đơn/đặt trước) — hủy
+      // đơn cũng phải hoàn lại, giống hệt cách hủy đặt trước
+      // (preorders.service.ts#cancel) và hoàn tiền đơn đã Hoàn thành (nhánh
+      // HOAN_TIEN bên dưới) đều làm — nếu không, cọc của một đơn đã hủy vẫn
+      // nằm mãi trong sổ quỹ như thể đơn đó vẫn còn hiệu lực.
+      if (current.tienCoc > 0) {
+        await createLedgerEntry(tx, {
+          loai: "CHI",
+          danhMuc: "BAN_HANG",
+          noiDung: `Hoàn cọc do hủy đơn hàng ${current.ma}`,
+          soTien: current.tienCoc,
+          nguoiTaoId: nguoiThucHienId,
         })
       }
     }
@@ -521,7 +563,7 @@ export async function updateStatus(params: { orderId: string; trangThai: OrderSt
       }
     }
 
-    return tx.order.update({ where: { id: orderId }, data: { trangThai }, include: orderInclude })
+    return tx.order.findUniqueOrThrow({ where: { id: orderId }, include: orderInclude, relationLoadStrategy: "join" })
   })
 }
 
@@ -626,11 +668,24 @@ export async function completeOrderViaPayment(orderId: string, systemStaffId: st
   }
 
   return prisma.$transaction(async (tx) => {
+    // So-sánh-rồi-ghi — chặn đơn này bị hoàn thành 2 lần (double invoice/sổ
+    // Thu-Chi/daBan) nếu webhook đối soát chạy gần như đồng thời với một thao
+    // tác khác cũng đổi trạng thái đơn này (nhân viên hoàn thành tay, hoặc
+    // một lượt gọi webhook trùng thời điểm khác). Trước đây chỉ kiểm tra
+    // trangThai đọc NGOÀI transaction rồi ghi thẳng theo id, không có gì chặn
+    // 2 giao dịch cùng đọc "MOI" trước khi cả hai commit.
+    const claim = await tx.order.updateMany({
+      where: { id: orderId, trangThai: { in: ["MOI", "DANG_XU_LY"] } },
+      // Tiền thật đã được ngân hàng xác nhận qua đối soát — đánh dấu luôn đã
+      // thanh toán, khác với luồng nhân viên tự hoàn thành đơn tay (không tự
+      // đổi trạng thái thanh toán, xem updatePaymentStatus).
+      data: { trangThai: "HOAN_THANH", daThanhToan: true },
+    })
+    if (claim.count === 0) {
+      throw conflict("Đơn hàng đã được xử lý ở nơi khác trước khi thanh toán được đối soát.")
+    }
     await applyOrderCompletion(tx, current, systemStaffId)
-    // Tiền thật đã được ngân hàng xác nhận qua đối soát — đánh dấu luôn đã
-    // thanh toán, khác với luồng nhân viên tự hoàn thành đơn tay (không tự
-    // đổi trạng thái thanh toán, xem updatePaymentStatus).
-    return tx.order.update({ where: { id: orderId }, data: { trangThai: "HOAN_THANH", daThanhToan: true }, include: orderInclude })
+    return tx.order.findUniqueOrThrow({ where: { id: orderId }, include: orderInclude, relationLoadStrategy: "join" })
   })
 }
 
@@ -645,9 +700,19 @@ export interface QrPaymentInfo {
  * Tính (không truy vấn DB) thông tin QR thanh toán hiển thị cho một đơn hàng,
  * nếu còn áp dụng được (phương thức QR Code, đơn chưa hoàn thành/hủy).
  */
-export function getQrPaymentInfo(order: Pick<Order, "ma" | "tongCong" | "phuongThucThanhToan" | "trangThai" | "qrExpiresAt">): QrPaymentInfo | null {
+export function getQrPaymentInfo(
+  order: Pick<Order, "ma" | "tongCong" | "tienCoc" | "phuongThucThanhToan" | "trangThai" | "qrExpiresAt">,
+): QrPaymentInfo | null {
   if (order.phuongThucThanhToan !== "QR_CODE") return null
   if (order.trangThai !== "MOI" && order.trangThai !== "DANG_XU_LY") return null
+
+  // Số tiền cần thu qua QR là phần CÒN LẠI sau khi trừ cọc đã nhận — trước
+  // đây luôn yêu cầu đủ tongCong kể cả khi đơn đã có cọc, khiến khách chuyển
+  // đúng phần còn thiếu (hợp lý) sẽ không bao giờ khớp số tiền đối soát
+  // (payments.service.ts so cùng con số này). Nếu cọc đã bằng/vượt tongCong
+  // thì không còn gì để thu qua chuyển khoản nữa — không hiển thị QR.
+  const soTienCanThu = order.tongCong - order.tienCoc
+  if (soTienCanThu <= 0) return null
 
   const expired = order.qrExpiresAt ? order.qrExpiresAt.getTime() < Date.now() : false
 
@@ -659,7 +724,7 @@ export function getQrPaymentInfo(order: Pick<Order, "ma" | "tongCong" | "phuongT
     bankBin: vietQrConfig.bankBin,
     accountNo: vietQrConfig.accountNo,
     accountName: vietQrConfig.accountName,
-    amount: order.tongCong,
+    amount: soTienCanThu,
     addInfo: order.ma,
   })
 

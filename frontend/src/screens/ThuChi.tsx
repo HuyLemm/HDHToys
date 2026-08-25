@@ -41,13 +41,13 @@ export function ThuChiScreen() {
   function reload() {
     setLoading(true)
     api.incomeExpense.list({
+      q: q || undefined,
       range,
       loai: (reverseLookup(transactionKindLabel, loai) as TransactionKind) || undefined,
       danhMuc: (reverseLookup(incomeExpenseCategoryLabel, danhMuc) as IncomeExpenseCategory) || undefined,
       page, pageSize,
     }).then(res => {
-      const filtered = q ? res.items.filter(t => t.noiDung.toLowerCase().includes(q.toLowerCase()) || t.maPhieu.toLowerCase().includes(q.toLowerCase())) : res.items
-      setItems(filtered); setTotal(res.total); setLoading(false)
+      setItems(res.items); setTotal(res.total); setLoading(false)
     })
     api.incomeExpense.summary({ range }).then(setSummary)
   }
@@ -101,7 +101,7 @@ export function ThuChiScreen() {
               <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold border ${t.loai === 'THU' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}`}>{transactionKindLabel[t.loai]}</span>,
               incomeExpenseCategoryLabel[t.danhMuc], t.noiDung,
               <span className={`font-bold text-xs ${t.loai === 'THU' ? 'text-emerald-600' : 'text-red-500'}`}>{t.loai === 'THU' ? '+' : '-'}{t.soTien.toLocaleString('vi-VN')} VNĐ</span>,
-              t.nguoiTao.hoTen,
+              <span className="block max-w-[140px] truncate" title={t.nguoiTao.hoTen}>{t.nguoiTao.hoTen}</span>,
             ])}
           />
         )}

@@ -18,6 +18,7 @@ import { debtsRouter } from "./routes/debts.js"
 import { accountingRouter } from "./routes/accounting.js"
 import { paymentsRouter } from "./routes/payments.js"
 import { preordersRouter } from "./routes/preorders.js"
+import { securityLogRouter } from "./routes/securityLog.js"
 import { errorHandler } from "./middleware/errorHandler.js"
 
 // Danh sách origin frontend được phép gọi API — KHÔNG dùng cors() mặc định
@@ -83,6 +84,7 @@ app.use("/api", incomeExpenseRouter)
 app.use("/api", debtsRouter)
 app.use("/api", accountingRouter)
 app.use("/api", preordersRouter)
+app.use("/api", securityLogRouter)
 
 // Must be registered after all routes.
 app.use(errorHandler)

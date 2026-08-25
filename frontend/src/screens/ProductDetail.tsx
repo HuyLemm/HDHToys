@@ -236,7 +236,9 @@ export function ProductDetailScreen({ productId, onBack }: { productId: string; 
                   rows={history.map(h => [
                     new Date(h.createdAt).toLocaleString('vi-VN'), h.maGiaoDich, inventoryTransactionTypeLabel[h.loai],
                     <span className={h.soLuongThayDoi > 0 ? 'text-emerald-600 font-bold' : 'text-red-500 font-bold'}>{h.soLuongThayDoi > 0 ? '+' : ''}{h.soLuongThayDoi}</span>,
-                    String(h.tonTruoc), String(h.tonSau), h.nguoiThucHien.hoTen, h.thamChieu ?? '—',
+                    String(h.tonTruoc), String(h.tonSau),
+                    <span className="block max-w-[140px] truncate" title={h.nguoiThucHien.hoTen}>{h.nguoiThucHien.hoTen}</span>,
+                    h.thamChieu ?? '—',
                   ])}
                 />
               )

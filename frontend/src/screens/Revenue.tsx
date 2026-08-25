@@ -4,8 +4,9 @@ import {
 } from 'recharts'
 import { Btn, SectionHeader, Table, Pagination, Spinner } from '../components/ui'
 import { FileDown } from 'lucide-react'
-import { api, type RangeKey } from '../lib/api'
+import { api, ApiError, type RangeKey } from '../lib/api'
 import { paymentMethodLabel } from '../lib/labels'
+import { useDialog } from '../lib/dialog'
 
 const COLORS = ['#1a56db', '#f97316', '#10b981', '#a855f7', '#f59e0b']
 
@@ -20,6 +21,7 @@ const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
 ]
 
 export function RevenueScreen() {
+  const dialog = useDialog()
   const [range, setRange] = useState<RangeKey>('30_ngay')
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
@@ -61,7 +63,7 @@ export function RevenueScreen() {
               style={range === r.key ? { background: '#1a56db' } : undefined}>{r.label}</button>
           ))}
         </div>
-        <Btn variant="secondary" small onClick={() => window.open(api.revenue.exportUrl({ range }), '_blank')}>
+        <Btn variant="secondary" small onClick={() => api.revenue.downloadExport({ range }).catch(err => dialog.alert(err instanceof ApiError ? err.message : 'Không thể xuất báo cáo CSV.'))}>
           <FileDown size={13} strokeWidth={1.75} /> Xuất CSV
         </Btn>
       </div>
@@ -169,7 +171,9 @@ export function RevenueScreen() {
                   <Table
                     cols={['Khách hàng', 'SĐT', 'Số đơn', 'Tổng chi tiêu']}
                     rows={repeatCustomers.items.slice(0, 10).map(c => [
-                      <span className="font-medium text-slate-800">{c.hoTen}</span>, c.sdt, `${c.soDon} đơn`,
+                      <span className="block max-w-[140px] truncate font-medium text-slate-800" title={c.hoTen}>{c.hoTen}</span>,
+                      <span className="block max-w-[110px] truncate" title={c.sdt}>{c.sdt}</span>,
+                      `${c.soDon} đơn`,
                       `${c.tongChiTieu.toLocaleString('vi-VN')} VNĐ`,
                     ])}
                   />

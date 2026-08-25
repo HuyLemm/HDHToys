@@ -1,5 +1,5 @@
 import { Router } from "express"
-import { requireAuth } from "../middleware/requireAuth.js"
+import { requireAuth, requireRole } from "../middleware/requireAuth.js"
 import * as paymentsController from "../controllers/payments.controller.js"
 
 export const paymentsRouter = Router()
@@ -8,4 +8,6 @@ export const paymentsRouter = Router()
 // không phải nhân viên — xác thực bằng secret riêng (verifyWebhookSecret).
 paymentsRouter.post("/payments/vietqr/webhook", paymentsController.webhook)
 
-paymentsRouter.get("/payments/unmatched", requireAuth, paymentsController.listUnmatched)
+// Dữ liệu đối soát tài chính — cùng mức nhạy cảm với accounting.ts (sửa bảng
+// cân đối), nên giới hạn cùng vai trò thay vì để mọi nhân viên đã đăng nhập xem.
+paymentsRouter.get("/payments/unmatched", requireAuth, requireRole("ADMIN", "ACCOUNTANT"), paymentsController.listUnmatched)

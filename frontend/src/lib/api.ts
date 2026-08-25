@@ -127,6 +127,40 @@ async function openAuthenticatedPdf(path: string) {
 }
 
 /**
+ * Downloads a protected endpoint that returns a file (e.g. CSV export) and
+ * saves it via the browser's normal download flow — same reason as
+ * openAuthenticatedPdf: a plain link/window.open sends no Authorization
+ * header, so the protected route would 401 (this was the actual bug: the CSV
+ * export button used window.open directly and silently failed with 401).
+ */
+async function downloadAuthenticatedFile(path: string, filename: string) {
+  const headers: Record<string, string> = {}
+  if (authToken) headers.Authorization = `Bearer ${authToken}`
+
+  const res = await fetch(`${API_BASE}${path}`, { headers })
+  if (!res.ok) {
+    let message = res.statusText
+    try {
+      const body = await res.json()
+      message = body.error ?? message
+    } catch {
+      // no JSON body
+    }
+    throw new ApiError(res.status, message)
+  }
+
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
+
+/**
  * Fetches a protected binary endpoint (e.g. the QR payment image) as a Blob,
  * for embedding inline (<img src={URL.createObjectURL(blob)}>) — same reason
  * as openAuthenticatedPdf: a plain <img src="..."> sends no Authorization
@@ -170,6 +204,13 @@ export type Staff = {
   vaiTro: StaffRole
   trangThai?: 'ACTIVE' | 'LOCKED'
   createdAt?: string
+}
+
+export type SecurityLog = {
+  id: string
+  event: string
+  detail: Record<string, unknown> | null
+  createdAt: string
 }
 
 export type ProductStatus = 'CON_HANG' | 'SAP_HET' | 'HET_HANG' | 'NGUNG_KINH_DOANH'
@@ -393,6 +434,13 @@ export const api = {
     delete: (id: string) => del<void>(`/staff/${id}`),
   },
 
+  /** Chỉ Admin — nhật ký các sự kiện bảo mật bị từ chối (sai token, hết quyền, vượt rate limit, sai webhook secret/IP). */
+  securityLogs: {
+    list: (params?: { event?: string; page?: number; pageSize?: number }) =>
+      get<Paginated<SecurityLog>>(`/security-logs${qs(params)}`),
+    eventTypes: () => get<{ items: string[] }>('/security-logs/event-types'),
+  },
+
   products: {
     list: (params?: {
       q?: string
@@ -546,6 +594,7 @@ export const api = {
     adjust: (data: { productId: string; tonKhoMoi: number; ghiChu?: string }) =>
       post<InventoryTransaction>('/inventory/adjust', data),
     history: (params?: {
+      q?: string
       productId?: string
       loai?: InventoryTransactionType
       nguoiThucHienId?: string
@@ -601,11 +650,11 @@ export const api = {
       get<{ tongKhachHang: number; khachMuaLai: number; tyLeMuaLai: number; items: { hoTen: string; sdt: string; soDon: number; tongChiTieu: number }[] }>(
         `/revenue/repeat-customers${qs(params)}`,
       ),
-    exportUrl: (params?: { range?: RangeKey }) => `${API_BASE}/revenue/export${qs(params)}`,
+    downloadExport: (params?: { range?: RangeKey }) => downloadAuthenticatedFile(`/revenue/export${qs(params)}`, 'doanh-thu.csv'),
   },
 
   incomeExpense: {
-    list: (params?: { loai?: TransactionKind; danhMuc?: IncomeExpenseCategory; range?: RangeKey; page?: number; pageSize?: number }) =>
+    list: (params?: { q?: string; loai?: TransactionKind; danhMuc?: IncomeExpenseCategory; range?: RangeKey; page?: number; pageSize?: number }) =>
       get<Paginated<IncomeExpense>>(`/income-expense${qs(params)}`),
     summary: (params?: { range?: RangeKey }) =>
       get<{ tongThu: number; tongChi: number; dongTienRong: number }>(`/income-expense/summary${qs(params)}`),

@@ -2,14 +2,17 @@
 // (backend/.env), not a mock. Every record created here is scoped to a unique
 // RUN_ID and removed again in afterAll. Run only against a dev/staging database.
 //
-// NOTE: only exercises the Postgres-fallback image storage path (no S3_* env
-// vars configured in this dev environment) — the S3-compatible path in
-// lib/imageStorage.ts can't be exercised here without real bucket credentials.
+// NOTE: this dev environment now has real S3_* env vars configured (item 11 —
+// Backblaze B2), so the Postgres-fallback test below temporarily clears them
+// (restored in afterAll) to deterministically exercise that code path
+// regardless of what's actually configured — lib/imageStorage.ts reads env
+// vars per-call (not cached at module load) specifically to make this possible.
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
 import { prisma } from "../lib/prisma.js"
 import * as productsService from "./products.service.js"
 
 const RUN_ID = `TEST-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+const S3_ENV_KEYS = ["S3_BUCKET", "S3_ENDPOINT", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"] as const
 
 // Ảnh PNG 1x1 hợp lệ tối thiểu (magic bytes thật) — file-type phải nhận ra image/png.
 const TINY_PNG = Buffer.from(
@@ -19,15 +22,23 @@ const TINY_PNG = Buffer.from(
 
 describe("products.service image storage (integration)", () => {
   let productId: string
+  let savedS3Env: Record<string, string | undefined> = {}
 
   beforeAll(async () => {
     const product = await prisma.product.create({
       data: { sku: RUN_ID, ten: `${RUN_ID} Product`, danhMuc: "Test", nhaCungCap: "Test", giaVon: 1000, giaBan: 2000 },
     })
     productId = product.id
+
+    savedS3Env = Object.fromEntries(S3_ENV_KEYS.map((k) => [k, process.env[k]]))
+    for (const k of S3_ENV_KEYS) delete process.env[k]
   })
 
   afterAll(async () => {
+    for (const k of S3_ENV_KEYS) {
+      if (savedS3Env[k] === undefined) delete process.env[k]
+      else process.env[k] = savedS3Env[k]
+    }
     await prisma.productImage.deleteMany({ where: { productId } })
     await prisma.product.delete({ where: { id: productId } })
   })

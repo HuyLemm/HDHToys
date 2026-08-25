@@ -59,6 +59,7 @@ export async function adjust(req: Request, res: Response) {
 }
 
 const historyQuerySchema = z.object({
+  q: z.string().optional(),
   productId: z.string().optional(),
   loai: z.enum(["NHAP", "XUAT", "DIEU_CHINH", "TRA_HANG"]).optional(),
   nguoiThucHienId: z.string().optional(),
