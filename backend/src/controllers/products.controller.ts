@@ -44,12 +44,15 @@ const createSchema = z.object({
   sku: z.string().min(1),
   ten: z.string().min(1),
   barcode: z.string().optional(),
-  danhMuc: z.string().min(1),
-  nhaCungCap: z.string().min(1),
+  // Chỉ sku/ten thực sự bắt buộc — các trường còn lại cho phép tạo sản phẩm
+  // "nháp" trước (VD import hàng loạt từ nguồn ngoài chưa có đủ giá/danh
+  // mục), điền đầy đủ sau bằng màn hình sửa sản phẩm.
+  danhMuc: z.string().min(1).default("Chưa phân loại"),
+  nhaCungCap: z.string().min(1).default("Chưa rõ"),
   anhUrl: z.string().url().optional(),
-  giaVon: z.number().int().min(1, "Giá vốn phải lớn hơn 0."),
+  giaVon: z.number().int().min(0).default(0),
   phiVanChuyen: z.number().int().min(0).default(0),
-  giaBan: z.number().int().min(1, "Giá bán phải lớn hơn 0."),
+  giaBan: z.number().int().min(0).default(0),
   tonKho: z.number().int().min(0).default(0),
   tonKhoToiThieu: z.number().int().min(0).default(0),
   loaiSanPham: z.enum(["CO_SAN", "PRE_ORDER"]).default("CO_SAN"),

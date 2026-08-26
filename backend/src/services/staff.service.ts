@@ -49,10 +49,10 @@ export async function resetPassword(id: string, matKhauMoi: string) {
 /**
  * Chỉ Admin được gọi (route-level requireRole). Staff gần như luôn được
  * tham chiếu (nhanVienId trên Order, nguoiTaoId trên Invoice/IncomeExpense,
- * nguoiThucHienId trên InventoryTransaction, nhanVienId trên Preorder — đều
- * là FK bắt buộc, không cascade) — nên chỉ xóa được nếu tài khoản đó chưa hề
- * tạo/xử lý gì. Trường hợp phổ biến hơn (nhân viên đã dùng hệ thống) vẫn nên
- * dùng "Khóa tài khoản" (trangThai=LOCKED) như trước.
+ * nguoiThucHienId trên InventoryTransaction — đều là FK bắt buộc, không
+ * cascade) — nên chỉ xóa được nếu tài khoản đó chưa hề tạo/xử lý gì. Trường
+ * hợp phổ biến hơn (nhân viên đã dùng hệ thống) vẫn nên dùng "Khóa tài
+ * khoản" (trangThai=LOCKED) như trước.
  */
 export async function remove(id: string, currentStaffId: string) {
   const staff = await prisma.staff.findUnique({ where: { id } })
@@ -62,14 +62,13 @@ export async function remove(id: string, currentStaffId: string) {
     throw badRequest("Đây là tài khoản hệ thống dùng cho thanh toán tự động — không thể xóa.")
   }
 
-  const [orderCount, invoiceCount, inventoryCount, incomeExpenseCount, preorderCount] = await Promise.all([
+  const [orderCount, invoiceCount, inventoryCount, incomeExpenseCount] = await Promise.all([
     prisma.order.count({ where: { nhanVienId: id } }),
     prisma.invoice.count({ where: { nguoiTaoId: id } }),
     prisma.inventoryTransaction.count({ where: { nguoiThucHienId: id } }),
     prisma.incomeExpense.count({ where: { nguoiTaoId: id } }),
-    prisma.preorder.count({ where: { nhanVienId: id } }),
   ])
-  if (orderCount || invoiceCount || inventoryCount || incomeExpenseCount || preorderCount) {
+  if (orderCount || invoiceCount || inventoryCount || incomeExpenseCount) {
     throw badRequest("Nhân viên này đã tạo/xử lý dữ liệu trong hệ thống — không thể xóa, hãy dùng 'Khóa tài khoản' thay thế.")
   }
 

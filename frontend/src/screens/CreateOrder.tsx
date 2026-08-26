@@ -277,12 +277,13 @@ export function NewCustomerModal({ onClose, onCreated }: { onClose: () => void; 
   const [submitting, setSubmitting] = useState(false)
 
   async function handleSubmit() {
-    if (!hoTen || !sdt) { setError('Vui lòng nhập tên và số điện thoại.'); return }
+    if (!hoTen) { setError('Vui lòng nhập tên khách hàng.'); return }
     setError(null)
     setSubmitting(true)
     try {
       const customer = await api.customers.create({
-        hoTen, sdt,
+        hoTen,
+        sdt: sdt || undefined,
         email: email || undefined,
         diaChi: diaChi || undefined,
         linkFacebook: linkFacebook || undefined,
@@ -301,7 +302,7 @@ export function NewCustomerModal({ onClose, onCreated }: { onClose: () => void; 
     <Modal title="Thêm khách hàng mới" onClose={onClose}>
       <ErrorBox message={error} />
       <Field label="Họ tên" required><Input value={hoTen} onChange={e => setHoTen(e.target.value)} placeholder="Nguyễn Văn A" /></Field>
-      <Field label="Số điện thoại" required><Input value={sdt} onChange={e => setSdt(e.target.value)} placeholder="09xxxxxxxx" /></Field>
+      <Field label="Số điện thoại (tùy chọn)"><Input value={sdt} onChange={e => setSdt(e.target.value)} placeholder="09xxxxxxxx" /></Field>
       <Field label="Email (tùy chọn)"><Input value={email} onChange={e => setEmail(e.target.value)} placeholder="email@example.com" /></Field>
       <Field label="Địa chỉ (tùy chọn)"><Input value={diaChi} onChange={e => setDiaChi(e.target.value)} placeholder="Số nhà, đường, quận/huyện, tỉnh/TP" /></Field>
       <Field label="Link Facebook (tùy chọn)"><Input value={linkFacebook} onChange={e => setLinkFacebook(e.target.value)} placeholder="facebook.com/..." /></Field>

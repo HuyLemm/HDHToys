@@ -17,8 +17,6 @@ import { CustomersScreen } from './screens/Customers'
 import { CustomerDetailScreen } from './screens/CustomerDetail'
 import { InvoicesScreen } from './screens/Invoices'
 import { InvoiceDetailScreen } from './screens/InvoiceDetail'
-import { PreordersScreen } from './screens/Preorders'
-import { PreorderDetailScreen } from './screens/PreorderDetail'
 import { RevenueScreen } from './screens/Revenue'
 import { ThuChiScreen } from './screens/ThuChi'
 import { KeToanScreen } from './screens/KeToan'
@@ -39,8 +37,6 @@ const titles: Record<string, string> = {
   'customer-detail': 'Hồ sơ khách hàng',
   invoices: 'Quản lý hóa đơn',
   'invoice-detail': 'Chi tiết hóa đơn',
-  preorders: 'Đặt trước',
-  'preorder-detail': 'Chi tiết đặt trước',
   revenue: 'Doanh thu',
   'thu-chi': 'Quản lý thu / chi',
   'ke-toan': 'Kế toán',
@@ -52,7 +48,7 @@ interface Nav { screen: Screen; id?: string }
 
 // Các màn hình chi tiết cần "id" mới hiển thị được — nếu URL thiếu id (gõ tay,
 // link cũ...) thì rơi về Dashboard cho an toàn thay vì crash.
-const SCREENS_REQUIRING_ID: Screen[] = ['order-detail', 'product-detail', 'customer-detail', 'invoice-detail', 'preorder-detail']
+const SCREENS_REQUIRING_ID: Screen[] = ['order-detail', 'product-detail', 'customer-detail', 'invoice-detail']
 
 function navFromLocation(): Nav {
   const params = new URLSearchParams(window.location.search)
@@ -122,8 +118,6 @@ function AppShell() {
       case 'customer-detail': return <CustomerDetailScreen customerId={nav.id!} onBack={() => go('customers')} onOrderDetail={id => go('order-detail', id)} />
       case 'invoices': return <InvoicesScreen onDetail={id => go('invoice-detail', id)} />
       case 'invoice-detail': return <InvoiceDetailScreen invoiceId={nav.id!} onBack={() => go('invoices')} onViewOrder={id => go('order-detail', id)} />
-      case 'preorders': return <PreordersScreen onDetail={id => go('preorder-detail', id)} />
-      case 'preorder-detail': return <PreorderDetailScreen preorderId={nav.id!} onBack={() => go('preorders')} onViewOrder={id => go('order-detail', id)} />
       case 'revenue': return <RevenueScreen />
       case 'thu-chi': return <ThuChiScreen />
       case 'ke-toan': return <KeToanScreen />

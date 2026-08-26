@@ -154,7 +154,7 @@ export async function getRepeatCustomers(tuNgay: Date, denNgay: Date) {
     select: { khachHangId: true, tongCong: true, khachHang: { select: { hoTen: true, sdt: true } } },
   })
 
-  const byCustomer = new Map<string, { hoTen: string; sdt: string; soDon: number; tongChiTieu: number }>()
+  const byCustomer = new Map<string, { hoTen: string; sdt: string | null; soDon: number; tongChiTieu: number }>()
   for (const o of orders) {
     const bucket = byCustomer.get(o.khachHangId) ?? { hoTen: o.khachHang.hoTen, sdt: o.khachHang.sdt, soDon: 0, tongChiTieu: 0 }
     bucket.soDon += 1

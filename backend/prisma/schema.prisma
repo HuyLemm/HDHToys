@@ -37,7 +37,6 @@ model Staff {
   inventoryTransactions InventoryTransaction[]
   invoicesCreated Invoice[]
   incomeExpenses  IncomeExpense[]
-  preorders    Preorder[]
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -72,15 +71,15 @@ model Product {
   daBan          Int           @default(0)
   trangThai      ProductStatus @default(CON_HANG)
   // Phân loại "hàng có sẵn" vs "pre-order" (hàng phải chờ về, ví dụ order từ
-  // nước ngoài) — độc lập với sổ Đặt trước (Preorder), chỉ là nhãn + ngày dự
-  // kiến/nhắc nhở để theo dõi, không ảnh hưởng luồng bán hàng bình thường.
+  // nước ngoài) — chỉ là nhãn + ngày dự kiến/nhắc nhở để theo dõi, không ảnh
+  // hưởng luồng bán hàng bình thường (Order xử lý như nhau cho cả hai loại).
   loaiSanPham    LoaiSanPham   @default(CO_SAN)
   ngayDuKienVe   DateTime?
   nhacHang       Boolean       @default(false)
   orderItems     OrderItem[]
   inventoryTransactions InventoryTransaction[]
-  preorders      Preorder[]
   image          ProductImage?
+  notifications  Notification[]
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
@@ -122,7 +121,10 @@ enum CustomerTier {
 model Customer {
   id            String         @id @default(cuid())
   hoTen         String
-  sdt           String         @unique
+  // Không bắt buộc nữa — nhiều khách (đặc biệt đặt hàng qua Facebook) chỉ có
+  // tên/link Facebook, chưa có SĐT ngay lúc tạo. Postgres cho phép nhiều NULL
+  // cùng lúc dù có @unique (NULL không coi là trùng NULL khác).
+  sdt           String?        @unique
   email         String?
   ngaySinh      DateTime?
   diaChi        String?
@@ -133,7 +135,6 @@ model Customer {
   diemTichLuy   Int            @default(0)
   ghiChu        CustomerNote[]
   orders        Order[]
-  preorders     Preorder[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
@@ -212,10 +213,7 @@ model Order {
   tamTinh             Int
   giamGia             Int           @default(0)
   tongCong            Int
-  // Tiền cọc khách đã đặt trước khi tạo đơn (0 = không cọc). Lưu trực tiếp
-  // trên Order (không chỉ tham chiếu qua Preorder.tienCoc) để đơn tạo trực
-  // tiếp (không qua sổ Đặt trước) cũng cọc được, và để hóa đơn vẫn hiển thị
-  // đúng số cọc dù sau này Preorder gốc có bị xóa.
+  // Tiền cọc khách đã đặt trước khi tạo đơn (0 = không cọc).
   tienCoc             Int           @default(0)
   ghiChu              String?
   qrExpiresAt         DateTime?
@@ -227,7 +225,6 @@ model Order {
   items               OrderItem[]
   invoice             Invoice?
   paymentTransactions PaymentTransaction[]
-  preorder            Preorder?
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 
@@ -387,48 +384,6 @@ model PaymentTransaction {
   @@map("payment_transactions")
 }
 
-enum PreorderStatus {
-  CHO_HANG
-  SAN_SANG
-  DA_CHUYEN_DON
-  DA_HUY
-}
-
-// Sổ đặt trước (preorder), tách biệt khỏi Order — cùng cách tổ chức với Debt:
-// không đụng vào state machine Order đang chạy ổn định. Khi hàng về đủ và
-// nhân viên xác nhận, một Order thật được tạo (dùng chung orders.service.ts)
-// và Preorder chỉ còn giữ vai trò tham chiếu lịch sử (orderId).
-model Preorder {
-  id            String         @id @default(cuid())
-  soThuTu       Int            @unique @default(autoincrement())
-  ma            String         @unique
-  khachHang     Customer       @relation(fields: [khachHangId], references: [id])
-  khachHangId   String
-  nhanVien      Staff          @relation(fields: [nhanVienId], references: [id])
-  nhanVienId    String
-  // Một trong hai PHẢI có giá trị: product (SP đã có trong catalog nhưng hết
-  // hàng) hoặc tenSanPhamMoi (SP hoàn toàn mới, chưa có SKU/Product thật).
-  product       Product?       @relation(fields: [productId], references: [id])
-  productId     String?
-  tenSanPhamMoi String?
-  soLuong       Int
-  donGiaDuKien  Int
-  tienCoc       Int            @default(0)
-  trangThai     PreorderStatus @default(CHO_HANG)
-  ngayDuKienCo  DateTime?
-  ghiChu        String?
-  order         Order?         @relation(fields: [orderId], references: [id])
-  orderId       String?        @unique
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-
-  @@index([khachHangId])
-  @@index([productId])
-  @@index([trangThai])
-  @@index([createdAt])
-  @@map("preorders")
-}
-
 model AccountingBalance {
   id                  String   @id @default("singleton")
   tienMat             Int      @default(0)
@@ -456,4 +411,32 @@ model SecurityLog {
   @@index([event])
   @@index([createdAt])
   @@map("security_logs")
+}
+
+enum NotificationType {
+  PREORDER_DEN_HAN
+}
+
+// Thông báo hiện ở chuông navbar. Hiện chỉ có 1 nguồn sinh: sản phẩm
+// Pre-order (nhacHang=true) tới đúng ngày dự kiến về (ngayDuKienVe). Không có
+// cron riêng — notifications.service.ts#generateDueNotifications() quét và
+// tạo (nếu thiếu) mỗi khi FE gọi GET /notifications, nên thông báo xuất hiện
+// ngay lần đầu có ai mở app trong ngày đó. ngayApDung (đã chuẩn hoá về đầu
+// ngày giờ VN) + unique constraint bên dưới đảm bảo không tạo trùng dù gọi
+// lại nhiều lần trong cùng một ngày.
+model Notification {
+  id         String           @id @default(cuid())
+  loai       NotificationType
+  tieuDe     String
+  noiDung    String
+  product    Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productId  String?
+  ngayApDung DateTime
+  daDoc      Boolean          @default(false)
+  createdAt  DateTime         @default(now())
+
+  @@unique([productId, loai, ngayApDung])
+  @@index([daDoc])
+  @@index([createdAt])
+  @@map("notifications")
 }

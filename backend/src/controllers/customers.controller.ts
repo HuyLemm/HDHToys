@@ -23,7 +23,7 @@ export async function get(req: Request, res: Response) {
 
 const createSchema = z.object({
   hoTen: z.string().min(1),
-  sdt: z.string().min(1),
+  sdt: z.string().min(1).optional(),
   email: z.string().email().optional(),
   ngaySinh: z.coerce.date().optional(),
   diaChi: z.string().optional(),
@@ -46,6 +46,7 @@ const updateSchema = z.object({
   // .nullable() (không chỉ .optional()) — cho phép gửi null để XÓA giá trị đã
   // lưu (khác với bỏ hẳn field, nghĩa là "không đổi"). Không cho gửi "" vì
   // email rỗng vẫn phải qua .email(), frontend gửi null khi người dùng xóa hết ô.
+  sdt: z.string().min(1).nullable().optional(),
   email: z.string().email().nullable().optional(),
   ngaySinh: z.coerce.date().nullable().optional(),
   diaChi: z.string().nullable().optional(),

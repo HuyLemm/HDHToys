@@ -141,24 +141,21 @@ export async function reactivate(id: string) {
 }
 
 /**
- * Chỉ chặn nếu còn Đơn hàng hoặc Đặt trước thật sự đang tham chiếu sản phẩm
- * (orderItemCount/preorderCount) — đây là dữ liệu giao dịch cần giữ lại nếu
- * còn tồn tại. Lịch sử kho (InventoryTransaction) KHÔNG chặn xóa nữa: nếu
- * đơn hàng liên quan đã bị xóa thì lịch sử kho của riêng sản phẩm này không
- * còn ý nghĩa gì để giữ lại — xóa sản phẩm sẽ tự động xóa theo (onDelete:
+ * Chỉ chặn nếu còn Đơn hàng thật sự đang tham chiếu sản phẩm (orderItemCount)
+ * — đây là dữ liệu giao dịch cần giữ lại nếu còn tồn tại. Lịch sử kho
+ * (InventoryTransaction) KHÔNG chặn xóa nữa: nếu đơn hàng liên quan đã bị
+ * xóa thì lịch sử kho của riêng sản phẩm này không còn ý nghĩa gì để giữ
+ * lại — xóa sản phẩm sẽ tự động xóa theo (onDelete:
  * Cascade trong schema). Muốn giữ lại lịch sử thì dùng "Ngừng kinh doanh".
  */
 export async function remove(id: string) {
   await get(id)
 
-  const [orderItemCount, preorderCount] = await Promise.all([
-    prisma.orderItem.count({ where: { productId: id } }),
-    prisma.preorder.count({ where: { productId: id } }),
-  ])
+  const orderItemCount = await prisma.orderItem.count({ where: { productId: id } })
 
-  if (orderItemCount > 0 || preorderCount > 0) {
+  if (orderItemCount > 0) {
     throw badRequest(
-      "Không thể xóa sản phẩm đã có trong đơn hàng hoặc đơn đặt trước còn tồn tại — hãy dùng 'Ngừng kinh doanh' thay thế.",
+      "Không thể xóa sản phẩm đã có trong đơn hàng còn tồn tại — hãy dùng 'Ngừng kinh doanh' thay thế.",
     )
   }
 

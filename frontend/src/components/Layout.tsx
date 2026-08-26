@@ -2,14 +2,73 @@ import { useEffect, useRef, useState } from 'react'
 import {
   LayoutDashboard, ClipboardList, Boxes, Package, Users,
   ReceiptText, ChartColumn, Wallet, Calculator, FileText, Settings,
-  Search, Bell, Menu, LogOut, CalendarClock, PanelLeftClose, PanelLeftOpen,
+  Search, Bell, Menu, LogOut, PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react'
 import { HdhLogo, Badge } from './ui'
 import logoUrl from '../assets/logo.jpg'
-import { api } from '../lib/api'
+import { api, type Notification } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { staffRoleLabel } from '../lib/labels'
 import type { Screen } from '../types'
+
+const NOTIFICATION_POLL_MS = 60_000
+
+function timeAgoVi(iso: string) {
+  const diffMs = Date.now() - new Date(iso).getTime()
+  const min = Math.floor(diffMs / 60_000)
+  if (min < 1) return 'Vừa xong'
+  if (min < 60) return `${min} phút trước`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr} giờ trước`
+  return new Date(iso).toLocaleDateString('vi-VN')
+}
+
+function NotificationDropdown({ notifications, onNav, onMarkRead, onMarkAllRead, onClose }: {
+  notifications: Notification[]
+  onNav: (s: Screen, id?: string) => void
+  onMarkRead: (id: string) => void
+  onMarkAllRead: () => void
+  onClose: () => void
+}) {
+  const hasUnread = notifications.some(n => !n.daDoc)
+
+  return (
+    <div className="absolute right-0 top-full mt-1 w-80 bg-white border border-slate-200 rounded-lg shadow-xl z-50 overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 bg-slate-50">
+        <span className="text-xs font-bold text-slate-600">Thông báo</span>
+        {hasUnread && (
+          <button onClick={onMarkAllRead} className="text-[10px] font-medium hover:underline cursor-pointer" style={{ color: '#1a56db' }}>
+            Đánh dấu đã đọc tất cả
+          </button>
+        )}
+      </div>
+      <div className="max-h-96 overflow-y-auto">
+        {notifications.length === 0 ? (
+          <div className="p-4 text-xs text-slate-400 text-center">Không có thông báo</div>
+        ) : (
+          notifications.map(n => (
+            <button
+              key={n.id}
+              onClick={() => {
+                onMarkRead(n.id)
+                if (n.productId) onNav('product-detail', n.productId)
+                onClose()
+              }}
+              className="w-full flex items-start gap-2 px-3 py-2.5 hover:bg-blue-50 transition-colors text-left border-b border-slate-50 last:border-b-0"
+            >
+              {!n.daDoc && <span className="mt-1 w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#f97316' }} />}
+              <div className={`min-w-0 ${n.daDoc ? 'opacity-60' : ''}`}>
+                <div className="text-xs font-semibold text-slate-800">{n.tieuDe}</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">{n.noiDung}</div>
+                <div className="text-[10px] text-slate-400 mt-1">{timeAgoVi(n.createdAt)}</div>
+              </div>
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
 
 const navItems = [
   { key: 'dashboard', Icon: LayoutDashboard, label: 'Tổng quan' },
@@ -17,7 +76,6 @@ const navItems = [
   { key: 'inventory', Icon: Boxes, label: 'Kho hàng' },
   { key: 'products', Icon: Package, label: 'Sản phẩm' },
   { key: 'customers', Icon: Users, label: 'Khách hàng' },
-  { key: 'preorders', Icon: CalendarClock, label: 'Đặt trước' },
   { key: 'invoices', Icon: ReceiptText, label: 'Hóa đơn' },
   { key: 'revenue', Icon: ChartColumn, label: 'Doanh thu' },
   { key: 'thu-chi', Icon: Wallet, label: 'Thu / Chi' },
@@ -34,7 +92,6 @@ export function Sidebar({ active, onNav, collapsed, onToggleCollapsed, mobileOpe
     ['inventory-history'].includes(active) ? 'inventory' :
     ['product-detail'].includes(active) ? 'products' :
     ['customer-detail'].includes(active) ? 'customers' :
-    ['preorder-detail'].includes(active) ? 'preorders' :
     ['invoice-detail'].includes(active) ? 'invoices' : active)
 
   return (
@@ -196,13 +253,45 @@ export function Header({ title, onToggleSidebar, onNav }: {
   const wrapRef = useRef<HTMLDivElement>(null)
   const { staff } = useAuth()
 
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [notifOpen, setNotifOpen] = useState(false)
+  const notifRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     function onClick(e: MouseEvent) {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setFocused(false)
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false)
     }
     document.addEventListener('mousedown', onClick)
     return () => document.removeEventListener('mousedown', onClick)
   }, [])
+
+  useEffect(() => {
+    function refresh() {
+      api.notifications.list({ pageSize: 20 }).then(res => {
+        setNotifications(res.items)
+        setUnreadCount(res.unread)
+      }).catch(() => {})
+    }
+    refresh()
+    const handle = setInterval(refresh, NOTIFICATION_POLL_MS)
+    return () => clearInterval(handle)
+  }, [])
+
+  function handleMarkRead(id: string) {
+    const target = notifications.find(n => n.id === id)
+    if (!target || target.daDoc) return
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, daDoc: true } : n))
+    setUnreadCount(prev => Math.max(0, prev - 1))
+    api.notifications.markRead(id).catch(() => {})
+  }
+
+  function handleMarkAllRead() {
+    setNotifications(prev => prev.map(n => ({ ...n, daDoc: true })))
+    setUnreadCount(0)
+    api.notifications.markAllRead().catch(() => {})
+  }
 
   return (
     <header className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4 h-14 border-b border-slate-200 bg-white flex-shrink-0 z-10">
@@ -230,10 +319,24 @@ export function Header({ title, onToggleSidebar, onNav }: {
       <div className="flex items-center gap-2 sm:gap-3 text-xs text-slate-500 flex-shrink-0">
         <span className="hidden lg:inline">{new Date().toLocaleDateString('vi-VN')}</span>
         <span className="text-slate-300 hidden lg:inline">|</span>
-        <div className="relative">
-          <button className="relative p-1.5 rounded hover:bg-slate-100 text-slate-500 cursor-pointer">
+        <div className="relative" ref={notifRef}>
+          <button onClick={() => setNotifOpen(v => !v)} className="relative p-1.5 rounded hover:bg-slate-100 text-slate-500 cursor-pointer">
             <Bell size={17} strokeWidth={1.75} />
+            {unreadCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full text-[9px] font-bold text-white flex items-center justify-center" style={{ background: '#f97316' }}>
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
           </button>
+          {notifOpen && (
+            <NotificationDropdown
+              notifications={notifications}
+              onNav={onNav}
+              onMarkRead={handleMarkRead}
+              onMarkAllRead={handleMarkAllRead}
+              onClose={() => setNotifOpen(false)}
+            />
+          )}
         </div>
         <div className="flex items-center gap-1.5">
           <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0" style={{ background: '#1a56db' }}>

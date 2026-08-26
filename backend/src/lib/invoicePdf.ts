@@ -34,10 +34,9 @@ export interface InvoicePdfData {
     phiShip: number
     tongCong: number
     tienCoc: number
-    khachHang: { hoTen: string; sdt: string; email: string | null; diaChi: string | null }
+    khachHang: { hoTen: string; sdt: string | null; email: string | null; diaChi: string | null }
     nhanVien: { hoTen: string }
     items: { soLuong: number; donGia: number; thanhTien: number; product: { sku: string; ten: string; loaiSanPham: string } }[]
-    preorder?: { ma: string } | null
     paymentTransactions?: { maGiaoDichNganHang: string }[]
   }
 }
@@ -140,7 +139,7 @@ export async function renderInvoicePdf(invoice: InvoicePdfData, res: Response) {
   ].filter((l): l is string => Boolean(l))
   const customerLines = [
     order.khachHang.hoTen,
-    `Điện thoại: ${order.khachHang.sdt}`,
+    `Điện thoại: ${order.khachHang.sdt ?? "—"}`,
     order.khachHang.email && `Email: ${order.khachHang.email}`,
   ].filter((l): l is string => Boolean(l))
   const rowSlots = Math.max(storeLines.length, customerLines.length)
@@ -234,8 +233,7 @@ export async function renderInvoicePdf(invoice: InvoicePdfData, res: Response) {
   totalsRow("Giảm giá", order.giamGia > 0 ? `-${formatMoney(order.giamGia)}` : formatMoney(0))
   totalsRow("Phí vận chuyển", formatMoney(order.phiShip))
   totalsRow("Tổng cộng", formatMoney(order.tongCong), { bold: true, color: docAccent, divider: true })
-  const nguon = order.preorder ? ` (${order.preorder.ma})` : ""
-  totalsRow(`Tiền đã cọc${nguon}`, order.tienCoc > 0 ? `-${formatMoney(order.tienCoc)}` : formatMoney(0))
+  totalsRow("Tiền đã cọc", order.tienCoc > 0 ? `-${formatMoney(order.tienCoc)}` : formatMoney(0))
   totalsRow("THANH TOÁN CUỐI CÙNG", formatMoney(order.tongCong - order.tienCoc), { bold: true, color: docAccent, divider: true })
 
   const notesHeight = doc.font(bodyFont).fontSize(8.5).heightOfString(notesText, { width: notesWidth })

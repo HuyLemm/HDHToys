@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Package, AlertTriangle } from 'lucide-react'
+import { Package, AlertTriangle, PackageCheck } from 'lucide-react'
 import { BackBtn, Badge, Btn, KpiCard, Tabs, Table, Spinner, Modal, Field, Input, Select, ErrorBox } from '../components/ui'
 import { api, ApiError, type Product, type InventoryTransaction, type LoaiSanPham } from '../lib/api'
 import { productStatusLabel, inventoryTransactionTypeLabel, loaiSanPhamLabel } from '../lib/labels'
+import { preorderDueStatus } from '../lib/preorderStatus'
 import { useDialog } from '../lib/dialog'
 import { StockModal } from './Inventory'
 
@@ -175,12 +176,22 @@ export function ProductDetailScreen({ productId, onBack }: { productId: string; 
 
       {deleteError && <ErrorBox message={deleteError} />}
 
-      {product.loaiSanPham === 'PRE_ORDER' && product.nhacHang && product.ngayDuKienVe && new Date(product.ngayDuKienVe) <= new Date() && (
-        <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-700">
-          <AlertTriangle size={14} strokeWidth={2} className="flex-shrink-0" />
-          Đã tới/qua ngày dự kiến hàng về ({new Date(product.ngayDuKienVe).toLocaleDateString('vi-VN')}) — kiểm tra hàng pre-order này.
-        </div>
-      )}
+      {(() => {
+        if (product.loaiSanPham !== 'PRE_ORDER' || !product.nhacHang || !product.ngayDuKienVe) return null
+        const dueStatus = preorderDueStatus(product.ngayDuKienVe)
+        if (!dueStatus) return null
+        const ngay = new Date(product.ngayDuKienVe).toLocaleDateString('vi-VN')
+        return (
+          <div className={`flex items-center gap-2 p-3 rounded-lg text-xs border ${dueStatus === 'toi' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+            {dueStatus === 'toi'
+              ? <PackageCheck size={14} strokeWidth={2} className="flex-shrink-0" />
+              : <AlertTriangle size={14} strokeWidth={2} className="flex-shrink-0" />}
+            {dueStatus === 'toi'
+              ? `Đã đến ngày dự kiến hàng về (${ngay}) — kiểm tra hàng pre-order này.`
+              : `Đã quá ngày dự kiến hàng về (${ngay}) — kiểm tra hàng pre-order này.`}
+          </div>
+        )
+      })()}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KpiCard label="Tồn kho" value={`${product.tonKho} sp`} />

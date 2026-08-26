@@ -37,6 +37,8 @@ export async function applyInventoryTransaction(
     nguoiThucHienId: string
     thamChieu?: string
     ghiChu?: string
+    /** Chỉ dùng cho import dữ liệu lịch sử (backdating) — bỏ trống thì dùng đúng thời điểm ghi (mặc định Prisma). */
+    createdAt?: Date
   },
 ) {
   const product = await tx.product.findUnique({ where: { id: params.productId } })
@@ -79,6 +81,7 @@ export async function applyInventoryTransaction(
       nguoiThucHienId: params.nguoiThucHienId,
       thamChieu: params.thamChieu,
       ghiChu: params.ghiChu,
+      ...(params.createdAt ? { createdAt: params.createdAt } : {}),
     },
   })
 
@@ -88,64 +91,7 @@ export async function applyInventoryTransaction(
     include: { product: { select: { id: true, sku: true, ten: true } }, nguoiThucHien: { select: { id: true, hoTen: true } } },
   })
 
-  // Tồn kho vừa tăng (nhập/điều chỉnh tăng/trả hàng) — kiểm tra xem đã đủ hàng
-  // cho các đơn đặt trước (Preorder) đang chờ chưa, khớp theo thứ tự đặt
-  // trước (FIFO). Chỉ đánh dấu "sẵn sàng giao" để nhân viên xác nhận thủ
-  // công — KHÔNG giữ/trừ tồn kho hộ (hệ thống chưa có khái niệm giữ hàng),
-  // nên đây là gợi ý, không phải một chỗ đảm bảo chắc chắn còn hàng.
-  if (soLuongThayDoi > 0) {
-    await matchPendingPreorders(tx, params.productId, tonSau)
-  }
-
   return transaction
-}
-
-async function matchPendingPreorders(tx: Prisma.TransactionClient, productId: string, tonKhoHienTai: number) {
-  const pending = await tx.preorder.findMany({
-    where: { productId, trangThai: "CHO_HANG" },
-    orderBy: { createdAt: "asc" },
-    select: { id: true, soLuong: true },
-  })
-
-  let remaining = tonKhoHienTai
-  const readyIds: string[] = []
-  for (const p of pending) {
-    if (remaining < p.soLuong) break // hết hàng khả dụng — không vượt qua đơn đang chờ để tôn trọng thứ tự FIFO
-    remaining -= p.soLuong
-    readyIds.push(p.id)
-  }
-
-  if (readyIds.length > 0) {
-    await tx.preorder.updateMany({ where: { id: { in: readyIds } }, data: { trangThai: "SAN_SANG" } })
-  }
-}
-
-/**
- * Tổng số lượng đang "giữ chỗ" cho khách đặt trước — các Preorder đã đánh
- * dấu Sẵn sàng giao (SAN_SANG) cho từng sản phẩm. Dùng để đơn hàng thường
- * (orders.service.ts#create) không được bán vượt phần tồn kho đã hứa cho
- * khách đặt trước (trước đây SAN_SANG chỉ là nhãn hiển thị, không thực sự
- * giữ hàng — một nhân viên khác vẫn có thể bán hết số đó cho khách vãng lai).
- * `excludePreorderId`: khi gọi từ chính bước chuyển Preorder đó thành Order
- * (convertToOrder), phải loại trừ chính nó khỏi phần "đang giữ chỗ" — nếu
- * không, đơn đặt trước sẽ tự chặn chính việc chuyển đổi của nó.
- */
-export async function getReservedQuantities(
-  client: Prisma.TransactionClient | typeof prisma,
-  productIds: string[],
-  excludePreorderId?: string,
-): Promise<Map<string, number>> {
-  if (productIds.length === 0) return new Map()
-  const grouped = await client.preorder.groupBy({
-    by: ["productId"],
-    where: {
-      productId: { in: productIds },
-      trangThai: "SAN_SANG",
-      ...(excludePreorderId ? { id: { not: excludePreorderId } } : {}),
-    },
-    _sum: { soLuong: true },
-  })
-  return new Map(grouped.filter((g): g is typeof g & { productId: string } => g.productId !== null).map((g) => [g.productId, g._sum.soLuong ?? 0]))
 }
 
 export async function getSummary() {

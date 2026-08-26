@@ -14,7 +14,7 @@ const SORT_OPTIONS = {
 
 /** Xếp hạng khách mua nhiều nhất (tổng đơn Hoàn thành) — tận dụng liên kết khachHangId có sẵn trên Order. */
 function TopCustomersPanel({ onSelectCustomer }: { onSelectCustomer: (customerId: string) => void }) {
-  const [items, setItems] = useState<{ khachHang: { id: string; hoTen: string; sdt: string }; tongChiTieu: number; soDonHoanThanh: number }[]>([])
+  const [items, setItems] = useState<{ khachHang: { id: string; hoTen: string; sdt: string | null }; tongChiTieu: number; soDonHoanThanh: number }[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { api.orders.topCustomers(5).then(res => { setItems(res.items); setLoading(false) }) }, [])
@@ -127,7 +127,7 @@ export function OrdersScreen({ onDetail, onCreate, onViewCustomer }: {
               <button onClick={() => onDetail(o.id)} className="font-mono text-[10px] font-semibold hover:underline cursor-pointer" style={{ color: '#1a56db' }}>{o.ma}</button>,
               new Date(o.createdAt).toLocaleDateString('vi-VN'),
               <span className="block max-w-[140px] truncate" title={o.khachHang.hoTen}>{o.khachHang.hoTen}</span>,
-              <span className="block max-w-[110px] truncate" title={o.khachHang.sdt}>{o.khachHang.sdt}</span>,
+              <span className="block max-w-[110px] truncate" title={o.khachHang.sdt ?? undefined}>{o.khachHang.sdt || '—'}</span>,
               <span className="font-semibold">{o.items.length}</span>,
               <span className="font-semibold">{o.tongCong.toLocaleString('vi-VN')} VNĐ</span>,
               paymentMethodLabel[o.phuongThucThanhToan], <Badge label={orderStatusLabel[o.trangThai]} />,

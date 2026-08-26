@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend,
 } from 'recharts'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, PackageCheck } from 'lucide-react'
 import { KpiCard, SectionHeader, LinkBtn, Badge, Table, Spinner } from '../components/ui'
 import { api, type Order, type RangeKey } from '../lib/api'
 import { orderStatusLabel } from '../lib/labels'
+import { preorderDueStatus, type PreorderDueStatus } from '../lib/preorderStatus'
 import type { Screen } from '../types'
 
 const COLORS = ['#1a56db', '#f97316', '#10b981', '#a855f7', '#f59e0b']
@@ -36,7 +37,7 @@ export function DashboardScreen({ onNav }: { onNav: (s: Screen, id?: string) => 
   const [byTime, setByTime] = useState<{ ngay: string; doanhThu: number; soDon: number }[]>([])
   const [byCategory, setByCategory] = useState<{ danhMuc: string; doanhThu: number }[]>([])
   const [alerts, setAlerts] = useState<{ id: string; ten: string; sku: string; tonKho: number; trangThai: string }[]>([])
-  const [preorderAlerts, setPreorderAlerts] = useState<{ id: string; ten: string; sku: string; ngayDuKienVe: string }[]>([])
+  const [preorderAlerts, setPreorderAlerts] = useState<{ id: string; ten: string; sku: string; ngayDuKienVe: string; trangThai: PreorderDueStatus }[]>([])
   const [topProducts, setTopProducts] = useState<{ ten: string; sku: string; soLuong: number; doanhThu: number }[]>([])
   const [recentOrders, setRecentOrders] = useState<Order[]>([])
 
@@ -85,13 +86,14 @@ export function DashboardScreen({ onNav }: { onNav: (s: Screen, id?: string) => 
       )
       setTopProducts(productData.items.slice(0, 5))
       setRecentOrders(orders.items)
-      const now = new Date()
       setPreorderAlerts(
         preorderProducts.items
-          .filter(p => p.nhacHang && p.ngayDuKienVe && new Date(p.ngayDuKienVe) <= now)
+          .filter(p => p.nhacHang && p.ngayDuKienVe)
+          .map(p => ({ ...p, trangThai: p.ngayDuKienVe ? preorderDueStatus(p.ngayDuKienVe) : null }))
+          .filter((p): p is typeof p & { trangThai: PreorderDueStatus } => p.trangThai !== null)
           .sort((a, b) => new Date(a.ngayDuKienVe!).getTime() - new Date(b.ngayDuKienVe!).getTime())
           .slice(0, 4)
-          .map(p => ({ id: p.id, ten: p.ten, sku: p.sku, ngayDuKienVe: p.ngayDuKienVe! })),
+          .map(p => ({ id: p.id, ten: p.ten, sku: p.sku, ngayDuKienVe: p.ngayDuKienVe!, trangThai: p.trangThai })),
       )
       setLoading(false)
     })
@@ -138,16 +140,26 @@ export function DashboardScreen({ onNav }: { onNav: (s: Screen, id?: string) => 
       </div>
 
       {preorderAlerts.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-          <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-amber-700">
-            <AlertTriangle size={14} strokeWidth={2} /> Hàng pre-order tới/qua ngày dự kiến về
+        <div className="bg-white border border-slate-200 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-slate-700">
+            <AlertTriangle size={14} strokeWidth={2} /> Hàng pre-order đến/quá hạn dự kiến về
           </div>
           <div className="space-y-1">
             {preorderAlerts.map(p => (
               <button key={p.id} onClick={() => onNav('product-detail', p.id)}
                 className="flex items-center justify-between w-full text-xs py-1 hover:underline cursor-pointer text-left">
-                <span className="text-slate-700">{p.ten} <span className="text-slate-400 font-mono">({p.sku})</span></span>
-                <span className="text-amber-700 font-medium">{new Date(p.ngayDuKienVe).toLocaleDateString('vi-VN')}</span>
+                <span className="flex items-center gap-1.5 text-slate-700 min-w-0">
+                  {p.trangThai === 'toi'
+                    ? <PackageCheck size={13} strokeWidth={2} className="text-emerald-600 flex-shrink-0" />
+                    : <AlertTriangle size={13} strokeWidth={2} className="text-amber-600 flex-shrink-0" />}
+                  <span className="truncate">{p.ten} <span className="text-slate-400 font-mono">({p.sku})</span></span>
+                </span>
+                <span className="flex items-center gap-1.5 flex-shrink-0">
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${p.trangThai === 'toi' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                    {p.trangThai === 'toi' ? 'Đến hạn' : 'Quá hạn'}
+                  </span>
+                  <span className="text-slate-500">{new Date(p.ngayDuKienVe).toLocaleDateString('vi-VN')}</span>
+                </span>
               </button>
             ))}
           </div>

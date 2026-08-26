@@ -20,12 +20,12 @@ function endOfVnDay(year: number, month: number, day: number) {
   return new Date(Date.UTC(year, month, day, 23, 59, 59, 999) - VN_OFFSET_MS)
 }
 
-function startOfDay(d: Date) {
+export function startOfDay(d: Date) {
   const { year, month, day } = vnWallClockParts(d)
   return startOfVnDay(year, month, day)
 }
 
-function endOfDay(d: Date) {
+export function endOfDay(d: Date) {
   const { year, month, day } = vnWallClockParts(d)
   return endOfVnDay(year, month, day)
 }

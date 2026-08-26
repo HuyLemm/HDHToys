@@ -106,13 +106,6 @@ export const loaiSanPhamLabel: Record<string, string> = {
   PRE_ORDER: 'Pre-order',
 }
 
-export const preorderStatusLabel: Record<string, string> = {
-  CHO_HANG: 'Chờ hàng',
-  SAN_SANG: 'Sẵn sàng giao',
-  DA_CHUYEN_DON: 'Đã chuyển đơn',
-  DA_HUY: 'Đã hủy',
-}
-
 export function reverseLookup(map: Record<string, string>, label: string): string | undefined {
   return Object.entries(map).find(([, v]) => v === label)?.[0]
 }

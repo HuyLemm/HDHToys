@@ -9,10 +9,6 @@ export const invoiceInclude = {
       khachHang: { select: { id: true, hoTen: true, sdt: true, email: true, diaChi: true } },
       nhanVien: { select: { id: true, hoTen: true } },
       items: { include: { product: { select: { id: true, sku: true, ten: true, loaiSanPham: true } } } },
-      // order.tienCoc (cột trực tiếp) là nguồn sự thật cho số tiền cọc hiển
-      // thị trên hóa đơn — preorder chỉ còn dùng để hiện thêm mã PO tham
-      // chiếu (nếu bản ghi Đặt trước gốc chưa bị xóa, xem preorders.service.ts#remove).
-      preorder: { select: { ma: true } },
       // Chỉ lấy giao dịch ngân hàng khớp gần nhất để in "Mã giao dịch" —
       // hóa đơn không cần toàn bộ lịch sử đối soát của đơn hàng.
       paymentTransactions: { select: { maGiaoDichNganHang: true }, orderBy: { createdAt: "desc" }, take: 1 },

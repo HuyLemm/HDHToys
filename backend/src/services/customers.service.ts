@@ -43,7 +43,7 @@ export async function get(id: string) {
 
 export async function create(data: {
   hoTen: string
-  sdt: string
+  sdt?: string
   email?: string
   ngaySinh?: Date
   diaChi?: string
@@ -52,15 +52,18 @@ export async function create(data: {
   nguonKhachHang: SalesChannel
   hangKhachHang: CustomerTier
 }) {
-  const existing = await prisma.customer.findUnique({ where: { sdt: data.sdt } })
-  if (existing) throw conflict("Số điện thoại đã tồn tại.")
+  if (data.sdt) {
+    const existing = await prisma.customer.findUnique({ where: { sdt: data.sdt } })
+    if (existing) throw conflict("Số điện thoại đã tồn tại.")
+  }
   return prisma.customer.create({ data })
 }
 
-export function update(
+export async function update(
   id: string,
   data: Partial<{
     hoTen: string
+    sdt: string | null
     email: string | null
     ngaySinh: Date | null
     diaChi: string | null
@@ -71,19 +74,20 @@ export function update(
     diemTichLuy: number
   }>,
 ) {
+  if (data.sdt) {
+    const existing = await prisma.customer.findUnique({ where: { sdt: data.sdt } })
+    if (existing && existing.id !== id) throw conflict("Số điện thoại đã tồn tại.")
+  }
   return prisma.customer.update({ where: { id }, data })
 }
 
 export async function remove(id: string) {
   await get(id)
 
-  const [orderCount, preorderCount] = await Promise.all([
-    prisma.order.count({ where: { khachHangId: id } }),
-    prisma.preorder.count({ where: { khachHangId: id } }),
-  ])
+  const orderCount = await prisma.order.count({ where: { khachHangId: id } })
 
-  if (orderCount > 0 || preorderCount > 0) {
-    throw badRequest("Không thể xóa khách hàng đã có đơn hàng hoặc đơn đặt trước — đây là lịch sử giao dịch cần giữ lại.")
+  if (orderCount > 0) {
+    throw badRequest("Không thể xóa khách hàng đã có đơn hàng — đây là lịch sử giao dịch cần giữ lại.")
   }
 
   // CustomerNote có onDelete: Cascade trong schema — tự động xóa theo khách hàng.

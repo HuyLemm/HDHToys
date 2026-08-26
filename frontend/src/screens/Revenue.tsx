@@ -172,7 +172,7 @@ export function RevenueScreen() {
                     cols={['Khách hàng', 'SĐT', 'Số đơn', 'Tổng chi tiêu']}
                     rows={repeatCustomers.items.slice(0, 10).map(c => [
                       <span className="block max-w-[140px] truncate font-medium text-slate-800" title={c.hoTen}>{c.hoTen}</span>,
-                      <span className="block max-w-[110px] truncate" title={c.sdt}>{c.sdt}</span>,
+                      <span className="block max-w-[110px] truncate" title={c.sdt ?? undefined}>{c.sdt || '—'}</span>,
                       `${c.soDon} đơn`,
                       `${c.tongChiTieu.toLocaleString('vi-VN')} VNĐ`,
                     ])}

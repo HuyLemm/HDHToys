@@ -188,15 +188,51 @@ export function Select({ placeholder, options, value, onChange, width }: {
   )
 }
 
+const DOTS = '…'
+
+function range(start: number, end: number) {
+  return Array.from({ length: end - start + 1 }, (_, i) => start + i)
+}
+
+/**
+ * Trang đầu ... (lân cận trang hiện tại) ... trang cuối — thay vì chỉ hiện 3
+ * trang liền kề như trước (không có cách nhảy nhanh tới đầu/cuối khi có
+ * nhiều trang). siblingCount=1: luôn hiện 1 trang liền trước/sau trang hiện
+ * tại, cộng trang 1 và trang cuối, dấu "…" thay cho khoảng bị bỏ qua.
+ *
+ * Ngưỡng "hiện đủ không cần dấu …" cố định ở 5 (không phải theo siblingCount)
+ * — trước đó ngưỡng này trùng với độ rộng của nhánh rút gọn (7 với
+ * siblingCount=1), nên đúng 7 trang lọt vào nhánh "hiện đủ" và không có dấu
+ * "…" nào cả, nhìn rời rạc/không nhất quán với các trường hợp >7 trang.
+ */
+function buildPageList(current: number, total: number, siblingCount = 1): (number | typeof DOTS)[] {
+  if (total <= 5) return range(1, total)
+
+  const leftSibling = Math.max(current - siblingCount, 1)
+  const rightSibling = Math.min(current + siblingCount, total)
+  const showLeftDots = leftSibling > 2
+  const showRightDots = rightSibling < total - 1
+
+  if (!showLeftDots && showRightDots) {
+    return [...range(1, 3 + siblingCount * 2), DOTS, total]
+  }
+  if (showLeftDots && !showRightDots) {
+    return [1, DOTS, ...range(total - (3 + siblingCount * 2) + 1, total)]
+  }
+  return [1, DOTS, ...range(leftSibling, rightSibling), DOTS, total]
+}
+
 export function Pagination({ total, page, pageSize = 20, onChange }: { total: number; page: number; pageSize?: number; onChange?: (p: number) => void }) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
-  const pages = Array.from({ length: totalPages }, (_, i) => i + 1).slice(Math.max(0, page - 2), Math.max(0, page - 2) + 3)
+  const pages = buildPageList(page, totalPages)
   return (
     <div className="flex items-center justify-between mt-3 text-xs text-slate-500">
       <span>Tổng {total} bản ghi</span>
       <div className="flex items-center gap-1">
         <button onClick={() => onChange?.(Math.max(1, page - 1))} className="px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 cursor-pointer">‹</button>
-        {pages.map(p => (
+        {pages.map((p, i) => p === DOTS ? (
+          <span key={`dots-${i}`} className="px-1.5 select-none">{DOTS}</span>
+        ) : (
           <button key={p} onClick={() => onChange?.(p)} className={`px-2.5 py-1 rounded border transition-colors cursor-pointer ${p === page ? 'text-white border-blue-500' : 'border-slate-200 hover:bg-slate-50'}`}
             style={p === page ? { background: '#1a56db' } : undefined}>{p}</button>
         ))}

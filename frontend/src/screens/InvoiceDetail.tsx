@@ -110,7 +110,7 @@ export function InvoiceDetailScreen({ invoiceId, onBack, onViewOrder }: {
                 <span style={{ color: '#1a56db' }}>{order.tongCong.toLocaleString('vi-VN')} VNĐ</span>
               </div>
               <div className="flex justify-between text-slate-600 pt-1">
-                <span>Tiền đã cọc{order.preorder ? ` (${order.preorder.ma})` : ''}</span>
+                <span>Tiền đã cọc</span>
                 <span>{order.tienCoc > 0 ? `-${order.tienCoc.toLocaleString('vi-VN')}` : '0'} VNĐ</span>
               </div>
               <div className="flex justify-between font-bold text-base pt-2 border-t-2 border-slate-300">

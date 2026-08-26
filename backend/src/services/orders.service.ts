@@ -2,7 +2,7 @@ import type { DonViVanChuyen, IncomeExpenseCategory, Order, OrderItem, OrderStat
 import { prisma } from "../lib/prisma.js"
 import { canTransition, formatOrderCode } from "../lib/orderCode.js"
 import { formatInvoiceCode } from "../lib/invoiceCode.js"
-import { applyInventoryTransaction, getReservedQuantities } from "./inventory.service.js"
+import { applyInventoryTransaction } from "./inventory.service.js"
 import { badRequest, conflict, notFound } from "../errors/HttpError.js"
 import { buildVietQrPayload } from "../lib/vietqr.js"
 import { vietQrConfig, isVietQrConfigured } from "../lib/paymentConfig.js"
@@ -118,7 +118,7 @@ export async function get(id: string) {
 /**
  * Dữ liệu cho phiếu tạm tính (xem invoicePdf.ts#renderInvoicePdf provisional) —
  * in trước khi đơn Hoàn thành, không phải Hóa đơn chính thức nên không dùng
- * orderInclude (thiếu diaChi/preorder/paymentTransactions mà mẫu PDF cần).
+ * orderInclude (thiếu diaChi/paymentTransactions mà mẫu PDF cần).
  */
 export async function getForPreviewPdf(id: string) {
   const order = await prisma.order.findUnique({
@@ -127,7 +127,6 @@ export async function getForPreviewPdf(id: string) {
       khachHang: { select: { hoTen: true, sdt: true, email: true, diaChi: true } },
       nhanVien: { select: { hoTen: true } },
       items: { include: { product: { select: { sku: true, ten: true, loaiSanPham: true } } } },
-      preorder: { select: { ma: true } },
       paymentTransactions: { select: { maGiaoDichNganHang: true }, orderBy: { createdAt: "desc" }, take: 1 },
     },
     relationLoadStrategy: "join",
@@ -140,21 +139,19 @@ export async function getForPreviewPdf(id: string) {
  * Chỉ Admin được gọi (route-level requireRole). Chỉ xóa được đơn CHƯA có
  * Hóa đơn (nghĩa là chưa từng Hoàn thành — Hoàn thành luôn sinh Invoice, xem
  * applyOrderCompletion) — tránh xóa mất số liệu đã tính vào doanh thu/kế
- * toán. Cũng chặn nếu có PaymentTransaction hoặc Preorder tham chiếu tới đơn
- * này (ràng buộc khóa ngoại sẽ chặn ở DB nếu không kiểm tra trước, nhưng
- * kiểm tra ở đây để trả thông báo tiếng Việt rõ nghĩa).
+ * toán. Cũng chặn nếu có PaymentTransaction tham chiếu tới đơn này (ràng
+ * buộc khóa ngoại sẽ chặn ở DB nếu không kiểm tra trước, nhưng kiểm tra ở
+ * đây để trả thông báo tiếng Việt rõ nghĩa).
  */
 export async function remove(id: string) {
-  const [order, invoice, paymentCount, preorderCount] = await Promise.all([
+  const [order, invoice, paymentCount] = await Promise.all([
     prisma.order.findUnique({ where: { id }, include: { items: true } }),
     prisma.invoice.findUnique({ where: { orderId: id } }),
     prisma.paymentTransaction.count({ where: { orderId: id } }),
-    prisma.preorder.count({ where: { orderId: id } }),
   ])
   if (!order) throw notFound("Không tìm thấy đơn hàng.")
   if (invoice) throw badRequest("Đơn hàng đã có hóa đơn (đã từng Hoàn thành) — không thể xóa, số liệu này đã tính vào doanh thu/kế toán.")
   if (paymentCount > 0) throw badRequest("Đơn hàng có giao dịch thanh toán QR liên quan — không thể xóa.")
-  if (preorderCount > 0) throw badRequest("Đơn hàng này được tạo từ một đơn đặt trước — không thể xóa để giữ lịch sử liên kết.")
 
   await prisma.$transaction(async (tx) => {
     // Đơn MOI/DANG_XU_LY vẫn đang "giữ" tồn kho (trừ ngay từ lúc tạo, xem
@@ -225,15 +222,10 @@ export async function create(params: {
   ghiChu?: string
   items: OrderItemInput[]
   fallbackNhanVienId: string
-  /** false khi được gọi từ preorders.service.ts#convertToOrder — tiền cọc đó đã được ghi Thu/Chi lúc tạo đơn đặt trước, không ghi lại lần nữa. */
-  recordDepositIncome?: boolean
-  /** Chỉ truyền khi gọi từ preorders.service.ts#convertToOrder — loại trừ chính Preorder đang chuyển đổi khỏi phần tồn kho "đã giữ chỗ cho đặt trước" (mục kiểm tra bên dưới), tránh nó tự chặn chính mình. */
-  excludePreorderIdFromReservation?: string
 }) {
   const { khachHangId, nhanVienId, kenhBan, phuongThucThanhToan, ghiChu, items, fallbackNhanVienId } = params
   const tienCoc = params.tienCoc ?? 0
   const phiShip = params.phiShip ?? 0
-  const recordDepositIncome = params.recordDepositIncome ?? true
   const delivery = resolveDelivery(params.phuongThucNhanHang ?? "KHACH_TOI_LAY", params.donViVanChuyen)
 
   if (phiShip > 0 && delivery.phuongThucNhanHang !== "SHIP") {
@@ -316,28 +308,6 @@ export async function create(params: {
     const qtyByProduct = new Map<string, number>()
     for (const l of lines) qtyByProduct.set(l.productId, (qtyByProduct.get(l.productId) ?? 0) + l.soLuong)
 
-    // Không được bán vượt phần tồn kho đã "giữ chỗ" cho khách đặt trước đã
-    // Sẵn sàng giao (trước đây SAN_SANG chỉ là nhãn hiển thị, ai cũng bán mất
-    // được — xem SRS/SDS mục "Preorder không giữ hàng thật"). Chỉ kiểm tra
-    // thêm cho sản phẩm thực sự đang có phần giữ chỗ, để không tốn thêm
-    // round-trip cho trường hợp phổ biến là không có đặt trước liên quan. Đây
-    // là kiểm tra "mềm" (không khóa dòng) — an toàn tuyệt đối trước tranh
-    // chấp đồng thời do compare-and-swap ở applyInventoryTransaction đảm nhiệm.
-    const reserved = await getReservedQuantities(tx, Array.from(qtyByProduct.keys()), params.excludePreorderIdFromReservation)
-    for (const [productId, soLuong] of qtyByProduct) {
-      const reservedQty = reserved.get(productId) ?? 0
-      if (reservedQty > 0) {
-        const current = await tx.product.findUnique({ where: { id: productId }, select: { tonKho: true } })
-        const khaDung = (current?.tonKho ?? 0) - reservedQty
-        if (khaDung < soLuong) {
-          const product = productMap.get(productId)!
-          throw badRequest(
-            `Sản phẩm ${product.ten} chỉ còn ${Math.max(khaDung, 0)} khả dụng để bán (${reservedQty} đang giữ cho đơn đặt trước Sẵn sàng giao) — cần ${soLuong}.`,
-          )
-        }
-      }
-    }
-
     for (const [productId, soLuong] of qtyByProduct) {
       await applyInventoryTransaction(tx, {
         productId,
@@ -350,10 +320,8 @@ export async function create(params: {
     }
 
     // Tiền cọc là tiền thật đã thu ngay lúc tạo đơn — ghi nhận vào sổ Thu/Chi
-    // để phản ánh đúng dòng tiền (giống cách Preorder ghi cọc — xem
-    // preorders.service.ts#create). Bỏ qua nếu đơn này vừa được tạo ra từ
-    // convertToOrder (tiền đó đã lên sổ Thu/Chi từ lúc tạo đơn đặt trước rồi).
-    if (tienCoc > 0 && recordDepositIncome) {
+    // để phản ánh đúng dòng tiền.
+    if (tienCoc > 0) {
       const receipt = await tx.incomeExpense.create({
         data: {
           maPhieu: `TEMP-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -434,7 +402,6 @@ async function applyOrderCompletion(
   }
 }
 
-/** Dùng chung với preorders.service.ts#cancel (hoàn cọc khi hủy đặt trước). */
 export async function createLedgerEntry(
   tx: Prisma.TransactionClient,
   params: { loai: "THU" | "CHI"; danhMuc: IncomeExpenseCategory; noiDung: string; soTien: number; nguoiTaoId: string },
@@ -498,11 +465,10 @@ export async function updateStatus(params: { orderId: string; trangThai: OrderSt
         })
       }
 
-      // Tiền cọc là tiền thật đã thu (ghi Thu lúc tạo đơn/đặt trước) — hủy
-      // đơn cũng phải hoàn lại, giống hệt cách hủy đặt trước
-      // (preorders.service.ts#cancel) và hoàn tiền đơn đã Hoàn thành (nhánh
-      // HOAN_TIEN bên dưới) đều làm — nếu không, cọc của một đơn đã hủy vẫn
-      // nằm mãi trong sổ quỹ như thể đơn đó vẫn còn hiệu lực.
+      // Tiền cọc là tiền thật đã thu (ghi Thu lúc tạo đơn) — hủy đơn cũng
+      // phải hoàn lại, giống hệt cách hoàn tiền đơn đã Hoàn thành (nhánh
+      // HOAN_TIEN bên dưới) làm — nếu không, cọc của một đơn đã hủy vẫn nằm
+      // mãi trong sổ quỹ như thể đơn đó vẫn còn hiệu lực.
       if (current.tienCoc > 0) {
         await createLedgerEntry(tx, {
           loai: "CHI",

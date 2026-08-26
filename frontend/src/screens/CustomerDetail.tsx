@@ -292,6 +292,7 @@ function NotesTab({ customerId }: { customerId: string }) {
 
 function EditCustomerModal({ customer, onClose, onSaved }: { customer: Customer; onClose: () => void; onSaved: () => void }) {
   const [hoTen, setHoTen] = useState(customer.hoTen)
+  const [sdt, setSdt] = useState(customer.sdt ?? '')
   const [email, setEmail] = useState(customer.email ?? '')
   const [ngaySinh, setNgaySinh] = useState(customer.ngaySinh ? customer.ngaySinh.slice(0, 10) : '')
   const [diaChi, setDiaChi] = useState(customer.diaChi ?? '')
@@ -311,6 +312,7 @@ function EditCustomerModal({ customer, onClose, onSaved }: { customer: Customer;
         // null (không phải undefined) khi ô bị xóa trắng — undefined bị
         // JSON.stringify bỏ qua nên backend hiểu là "không đổi", còn null mới
         // thực sự xóa được giá trị cũ đã lưu (xem customers.service.ts#update).
+        sdt: sdt || null,
         email: email || null,
         ngaySinh: ngaySinh || null,
         diaChi: diaChi || null,
@@ -330,7 +332,7 @@ function EditCustomerModal({ customer, onClose, onSaved }: { customer: Customer;
     <Modal title="Chỉnh sửa khách hàng" onClose={onClose}>
       <ErrorBox message={error} />
       <Field label="Họ tên" required><Input value={hoTen} onChange={e => setHoTen(e.target.value)} /></Field>
-      <Field label="Số điện thoại"><Input value={customer.sdt} disabled className="opacity-60 cursor-not-allowed" /></Field>
+      <Field label="Số điện thoại (tùy chọn)"><Input value={sdt} onChange={e => setSdt(e.target.value)} placeholder="09xxxxxxxx" /></Field>
       <Field label="Email (tùy chọn)"><Input value={email} onChange={e => setEmail(e.target.value)} /></Field>
       <Field label="Ngày sinh (tùy chọn)"><Input type="date" value={ngaySinh} onChange={e => setNgaySinh(e.target.value)} /></Field>
       <Field label="Địa chỉ (tùy chọn)"><Input value={diaChi} onChange={e => setDiaChi(e.target.value)} placeholder="Số nhà, đường, quận/huyện, tỉnh/TP" /></Field>

@@ -243,7 +243,7 @@ export type CustomerTier = 'NEW' | 'MEMBER' | 'VIP'
 export type Customer = {
   id: string
   hoTen: string
-  sdt: string
+  sdt?: string | null
   email?: string | null
   ngaySinh?: string | null
   diaChi?: string | null
@@ -302,7 +302,7 @@ export type Order = {
   maVanDon?: string | null
   ghiChu?: string | null
   items: OrderItem[]
-  khachHang: { id: string; hoTen: string; sdt: string; email?: string | null }
+  khachHang: { id: string; hoTen: string; sdt: string | null; email?: string | null }
   nhanVien: { id: string; hoTen: string }
   invoice?: { id: string; soHoaDon: string } | null
   /** Chỉ có trên GET /orders/:id (không có ở danh sách) — null nếu không áp dụng (không phải QR/đã xử lý xong). */
@@ -347,8 +347,7 @@ export type Invoice = {
   nguoiTaoId: string
   createdAt: string
   nguoiTao: { id: string; hoTen: string }
-  /** preorder chỉ có khi hóa đơn này được chuyển từ một đơn "Đặt trước" (dùng để hiện mã PO tham chiếu) — số tiền cọc lấy từ order.tienCoc, không phụ thuộc preorder còn tồn tại hay không. */
-  order: Order & { preorder?: { ma: string } | null }
+  order: Order
 }
 
 export type DebtType = 'PHAI_THU' | 'PHAI_TRA'
@@ -388,26 +387,16 @@ export type IncomeExpense = {
   nguoiTao: { id: string; hoTen: string }
 }
 
-export type PreorderStatus = 'CHO_HANG' | 'SAN_SANG' | 'DA_CHUYEN_DON' | 'DA_HUY'
-export type Preorder = {
+export type NotificationType = 'PREORDER_DEN_HAN'
+export type Notification = {
   id: string
-  ma: string
-  khachHangId: string
-  nhanVienId: string
-  productId?: string | null
-  tenSanPhamMoi?: string | null
-  soLuong: number
-  donGiaDuKien: number
-  tienCoc: number
-  trangThai: PreorderStatus
-  ngayDuKienCo?: string | null
-  ghiChu?: string | null
-  orderId?: string | null
-  khachHang: { id: string; hoTen: string; sdt: string; email?: string | null }
-  nhanVien: { id: string; hoTen: string }
-  product?: { id: string; sku: string; ten: string; giaBan: number; tonKho: number } | null
+  loai: NotificationType
+  tieuDe: string
+  noiDung: string
+  productId: string | null
+  ngayApDung: string
+  daDoc: boolean
   createdAt: string
-  updatedAt: string
 }
 
 export type Paginated<T> = { items: T[]; total: number; page: number; pageSize: number }
@@ -432,6 +421,13 @@ export const api = {
     resetPassword: (id: string, matKhauMoi: string) => post(`/staff/${id}/reset-password`, { matKhauMoi }),
     /** Chỉ Admin — chỉ xóa được nếu tài khoản chưa tạo/xử lý dữ liệu gì. */
     delete: (id: string) => del<void>(`/staff/${id}`),
+  },
+
+  notifications: {
+    list: (params?: { page?: number; pageSize?: number }) =>
+      get<Paginated<Notification> & { unread: number }>(`/notifications${qs(params)}`),
+    markRead: (id: string) => patch<Notification>(`/notifications/${id}/read`, {}),
+    markAllRead: () => patch<{ ok: boolean }>('/notifications/read-all', {}),
   },
 
   /** Chỉ Admin — nhật ký các sự kiện bảo mật bị từ chối (sai token, hết quyền, vượt rate limit, sai webhook secret/IP). */
@@ -470,7 +466,7 @@ export const api = {
     get: (id: string) => get<Customer>(`/customers/${id}`),
     create: (data: {
       hoTen: string
-      sdt: string
+      sdt?: string
       email?: string
       ngaySinh?: string
       diaChi?: string
@@ -521,7 +517,7 @@ export const api = {
     }) => get<Paginated<Order>>(`/orders${qs(params)}`),
     /** Xếp hạng khách hàng theo tổng giá trị đơn Hoàn thành — tận dụng liên kết khachHangId có sẵn trên Order. */
     topCustomers: (limit?: number) =>
-      get<{ items: { khachHang: { id: string; hoTen: string; sdt: string }; tongChiTieu: number; soDonHoanThanh: number }[] }>(`/orders/top-customers${qs({ limit })}`),
+      get<{ items: { khachHang: { id: string; hoTen: string; sdt: string | null }; tongChiTieu: number; soDonHoanThanh: number }[] }>(`/orders/top-customers${qs({ limit })}`),
     get: (id: string) => get<Order>(`/orders/${id}`),
     create: (data: {
       khachHangId: string
@@ -553,31 +549,6 @@ export const api = {
   payments: {
     unmatched: (params?: { page?: number; pageSize?: number }) =>
       get<Paginated<PaymentTransaction>>(`/payments/unmatched${qs(params)}`),
-  },
-
-  preorders: {
-    list: (params?: { q?: string; trangThai?: PreorderStatus; khachHangId?: string; productId?: string; page?: number; pageSize?: number }) =>
-      get<Paginated<Preorder>>(`/preorders${qs(params)}`),
-    summary: () =>
-      get<{ dangChoHang: number; sanSangGiao: number; tongTienCocDangGiu: number }>('/preorders/summary'),
-    get: (id: string) => get<Preorder>(`/preorders/${id}`),
-    create: (data: {
-      khachHangId: string
-      productId?: string
-      tenSanPhamMoi?: string
-      soLuong: number
-      donGiaDuKien: number
-      tienCoc?: number
-      ngayDuKienCo?: string
-      ghiChu?: string
-    }) => post<Preorder>('/preorders', data),
-    update: (id: string, data: Partial<{ soLuong: number; donGiaDuKien: number; tienCoc: number; ngayDuKienCo: string; ghiChu: string }>) =>
-      patch<Preorder>(`/preorders/${id}`, data),
-    cancel: (id: string) => post<Preorder>(`/preorders/${id}/cancel`),
-    convertToOrder: (id: string, data: { productId?: string; phuongThucThanhToan: PaymentMethod; kenhBan?: SalesChannel }) =>
-      post<{ preorder: Preorder; order: Order }>(`/preorders/${id}/convert-to-order`, data),
-    /** Không xóa được đơn đã DA_CHUYEN_DON (đã có Order thật liên kết). */
-    delete: (id: string) => del<void>(`/preorders/${id}`),
   },
 
   inventory: {
@@ -647,7 +618,7 @@ export const api = {
         `/revenue/inventory-turnover${qs(params)}`,
       ),
     repeatCustomers: (params?: { range?: RangeKey }) =>
-      get<{ tongKhachHang: number; khachMuaLai: number; tyLeMuaLai: number; items: { hoTen: string; sdt: string; soDon: number; tongChiTieu: number }[] }>(
+      get<{ tongKhachHang: number; khachMuaLai: number; tyLeMuaLai: number; items: { hoTen: string; sdt: string | null; soDon: number; tongChiTieu: number }[] }>(
         `/revenue/repeat-customers${qs(params)}`,
       ),
     downloadExport: (params?: { range?: RangeKey }) => downloadAuthenticatedFile(`/revenue/export${qs(params)}`, 'doanh-thu.csv'),
