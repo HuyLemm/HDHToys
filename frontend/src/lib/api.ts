@@ -232,7 +232,6 @@ export type Product = {
   trangThai: ProductStatus
   loaiSanPham: LoaiSanPham
   ngayDuKienVe?: string | null
-  nhacHang: boolean
   createdAt: string
   updatedAt: string
   coTheBan?: number

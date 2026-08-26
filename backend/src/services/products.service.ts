@@ -52,14 +52,15 @@ export async function get(id: string) {
 }
 
 /**
- * Sản phẩm "có sẵn" thì không giữ ngày dự kiến về/nhắc hàng của lần chọn
- * pre-order trước đó. Ngược lại, Pre-order bắt buộc phải có ngày dự kiến —
- * không thì tính năng nhắc hàng về (banner ở Dashboard/chi tiết SP) vô nghĩa.
+ * Sản phẩm "có sẵn" thì không giữ ngày dự kiến về của lần chọn pre-order
+ * trước đó. Ngược lại, Pre-order được phép chưa có ngày dự kiến (điền sau
+ * khi biết) — mọi sản phẩm Pre-order đều tự động nhắc khi ngày dự kiến tới
+ * hạn (không có tùy chọn bật/tắt riêng), nên chưa có ngày thì đơn giản là
+ * chưa có gì để nhắc, không phải lỗi.
  */
-function resolveProductType(loaiSanPham: LoaiSanPham, ngayDuKienVe?: Date | null, nhacHang?: boolean) {
-  if (loaiSanPham === "CO_SAN") return { loaiSanPham, ngayDuKienVe: null, nhacHang: false }
-  if (!ngayDuKienVe) throw badRequest("Sản phẩm Pre-order cần nhập ngày dự kiến hàng về.")
-  return { loaiSanPham, ngayDuKienVe, nhacHang: nhacHang ?? false }
+function resolveProductType(loaiSanPham: LoaiSanPham, ngayDuKienVe?: Date | null) {
+  if (loaiSanPham === "CO_SAN") return { loaiSanPham, ngayDuKienVe: null }
+  return { loaiSanPham, ngayDuKienVe: ngayDuKienVe ?? null }
 }
 
 export async function create(data: {
@@ -76,16 +77,15 @@ export async function create(data: {
   tonKhoToiThieu: number
   loaiSanPham?: LoaiSanPham
   ngayDuKienVe?: Date
-  nhacHang?: boolean
 }) {
   const existing = await prisma.product.findUnique({ where: { sku: data.sku } })
   if (existing) throw conflict("SKU đã tồn tại.")
 
-  const { loaiSanPham, ngayDuKienVe, nhacHang, ...rest } = data
+  const { loaiSanPham, ngayDuKienVe, ...rest } = data
   return prisma.product.create({
     data: {
       ...rest,
-      ...resolveProductType(loaiSanPham ?? "CO_SAN", ngayDuKienVe, nhacHang),
+      ...resolveProductType(loaiSanPham ?? "CO_SAN", ngayDuKienVe),
       trangThai: resolveStockStatus(data.tonKho, data.tonKhoToiThieu, "CON_HANG"),
     },
   })
@@ -105,23 +105,18 @@ export async function update(
     tonKhoToiThieu: number
     loaiSanPham: LoaiSanPham
     ngayDuKienVe: Date
-    nhacHang: boolean
   }>,
 ) {
   const current = await get(id)
   const tonKhoToiThieu = data.tonKhoToiThieu ?? current.tonKhoToiThieu
-  const { loaiSanPham, ngayDuKienVe, nhacHang, ...rest } = data
+  const { loaiSanPham, ngayDuKienVe, ...rest } = data
 
   return prisma.product.update({
     where: { id },
     data: {
       ...rest,
-      ...(loaiSanPham !== undefined || ngayDuKienVe !== undefined || nhacHang !== undefined
-        ? resolveProductType(
-            loaiSanPham ?? current.loaiSanPham,
-            ngayDuKienVe ?? current.ngayDuKienVe,
-            nhacHang ?? current.nhacHang,
-          )
+      ...(loaiSanPham !== undefined || ngayDuKienVe !== undefined
+        ? resolveProductType(loaiSanPham ?? current.loaiSanPham, ngayDuKienVe ?? current.ngayDuKienVe)
         : {}),
       trangThai: resolveStockStatus(current.tonKho, tonKhoToiThieu, current.trangThai),
     },

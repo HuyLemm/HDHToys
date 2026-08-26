@@ -104,14 +104,12 @@ function CreateProductModal({ onClose, onCreated }: { onClose: () => void; onCre
   const [tonKhoToiThieu, setTonKhoToiThieu] = useState(5)
   const [loaiSanPham, setLoaiSanPham] = useState<LoaiSanPham>('CO_SAN')
   const [ngayDuKienVe, setNgayDuKienVe] = useState('')
-  const [nhacHang, setNhacHang] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   async function handleSubmit() {
     if (!sku || !ten || !danhMuc || !nhaCungCap) { setError('Vui lòng nhập đầy đủ SKU, tên, danh mục, nhà cung cấp.'); return }
     if (giaVon <= 0 || giaBan <= 0) { setError('Giá vốn và giá bán phải lớn hơn 0.'); return }
-    if (loaiSanPham === 'PRE_ORDER' && !ngayDuKienVe) { setError('Sản phẩm Pre-order cần nhập ngày dự kiến hàng về.'); return }
     setError(null)
     setSubmitting(true)
     try {
@@ -119,7 +117,6 @@ function CreateProductModal({ onClose, onCreated }: { onClose: () => void; onCre
         sku, ten, danhMuc, nhaCungCap, giaVon, phiVanChuyen, giaBan, tonKho, tonKhoToiThieu,
         loaiSanPham,
         ngayDuKienVe: loaiSanPham === 'PRE_ORDER' && ngayDuKienVe ? new Date(ngayDuKienVe).toISOString() : undefined,
-        nhacHang: loaiSanPham === 'PRE_ORDER' ? nhacHang : undefined,
       })
       onCreated()
     } catch (err) {
@@ -147,17 +144,11 @@ function CreateProductModal({ onClose, onCreated }: { onClose: () => void; onCre
             onChange={v => setLoaiSanPham(v === 'Pre-order' ? 'PRE_ORDER' : 'CO_SAN')} />
         </Field>
         {loaiSanPham === 'PRE_ORDER' && (
-          <Field label="Thời gian hàng về (dự kiến)" required>
+          <Field label="Thời gian hàng về (dự kiến)">
             <Input type="date" value={ngayDuKienVe} onChange={e => setNgayDuKienVe(e.target.value)} />
           </Field>
         )}
       </div>
-      {loaiSanPham === 'PRE_ORDER' && (
-        <label className="flex items-center gap-2 text-xs text-slate-600 mb-2 px-1 cursor-pointer">
-          <input type="checkbox" checked={nhacHang} onChange={e => setNhacHang(e.target.checked)} />
-          Nhắc khi tới/qua ngày dự kiến hàng về (hiện cảnh báo ở Tổng quan)
-        </label>
-      )}
       <div className="text-xs text-slate-500 mb-2 flex justify-between px-1">
         <span>Tổng giá vốn (giá vốn + phí vận chuyển)</span>
         <span className="font-semibold text-slate-800">{(giaVon + phiVanChuyen).toLocaleString('vi-VN')} VNĐ</span>

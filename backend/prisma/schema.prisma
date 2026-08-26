@@ -71,11 +71,12 @@ model Product {
   daBan          Int           @default(0)
   trangThai      ProductStatus @default(CON_HANG)
   // Phân loại "hàng có sẵn" vs "pre-order" (hàng phải chờ về, ví dụ order từ
-  // nước ngoài) — chỉ là nhãn + ngày dự kiến/nhắc nhở để theo dõi, không ảnh
-  // hưởng luồng bán hàng bình thường (Order xử lý như nhau cho cả hai loại).
+  // nước ngoài) — chỉ là nhãn + ngày dự kiến để theo dõi, không ảnh hưởng
+  // luồng bán hàng bình thường (Order xử lý như nhau cho cả hai loại). Mọi
+  // sản phẩm Pre-order đều tự động nhắc khi tới ngày dự kiến (không có tùy
+  // chọn bật/tắt riêng) — xem notifications.service.ts.
   loaiSanPham    LoaiSanPham   @default(CO_SAN)
   ngayDuKienVe   DateTime?
-  nhacHang       Boolean       @default(false)
   orderItems     OrderItem[]
   inventoryTransactions InventoryTransaction[]
   image          ProductImage?

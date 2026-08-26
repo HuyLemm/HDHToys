@@ -88,7 +88,7 @@ export function DashboardScreen({ onNav }: { onNav: (s: Screen, id?: string) => 
       setRecentOrders(orders.items)
       setPreorderAlerts(
         preorderProducts.items
-          .filter(p => p.nhacHang && p.ngayDuKienVe)
+          .filter(p => p.ngayDuKienVe)
           .map(p => ({ ...p, trangThai: p.ngayDuKienVe ? preorderDueStatus(p.ngayDuKienVe) : null }))
           .filter((p): p is typeof p & { trangThai: PreorderDueStatus } => p.trangThai !== null)
           .sort((a, b) => new Date(a.ngayDuKienVe!).getTime() - new Date(b.ngayDuKienVe!).getTime())

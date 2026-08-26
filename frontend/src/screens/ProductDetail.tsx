@@ -177,7 +177,7 @@ export function ProductDetailScreen({ productId, onBack }: { productId: string; 
       {deleteError && <ErrorBox message={deleteError} />}
 
       {(() => {
-        if (product.loaiSanPham !== 'PRE_ORDER' || !product.nhacHang || !product.ngayDuKienVe) return null
+        if (product.loaiSanPham !== 'PRE_ORDER' || !product.ngayDuKienVe) return null
         const dueStatus = preorderDueStatus(product.ngayDuKienVe)
         if (!dueStatus) return null
         const ngay = new Date(product.ngayDuKienVe).toLocaleDateString('vi-VN')
@@ -232,7 +232,6 @@ export function ProductDetailScreen({ productId, onBack }: { productId: string; 
                   ...(product.loaiSanPham === 'PRE_ORDER'
                     ? [
                         ['Thời gian hàng về (dự kiến)', product.ngayDuKienVe ? new Date(product.ngayDuKienVe).toLocaleDateString('vi-VN') : 'Chưa xác định'],
-                        ['Nhắc hàng về', product.nhacHang ? 'Có' : 'Không'],
                       ]
                     : []),
                 ].map(([k, v]) => (
@@ -274,14 +273,12 @@ function EditProductModal({ product, onClose, onSaved }: { product: Product; onC
   const [tonKhoToiThieu, setTonKhoToiThieu] = useState(product.tonKhoToiThieu)
   const [loaiSanPham, setLoaiSanPham] = useState<LoaiSanPham>(product.loaiSanPham)
   const [ngayDuKienVe, setNgayDuKienVe] = useState(product.ngayDuKienVe ? product.ngayDuKienVe.slice(0, 10) : '')
-  const [nhacHang, setNhacHang] = useState(product.nhacHang)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   async function handleSubmit() {
     if (!ten || !danhMuc || !nhaCungCap) { setError('Vui lòng nhập đầy đủ tên, danh mục, nhà cung cấp.'); return }
     if (giaVon <= 0 || giaBan <= 0) { setError('Giá vốn và giá bán phải lớn hơn 0.'); return }
-    if (loaiSanPham === 'PRE_ORDER' && !ngayDuKienVe) { setError('Sản phẩm Pre-order cần nhập ngày dự kiến hàng về.'); return }
     setError(null)
     setSubmitting(true)
     try {
@@ -289,7 +286,6 @@ function EditProductModal({ product, onClose, onSaved }: { product: Product; onC
         ten, danhMuc, nhaCungCap, giaVon, phiVanChuyen, giaBan, tonKhoToiThieu,
         loaiSanPham,
         ngayDuKienVe: loaiSanPham === 'PRE_ORDER' && ngayDuKienVe ? new Date(ngayDuKienVe).toISOString() : undefined,
-        nhacHang: loaiSanPham === 'PRE_ORDER' ? nhacHang : undefined,
       })
       onSaved()
     } catch (err) {
@@ -315,17 +311,11 @@ function EditProductModal({ product, onClose, onSaved }: { product: Product; onC
             onChange={v => setLoaiSanPham(v === 'Pre-order' ? 'PRE_ORDER' : 'CO_SAN')} />
         </Field>
         {loaiSanPham === 'PRE_ORDER' && (
-          <Field label="Thời gian hàng về (dự kiến)" required>
+          <Field label="Thời gian hàng về (dự kiến)">
             <Input type="date" value={ngayDuKienVe} onChange={e => setNgayDuKienVe(e.target.value)} />
           </Field>
         )}
       </div>
-      {loaiSanPham === 'PRE_ORDER' && (
-        <label className="flex items-center gap-2 text-xs text-slate-600 mb-2 px-1 cursor-pointer">
-          <input type="checkbox" checked={nhacHang} onChange={e => setNhacHang(e.target.checked)} />
-          Nhắc khi tới/qua ngày dự kiến hàng về (hiện cảnh báo ở Tổng quan)
-        </label>
-      )}
       <div className="text-xs text-slate-500 mb-2 flex justify-between px-1">
         <span>Tổng giá vốn (giá vốn + phí vận chuyển)</span>
         <span className="font-semibold text-slate-800">{(giaVon + phiVanChuyen).toLocaleString('vi-VN')} VNĐ</span>

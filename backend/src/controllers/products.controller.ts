@@ -57,7 +57,6 @@ const createSchema = z.object({
   tonKhoToiThieu: z.number().int().min(0).default(0),
   loaiSanPham: z.enum(["CO_SAN", "PRE_ORDER"]).default("CO_SAN"),
   ngayDuKienVe: z.coerce.date().optional(),
-  nhacHang: z.boolean().default(false),
 })
 
 export async function create(req: Request, res: Response) {
@@ -78,7 +77,6 @@ const updateSchema = z.object({
   tonKhoToiThieu: z.number().int().min(0).optional(),
   loaiSanPham: z.enum(["CO_SAN", "PRE_ORDER"]).optional(),
   ngayDuKienVe: z.coerce.date().optional(),
-  nhacHang: z.boolean().optional(),
 })
 
 export async function update(req: Request, res: Response) {
