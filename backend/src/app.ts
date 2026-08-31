@@ -26,7 +26,7 @@ import { errorHandler } from "./middleware/errorHandler.js"
 // toàn bộ, một trang bất kỳ có được token (rò rỉ qua XSS/kênh khác) có thể
 // đọc thẳng response API bằng fetch() từ chính trang đó. Cấu hình qua env
 // CORS_ORIGINS (phân tách bằng dấu phẩy); mặc định chỉ mở cho dev local.
-const corsOrigins = (process.env.CORS_ORIGINS ?? "http://localhost:8443")
+const corsOrigins = (process.env.CORS_ORIGINS ?? "http://localhost:8444")
   .split(",")
   .map((o) => o.trim())
   .filter(Boolean)

@@ -78,6 +78,10 @@ export async function renderInvoicePdf(invoice: InvoicePdfData, res: Response) {
   const filenameSlug = invoice.provisional ? `Tam-tinh-${invoice.order.ma}` : invoice.soHoaDon
   res.setHeader("Content-Type", "application/pdf")
   res.setHeader("Content-Disposition", `inline; filename="${filenameSlug}.pdf"`)
+  // Nội dung sinh động (đơn hàng có thể đổi, layout PDF có thể được sửa) —
+  // không để trình duyệt cache lại theo URL, kẻo mở lại phiếu cũ vẫn ra bản
+  // đã lỗi/lỗi thời dù server đã trả dữ liệu/layout mới.
+  res.setHeader("Cache-Control", "no-store")
   doc.pipe(res)
 
   // ─── Header: logo + tên cửa hàng bên trái, "HÓA ĐƠN ĐIỆN TỬ" bên phải ─────
@@ -123,7 +127,10 @@ export async function renderInvoicePdf(invoice: InvoicePdfData, res: Response) {
     let ly = y + PAD + headingHeight + 4
     lines.forEach((line, i) => {
       doc.font(i === 0 ? boldFont : bodyFont).fontSize(9).fillColor(i === 0 ? TEXT : MUTED)
-      doc.text(line, x + PAD, ly, { width: width - PAD * 2, lineBreak: false })
+      // height + ellipsis: chặn text dài (VD tên khách hàng/email dài) tràn
+      // xuống dòng thứ 2 và đè lên dòng kế tiếp — lineBreak:false không đủ,
+      // pdfkit vẫn tự xuống dòng khi vượt quá width dù đã tắt lineBreak.
+      doc.text(line, x + PAD, ly, { width: width - PAD * 2, height: 10.5, ellipsis: true })
       ly += lineHeight
     })
     return height
@@ -177,22 +184,30 @@ export async function renderInvoicePdf(invoice: InvoicePdfData, res: Response) {
   y = drawTableHeader(y)
 
   order.items.forEach((item, idx) => {
-    if (y + ITEM_ROW_HEIGHT > doc.page.height - PAGE_MARGIN - FOOTER_RESERVE) {
+    const preOrderTag = item.product.loaiSanPham === "PRE_ORDER" ? "  ·  Pre-order" : ""
+    const skuText = `Mã SP: ${item.product.sku}${preOrderTag}`
+    // Tên sản phẩm/SKU dài thì xuống dòng đầy đủ (không cắt "…") — đo trước
+    // chiều cao thật để tính chiều cao dòng động, tránh đè lên nhau như khi
+    // dùng chiều cao cố định ITEM_ROW_HEIGHT cho tên 1 dòng.
+    const nameHeight = doc.font(boldFont).fontSize(9.5).heightOfString(item.product.ten, { width: colProduct.w - 16 })
+    const skuHeight = doc.font(bodyFont).fontSize(8).heightOfString(skuText, { width: colProduct.w - 16 })
+    const rowHeight = Math.max(ITEM_ROW_HEIGHT, 6 + nameHeight + 3 + skuHeight + 6)
+
+    if (y + rowHeight > doc.page.height - PAGE_MARGIN - FOOTER_RESERVE) {
       doc.addPage()
       y = PAGE_MARGIN
       y = drawTableHeader(y)
     }
     const rowTop = y
-    const preOrderTag = item.product.loaiSanPham === "PRE_ORDER" ? "  ·  Pre-order" : ""
-    doc.font(boldFont).fontSize(9.5).fillColor(TEXT).text(item.product.ten, colProduct.x + 8, rowTop + 6, { width: colProduct.w - 16, lineBreak: false })
-    doc.font(bodyFont).fontSize(8).fillColor(MUTED).text(`Mã SP: ${item.product.sku}${preOrderTag}`, colProduct.x + 8, rowTop + 19, { width: colProduct.w - 16, lineBreak: false })
+    doc.font(boldFont).fontSize(9.5).fillColor(TEXT).text(item.product.ten, colProduct.x + 8, rowTop + 6, { width: colProduct.w - 16 })
+    doc.font(bodyFont).fontSize(8).fillColor(MUTED).text(skuText, colProduct.x + 8, rowTop + 6 + nameHeight + 3, { width: colProduct.w - 16 })
     doc.font(bodyFont).fontSize(9).fillColor(TEXT)
     doc.text(String(idx + 1), colSTT.x, rowTop + 11, { width: colSTT.w, align: "center" })
     doc.text(String(item.soLuong), colSL.x, rowTop + 11, { width: colSL.w, align: "center" })
     doc.text(formatMoney(item.donGia), colGia.x, rowTop + 11, { width: colGia.w - 8, align: "right" })
     doc.font(boldFont).text(formatMoney(item.thanhTien), colThanh.x, rowTop + 11, { width: colThanh.w - 8, align: "right" })
-    doc.moveTo(PAGE_MARGIN, rowTop + ITEM_ROW_HEIGHT).lineTo(rightEdge, rowTop + ITEM_ROW_HEIGHT).lineWidth(0.5).strokeColor(BORDER).stroke()
-    y = rowTop + ITEM_ROW_HEIGHT
+    doc.moveTo(PAGE_MARGIN, rowTop + rowHeight).lineTo(rightEdge, rowTop + rowHeight).lineWidth(0.5).strokeColor(BORDER).stroke()
+    y = rowTop + rowHeight
   })
 
   if (y + FOOTER_RESERVE > doc.page.height - PAGE_MARGIN) {

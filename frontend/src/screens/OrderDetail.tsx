@@ -222,8 +222,8 @@ export function OrderDetailScreen({ orderId, onBack }: { orderId: string; onBack
             <Table
               cols={['Sản phẩm', 'SKU', 'Số lượng', 'Đơn giá', 'Thành tiền']}
               rows={order.items.map(i => [
-                <span className="flex items-center gap-1.5">
-                  {i.product.ten}
+                <span className="flex items-center gap-1.5 flex-wrap">
+                  <span className="min-w-0">{i.product.ten}</span>
                   {i.product.loaiSanPham === 'PRE_ORDER' && <Badge label={loaiSanPhamLabel.PRE_ORDER} />}
                 </span>,
                 i.product.sku, String(i.soLuong),

@@ -156,9 +156,9 @@ export function CreateOrderScreen({ onBack, onCreated }: { onBack: () => void; o
               <div className="mt-2 border border-slate-200 rounded-lg divide-y divide-slate-100 mb-3">
                 {productResults.map(p => (
                   <button key={p.id} onClick={() => addToCart(p)}
-                    className="w-full text-left px-3 py-2 hover:bg-blue-50 text-xs cursor-pointer flex justify-between">
-                    <span><span className="font-semibold text-slate-800">{p.ten}</span> · {p.sku}</span>
-                    <span>{p.giaBan.toLocaleString('vi-VN')} VNĐ · Tồn {p.tonKho}</span>
+                    className="w-full text-left px-3 py-2 hover:bg-blue-50 text-xs cursor-pointer flex justify-between gap-2 flex-wrap">
+                    <span className="min-w-0"><span className="font-semibold text-slate-800">{p.ten}</span> · {p.sku}</span>
+                    <span className="flex-shrink-0">{p.giaBan.toLocaleString('vi-VN')} VNĐ · Tồn {p.tonKho}</span>
                   </button>
                 ))}
               </div>

@@ -86,8 +86,8 @@ export function InvoiceDetailScreen({ invoiceId, onBack, onViewOrder }: {
               {order.items.map(item => (
                 <tr key={item.id} className="border-b border-slate-100">
                   <td className="py-2 font-medium text-slate-800">
-                    <div className="flex items-center gap-1.5">
-                      {item.product.ten}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="min-w-0">{item.product.ten}</span>
                       {item.product.loaiSanPham === 'PRE_ORDER' && <Badge label={loaiSanPhamLabel.PRE_ORDER} />}
                     </div>
                   </td>

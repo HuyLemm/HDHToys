@@ -143,7 +143,7 @@ export function Table({ cols, rows }: { cols: string[]; rows: React.ReactNode[][
           {rows.map((row, ri) => (
             <tr key={ri} className="group border-b border-slate-100 hover:bg-slate-50 transition-colors">
               {row.map((cell, ci) => (
-                <td key={ci} className={`py-1.5 px-2 text-slate-700 whitespace-nowrap ${ci === 0 ? 'sticky left-0 z-10 bg-white group-hover:bg-slate-50' : ''}`}>{cell}</td>
+                <td key={ci} className={`py-1.5 px-2 text-slate-700 ${ci === 0 ? 'sticky left-0 z-10 bg-white group-hover:bg-slate-50' : ''}`}>{cell}</td>
               ))}
             </tr>
           ))}
