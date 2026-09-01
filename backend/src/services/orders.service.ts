@@ -154,12 +154,14 @@ export async function remove(id: string) {
   if (paymentCount > 0) throw badRequest("Đơn hàng có giao dịch thanh toán QR liên quan — không thể xóa.")
 
   await prisma.$transaction(async (tx) => {
-    // Đơn MOI/DANG_XU_LY vẫn đang "giữ" tồn kho (trừ ngay từ lúc tạo, xem
-    // create()) — xóa thẳng đơn mà không hoàn tồn kho sẽ làm mất hàng oan.
-    // Đơn DA_HUY thì tồn kho đã được hoàn lại từ lúc hủy rồi (updateStatus),
-    // hoàn lại lần nữa ở đây sẽ bị cộng khống.
+    // Đơn MOI/DANG_XU_LY vẫn đang "giữ" tồn kho + "đã bán" (trừ kho và cộng
+    // đã bán ngay từ lúc tạo, xem create()) — xóa thẳng đơn mà không hoàn lại
+    // cả hai sẽ làm mất hàng oan / sản phẩm hiện "đã bán" cho một đơn không
+    // còn tồn tại. Đơn DA_HUY thì cả hai đã được hoàn lại từ lúc hủy rồi
+    // (updateStatus), hoàn lại lần nữa ở đây sẽ bị cộng khống.
     if (order.trangThai === "MOI" || order.trangThai === "DANG_XU_LY") {
       for (const item of order.items) {
+        await tx.product.update({ where: { id: item.productId }, data: { daBan: { decrement: item.soLuong } } })
         await applyInventoryTransaction(tx, {
           productId: item.productId,
           loai: "TRA_HANG",
@@ -170,10 +172,12 @@ export async function remove(id: string) {
         })
       }
 
-      // Đơn ở MOI/DANG_XU_LY chưa từng bị hủy (nếu đã DA_HUY thì cọc đã được
-      // hoàn ở updateStatus rồi, không hoàn lại lần 2 ở đây) — nếu có cọc thì
-      // đó là tiền THU đã ghi sổ lúc tạo đơn, xóa đơn mà không hoàn lại sẽ
-      // khiến khoản cọc đó mãi mãi nằm trong sổ quỹ dù đơn không còn tồn tại.
+      // Khác với hủy đơn (DA_HUY — shop giữ cọc làm phí hủy, xem updateStatus)
+      // — đây là ADMIN XÓA HẲN bản ghi đơn hàng (thường do nhập nhầm), không
+      // phải khách chủ động hủy, nên vẫn hoàn cọc như một giao dịch chưa từng
+      // xảy ra: nếu có cọc thì đó là tiền THU đã ghi sổ lúc tạo đơn, xóa đơn
+      // mà không hoàn lại sẽ khiến khoản cọc đó mãi mãi nằm trong sổ quỹ dù
+      // đơn không còn tồn tại.
       if (order.tienCoc > 0) {
         await createLedgerEntry(tx, {
           loai: "CHI",
@@ -319,6 +323,14 @@ export async function create(params: {
       })
     }
 
+    // Tính "đã bán" ngay khi tạo đơn (không đợi Hoàn thành) — đơn hàng coi
+    // như đã bán ngay từ lúc lên đơn. Nếu sau đó đơn bị Hủy thì trừ lại (xem
+    // nhánh DA_HUY của updateStatus) — applyOrderCompletion không cộng lại
+    // daBan nữa (tránh cộng 2 lần), chỉ còn lo hóa đơn + sổ Thu/Chi.
+    for (const [productId, soLuong] of qtyByProduct) {
+      await tx.product.update({ where: { id: productId }, data: { daBan: { increment: soLuong } } })
+    }
+
     // Tiền cọc là tiền thật đã thu ngay lúc tạo đơn — ghi nhận vào sổ Thu/Chi
     // để phản ánh đúng dòng tiền.
     if (tienCoc > 0) {
@@ -347,22 +359,19 @@ export async function create(params: {
 }
 
 /**
- * Side-effect chung khi một đơn hàng được hoàn thành: tăng số đã bán rồi sinh
- * hóa đơn. Dùng chung bởi cả luồng nhân viên chuyển trạng thái thủ công
- * (updateStatus) và luồng hệ thống tự hoàn thành khi đối soát thanh toán QR
- * khớp (completeOrderViaPayment) — đảm bảo hai luồng không bao giờ lệch hành
- * vi (SDS mục 5.8). KHÔNG trừ tồn kho ở đây nữa — tồn kho đã bị trừ ngay từ
- * lúc tạo đơn (xem create()), tránh trừ hai lần.
+ * Side-effect chung khi một đơn hàng được hoàn thành: sinh hóa đơn chính
+ * thức + ghi doanh thu/giá vốn vào sổ Thu-Chi. Dùng chung bởi cả luồng nhân
+ * viên chuyển trạng thái thủ công (updateStatus) và luồng hệ thống tự hoàn
+ * thành khi đối soát thanh toán QR khớp (completeOrderViaPayment) — đảm bảo
+ * hai luồng không bao giờ lệch hành vi (SDS mục 5.8). KHÔNG trừ tồn kho hay
+ * cộng "đã bán" ở đây nữa — cả hai đã được xử lý ngay từ lúc tạo đơn (xem
+ * create()), tránh trừ/cộng hai lần.
  */
 async function applyOrderCompletion(
   tx: Prisma.TransactionClient,
   order: Pick<Order, "id" | "ma" | "tongCong" | "tienCoc"> & { items: Pick<OrderItem, "productId" | "soLuong" | "giaVon">[] },
   nguoiThucHienId: string,
 ) {
-  for (const item of order.items) {
-    await tx.product.update({ where: { id: item.productId }, data: { daBan: { increment: item.soLuong } } })
-  }
-
   const createdInvoice = await tx.invoice.create({
     data: {
       soHoaDon: `TEMP-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -452,9 +461,12 @@ export async function updateStatus(params: { orderId: string; trangThai: OrderSt
 
     // Hủy đơn (chỉ xảy ra từ Mới/Đang xử lý, theo canTransition) — tồn kho đã
     // bị trừ ngay lúc tạo đơn nên phải hoàn lại, không thì kho sẽ "mất" hàng
-    // của những đơn bị hủy.
+    // của những đơn bị hủy. "Đã bán" cũng đã cộng ngay lúc tạo đơn (xem
+    // create()) nên phải trừ lại tương ứng — nếu không, sản phẩm vẫn hiện
+    // "đã bán" cho một đơn thực ra đã hủy.
     if (trangThai === "DA_HUY") {
       for (const item of current.items) {
+        await tx.product.update({ where: { id: item.productId }, data: { daBan: { decrement: item.soLuong } } })
         await applyInventoryTransaction(tx, {
           productId: item.productId,
           loai: "TRA_HANG",
@@ -465,19 +477,10 @@ export async function updateStatus(params: { orderId: string; trangThai: OrderSt
         })
       }
 
-      // Tiền cọc là tiền thật đã thu (ghi Thu lúc tạo đơn) — hủy đơn cũng
-      // phải hoàn lại, giống hệt cách hoàn tiền đơn đã Hoàn thành (nhánh
-      // HOAN_TIEN bên dưới) làm — nếu không, cọc của một đơn đã hủy vẫn nằm
-      // mãi trong sổ quỹ như thể đơn đó vẫn còn hiệu lực.
-      if (current.tienCoc > 0) {
-        await createLedgerEntry(tx, {
-          loai: "CHI",
-          danhMuc: "BAN_HANG",
-          noiDung: `Hoàn cọc do hủy đơn hàng ${current.ma}`,
-          soTien: current.tienCoc,
-          nguoiTaoId: nguoiThucHienId,
-        })
-      }
+      // Khác với hoàn tiền (nhánh HOAN_TIEN bên dưới) — khách TỰ hủy đơn thì
+      // shop giữ lại tiền cọc đã thu (không hoàn), coi như phí hủy đơn. Tiền
+      // cọc vẫn nằm nguyên trong sổ Thu/Chi từ lúc tạo đơn, không tạo bút
+      // toán hoàn lại ở đây nữa.
     }
 
     if (trangThai === "HOAN_TIEN" && current.trangThai === "HOAN_THANH") {
@@ -635,7 +638,7 @@ export async function completeOrderViaPayment(orderId: string, systemStaffId: st
 
   return prisma.$transaction(async (tx) => {
     // So-sánh-rồi-ghi — chặn đơn này bị hoàn thành 2 lần (double invoice/sổ
-    // Thu-Chi/daBan) nếu webhook đối soát chạy gần như đồng thời với một thao
+    // Thu-Chi) nếu webhook đối soát chạy gần như đồng thời với một thao
     // tác khác cũng đổi trạng thái đơn này (nhân viên hoàn thành tay, hoặc
     // một lượt gọi webhook trùng thời điểm khác). Trước đây chỉ kiểm tra
     // trangThai đọc NGOÀI transaction rồi ghi thẳng theo id, không có gì chặn
