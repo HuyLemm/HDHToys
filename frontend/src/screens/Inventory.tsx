@@ -117,6 +117,8 @@ export function StockModal({ mode, initialProduct, onClose, onDone }: {
 
   async function handleSubmit() {
     if (!product) { setError('Vui lòng chọn sản phẩm.'); return }
+    if (mode !== 'adjust' && soLuong < 1) { setError('Số lượng phải lớn hơn 0.'); return }
+    if (mode === 'adjust' && tonKhoMoi < 0) { setError('Tồn kho thực tế không được âm.'); return }
     setError(null)
     setSubmitting(true)
     try {
@@ -162,7 +164,7 @@ export function StockModal({ mode, initialProduct, onClose, onDone }: {
         </Field>
       ) : (
         <Field label="Số lượng">
-          <Input type="number" min={1} value={soLuong === 0 ? '' : soLuong} onChange={e => setSoLuong(Math.max(1, Number(e.target.value)))} />
+          <Input type="number" min={1} value={soLuong === 0 ? '' : soLuong} onChange={e => setSoLuong(Number(e.target.value))} />
         </Field>
       )}
       <Field label="Ghi chú (tùy chọn)"><Input value={ghiChu} onChange={e => setGhiChu(e.target.value)} /></Field>

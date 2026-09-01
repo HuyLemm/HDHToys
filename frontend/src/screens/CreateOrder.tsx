@@ -71,6 +71,14 @@ export function CreateOrderScreen({ onBack, onCreated }: { onBack: () => void; o
   async function handleSubmit() {
     if (!customer) { setError('Vui lòng chọn khách hàng.'); return }
     if (cart.length === 0) { setError('Vui lòng thêm ít nhất một sản phẩm.'); return }
+    for (const l of cart) {
+      if (l.soLuong < 1) { setError(`Số lượng "${l.product.ten}" phải lớn hơn 0.`); return }
+      const lineTotal = l.soLuong * l.product.giaBan
+      if (l.giamGia < 0 || l.giamGia > lineTotal) {
+        setError(`Giảm giá "${l.product.ten}" phải từ 0 đến ${lineTotal.toLocaleString('vi-VN')} VNĐ.`)
+        return
+      }
+    }
     if (tienCoc > tongCong) { setError('Tiền cọc không được vượt quá tổng tiền đơn hàng.'); return }
     setError(null)
     setSubmitting(true)
@@ -169,11 +177,11 @@ export function CreateOrderScreen({ onBack, onCreated }: { onBack: () => void; o
                 rows={cart.map(l => [
                   <span className="font-medium text-slate-800">{l.product.ten}</span>,
                   <span className="font-mono text-[10px] text-slate-500">{l.product.sku}</span>,
-                  <input type="number" min={1} value={l.soLuong === 0 ? '' : l.soLuong} onChange={e => updateLine(l.product.id, { soLuong: Math.max(1, Number(e.target.value)) })}
+                  <input type="number" min={1} value={l.soLuong === 0 ? '' : l.soLuong} onChange={e => updateLine(l.product.id, { soLuong: Number(e.target.value) })}
                     className="w-14 text-center text-xs border border-slate-200 rounded px-1 py-0.5" />,
                   <span>{l.product.giaBan.toLocaleString('vi-VN')} VNĐ</span>,
                   <input type="number" min={0} max={l.soLuong * l.product.giaBan} value={l.giamGia === 0 ? '' : l.giamGia}
-                    onChange={e => updateLine(l.product.id, { giamGia: Math.min(l.soLuong * l.product.giaBan, Math.max(0, Number(e.target.value))) })}
+                    onChange={e => updateLine(l.product.id, { giamGia: Number(e.target.value) })}
                     className="w-20 text-center text-xs border border-slate-200 rounded px-1 py-0.5" />,
                   <span className="font-semibold">{(l.soLuong * l.product.giaBan - l.giamGia).toLocaleString('vi-VN')} VNĐ</span>,
                   <TinyBtn danger onClick={() => removeLine(l.product.id)}>✕</TinyBtn>,
