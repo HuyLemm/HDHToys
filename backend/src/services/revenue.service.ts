@@ -104,6 +104,30 @@ export async function getByProduct(tuNgay: Date, denNgay: Date) {
 }
 
 /**
+ * Số lượng "đã bán" theo sản phẩm trong kỳ — dùng để đặt hàng bổ sung với
+ * nhà cung cấp (VD "hôm nay bán 7 chiếc Modern Art thì cần đặt thêm bao
+ * nhiêu"), KHÔNG phải báo cáo doanh thu như getByProduct ở trên. Vì vậy tính
+ * theo đúng logic Product.daBan (orders.service.ts) — đơn được tính ngay khi
+ * TẠO (không đợi Hoàn thành), chỉ loại trừ đơn đã Hủy hoặc đã Hoàn tiền —
+ * thay vì chỉ tính đơn Hoàn thành như getByProduct.
+ */
+export async function getUnitsSoldByProduct(tuNgay: Date, denNgay: Date) {
+  const items = await prisma.orderItem.findMany({
+    where: { order: { trangThai: { notIn: ["DA_HUY", "HOAN_TIEN"] }, createdAt: { gte: tuNgay, lte: denNgay } } },
+    include: { product: { select: { id: true, sku: true, ten: true } } },
+  })
+
+  const byProduct = new Map<string, { productId: string; sku: string; ten: string; soLuong: number }>()
+  for (const i of items) {
+    const existing = byProduct.get(i.productId)
+    if (existing) existing.soLuong += i.soLuong
+    else byProduct.set(i.productId, { productId: i.productId, sku: i.product.sku, ten: i.product.ten, soLuong: i.soLuong })
+  }
+
+  return { items: [...byProduct.values()].sort((a, b) => b.soLuong - a.soLuong) }
+}
+
+/**
  * Vòng quay tồn kho theo sản phẩm — ước tính đơn giản (số lượng bán trong kỳ
  * / tồn kho hiện tại), KHÔNG phải công thức chuẩn (thường dùng tồn kho trung
  * bình theo từng mốc thời gian, nhưng hệ thống chưa lưu lịch sử tồn kho theo

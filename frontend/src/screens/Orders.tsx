@@ -4,6 +4,7 @@ import { Btn, FilterBar, SearchInput, Select, Table, Pagination, TinyBtn, Badge,
 import { api, ApiError, type Order, type OrderStatus, type PaymentMethod, type DeliveryMethod } from '../lib/api'
 import { orderStatusLabel, paymentMethodLabel, deliveryMethodLabel, shippingCarrierLabel, reverseLookup } from '../lib/labels'
 import { useDialog } from '../lib/dialog'
+import { ProductThumb } from './ProductDetail'
 
 const SORT_OPTIONS = {
   'Ngày mới nhất': { sortBy: 'createdAt', sortOrder: 'desc' },
@@ -110,7 +111,7 @@ export function OrdersScreen({ onDetail, onCreate, onViewCustomer }: {
           <div className="text-xs text-slate-400 py-12 text-center">Không có đơn hàng nào</div>
         ) : (
           <Table
-            cols={['Thao tác', 'Mã đơn', 'Ngày tạo', 'Khách hàng', 'SĐT', 'Số SP', 'Tổng tiền', 'Thanh toán', 'Trạng thái', 'Đã thu tiền', 'Nhận hàng', 'Mã vận đơn', 'Nhân viên']}
+            cols={['Thao tác', 'Mã đơn', 'Ngày tạo', 'Khách hàng', 'SĐT', 'Sản phẩm', 'Số SP', 'Tổng tiền', 'Thanh toán', 'Trạng thái', 'Đã thu tiền', 'Nhận hàng', 'Mã vận đơn', 'Nhân viên']}
             rows={items.map(o => [
               <div className="flex gap-1">
                 <TinyBtn title="Xem" onClick={() => onDetail(o.id)}><Eye size={12} strokeWidth={1.75} /></TinyBtn>
@@ -128,6 +129,15 @@ export function OrdersScreen({ onDetail, onCreate, onViewCustomer }: {
               new Date(o.createdAt).toLocaleDateString('vi-VN'),
               <span className="block max-w-[140px] truncate" title={o.khachHang.hoTen}>{o.khachHang.hoTen}</span>,
               <span className="block max-w-[110px] truncate" title={o.khachHang.sdt ?? undefined}>{o.khachHang.sdt || '—'}</span>,
+              o.items[0] ? (
+                <div className="flex items-center gap-1.5 max-w-[170px]">
+                  <ProductThumb productId={o.items[0].product.id} size={26} />
+                  <span className="min-w-0 truncate" title={o.items[0].product.ten}>
+                    {o.items[0].product.ten}
+                    {o.items.length > 1 && <span className="text-slate-400"> +{o.items.length - 1}</span>}
+                  </span>
+                </div>
+              ) : <span className="text-slate-300">—</span>,
               <span className="font-semibold">{o.items.length}</span>,
               <span className="font-semibold">{o.tongCong.toLocaleString('vi-VN')} VNĐ</span>,
               paymentMethodLabel[o.phuongThucThanhToan], <Badge label={orderStatusLabel[o.trangThai]} />,

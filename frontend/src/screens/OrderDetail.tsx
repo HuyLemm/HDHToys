@@ -5,6 +5,7 @@ import { api, ApiError, type Order, type OrderStatus, type DeliveryMethod, type 
 import { orderStatusLabel, paymentMethodLabel, salesChannelLabel, deliveryMethodLabel, shippingCarrierLabel, loaiSanPhamLabel } from '../lib/labels'
 import { useAuth } from '../lib/auth'
 import { useDialog } from '../lib/dialog'
+import { ProductThumb } from './ProductDetail'
 
 // Bao lâu poll lại đơn hàng để phát hiện hệ thống tự hoàn thành qua đối soát
 // thanh toán QR (SRS FR-PAY.4) — không có push/websocket nên dùng polling đơn giản.
@@ -222,7 +223,8 @@ export function OrderDetailScreen({ orderId, onBack }: { orderId: string; onBack
             <Table
               cols={['Sản phẩm', 'SKU', 'Số lượng', 'Đơn giá', 'Thành tiền']}
               rows={order.items.map(i => [
-                <span className="flex items-center gap-1.5 flex-wrap">
+                <span className="flex items-center gap-2 flex-wrap">
+                  <ProductThumb productId={i.product.id} size={32} />
                   <span className="min-w-0">{i.product.ten}</span>
                   {i.product.loaiSanPham === 'PRE_ORDER' && <Badge label={loaiSanPhamLabel.PRE_ORDER} />}
                 </span>,

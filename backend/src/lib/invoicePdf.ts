@@ -36,7 +36,12 @@ export interface InvoicePdfData {
     tienCoc: number
     khachHang: { hoTen: string; sdt: string | null; email: string | null; diaChi: string | null }
     nhanVien: { hoTen: string }
-    items: { soLuong: number; donGia: number; thanhTien: number; product: { sku: string; ten: string; loaiSanPham: string } }[]
+    items: {
+      soLuong: number
+      donGia: number
+      thanhTien: number
+      product: { sku: string; ten: string; loaiSanPham: string; anh?: { data: Buffer; mimeType: string } | null }
+    }[]
     paymentTransactions?: { maGiaoDichNganHang: string }[]
   }
 }
@@ -183,15 +188,24 @@ export async function renderInvoicePdf(invoice: InvoicePdfData, res: Response) {
   let y = panelY + panelHeight + 20
   y = drawTableHeader(y)
 
+  const IMAGE_SIZE = 28
+  const IMAGE_GAP = 8
+
   order.items.forEach((item, idx) => {
     const preOrderTag = item.product.loaiSanPham === "PRE_ORDER" ? "  ·  Pre-order" : ""
     const skuText = `Mã SP: ${item.product.sku}${preOrderTag}`
+    // pdfkit chỉ đọc được JPEG/PNG — ảnh sản phẩm upload WEBP/GIF thì bỏ qua ở
+    // đây (vẫn hiển thị bình thường trên web, chỉ không chèn được vào PDF).
+    const img = item.product.anh && (item.product.anh.mimeType === "image/jpeg" || item.product.anh.mimeType === "image/png") ? item.product.anh : null
+    const textX = colProduct.x + 8 + (img ? IMAGE_SIZE + IMAGE_GAP : 0)
+    const textWidth = colProduct.w - 16 - (img ? IMAGE_SIZE + IMAGE_GAP : 0)
+
     // Tên sản phẩm/SKU dài thì xuống dòng đầy đủ (không cắt "…") — đo trước
     // chiều cao thật để tính chiều cao dòng động, tránh đè lên nhau như khi
     // dùng chiều cao cố định ITEM_ROW_HEIGHT cho tên 1 dòng.
-    const nameHeight = doc.font(boldFont).fontSize(9.5).heightOfString(item.product.ten, { width: colProduct.w - 16 })
-    const skuHeight = doc.font(bodyFont).fontSize(8).heightOfString(skuText, { width: colProduct.w - 16 })
-    const rowHeight = Math.max(ITEM_ROW_HEIGHT, 6 + nameHeight + 3 + skuHeight + 6)
+    const nameHeight = doc.font(boldFont).fontSize(9.5).heightOfString(item.product.ten, { width: textWidth })
+    const skuHeight = doc.font(bodyFont).fontSize(8).heightOfString(skuText, { width: textWidth })
+    const rowHeight = Math.max(ITEM_ROW_HEIGHT, 6 + nameHeight + 3 + skuHeight + 6, img ? IMAGE_SIZE + 12 : 0)
 
     if (y + rowHeight > doc.page.height - PAGE_MARGIN - FOOTER_RESERVE) {
       doc.addPage()
@@ -199,8 +213,15 @@ export async function renderInvoicePdf(invoice: InvoicePdfData, res: Response) {
       y = drawTableHeader(y)
     }
     const rowTop = y
-    doc.font(boldFont).fontSize(9.5).fillColor(TEXT).text(item.product.ten, colProduct.x + 8, rowTop + 6, { width: colProduct.w - 16 })
-    doc.font(bodyFont).fontSize(8).fillColor(MUTED).text(skuText, colProduct.x + 8, rowTop + 6 + nameHeight + 3, { width: colProduct.w - 16 })
+    if (img) {
+      try {
+        doc.image(img.data, colProduct.x + 8, rowTop + 6, { fit: [IMAGE_SIZE, IMAGE_SIZE] })
+      } catch {
+        // Ảnh lỗi/không đọc được — bỏ qua, không chặn in phần còn lại của hóa đơn.
+      }
+    }
+    doc.font(boldFont).fontSize(9.5).fillColor(TEXT).text(item.product.ten, textX, rowTop + 6, { width: textWidth })
+    doc.font(bodyFont).fontSize(8).fillColor(MUTED).text(skuText, textX, rowTop + 6 + nameHeight + 3, { width: textWidth })
     doc.font(bodyFont).fontSize(9).fillColor(TEXT)
     doc.text(String(idx + 1), colSTT.x, rowTop + 11, { width: colSTT.w, align: "center" })
     doc.text(String(item.soLuong), colSL.x, rowTop + 11, { width: colSL.w, align: "center" })

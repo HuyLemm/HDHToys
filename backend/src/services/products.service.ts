@@ -171,6 +171,26 @@ export async function getImage(productId: string) {
   return { data: Buffer.from(image.data!), mimeType: image.mimeType }
 }
 
+/**
+ * Lấy ảnh cho nhiều sản phẩm cùng lúc — dùng khi in hóa đơn/phiếu tạm tính
+ * (invoicePdf.ts) để chèn ảnh sản phẩm vào từng dòng. Sản phẩm chưa có ảnh
+ * thì bỏ qua (không có trong map trả về) thay vì throw, vì đây là dữ liệu
+ * "có thì đẹp hơn" chứ không bắt buộc phải có để in được hóa đơn.
+ */
+export async function getImagesForProducts(productIds: string[]): Promise<Map<string, { data: Buffer; mimeType: string }>> {
+  const result = new Map<string, { data: Buffer; mimeType: string }>()
+  await Promise.all(
+    [...new Set(productIds)].map(async (id) => {
+      try {
+        result.set(id, await getImage(id))
+      } catch {
+        // Chưa có ảnh — bỏ qua, không phải lỗi.
+      }
+    }),
+  )
+  return result
+}
+
 /** Tham số mimeType không còn dùng để lưu — giữ lại chữ ký để controller không đổi, nhưng KHÔNG tin giá trị client khai; xem bên trong. */
 export async function uploadImage(productId: string, data: Buffer, _declaredMimeType: string) {
   await get(productId)

@@ -3,6 +3,7 @@ import { z } from "zod"
 import { badRequest } from "../errors/HttpError.js"
 import { renderInvoicePdf } from "../lib/invoicePdf.js"
 import * as invoicesService from "../services/invoices.service.js"
+import * as productsService from "../services/products.service.js"
 
 const listQuerySchema = z.object({
   q: z.string().optional(),
@@ -27,7 +28,12 @@ export async function get(req: Request, res: Response) {
 
 export async function getPdf(req: Request, res: Response) {
   const invoice = await invoicesService.get(req.params.id)
-  await renderInvoicePdf(invoice, res)
+  const images = await productsService.getImagesForProducts(invoice.order.items.map((i) => i.productId))
+  const invoiceWithImages = {
+    ...invoice,
+    order: { ...invoice.order, items: invoice.order.items.map((i) => ({ ...i, product: { ...i.product, anh: images.get(i.productId) } })) },
+  }
+  await renderInvoicePdf(invoiceWithImages, res)
 }
 
 export async function remove(req: Request, res: Response) {

@@ -41,6 +41,13 @@ export function DashboardScreen({ onNav }: { onNav: (s: Screen, id?: string) => 
   const [topProducts, setTopProducts] = useState<{ ten: string; sku: string; soLuong: number; doanhThu: number }[]>([])
   const [recentOrders, setRecentOrders] = useState<Order[]>([])
 
+  // Số lượng "đã bán" theo sản phẩm — để đặt hàng bổ sung với NCC, có bộ lọc
+  // thời gian riêng (mặc định Hôm nay) vì mục đích khác với biểu đồ doanh thu
+  // phía trên (không tính doanh thu, tính mọi đơn trừ Hủy/Hoàn tiền).
+  const [unitsRange, setUnitsRange] = useState<RangeKey>('hom_nay')
+  const [unitsSold, setUnitsSold] = useState<{ productId: string; sku: string; ten: string; soLuong: number }[]>([])
+  const [unitsLoading, setUnitsLoading] = useState(true)
+
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -100,6 +107,17 @@ export function DashboardScreen({ onNav }: { onNav: (s: Screen, id?: string) => 
     return () => { cancelled = true }
   }, [range])
 
+  useEffect(() => {
+    let cancelled = false
+    setUnitsLoading(true)
+    api.revenue.unitsSoldByProduct({ range: unitsRange }).then(res => {
+      if (cancelled) return
+      setUnitsSold(res.items)
+      setUnitsLoading(false)
+    })
+    return () => { cancelled = true }
+  }, [unitsRange])
+
   if (loading || !kpi) return <Spinner />
 
   return (
@@ -137,6 +155,32 @@ export function DashboardScreen({ onNav }: { onNav: (s: Screen, id?: string) => 
             <Bar dataKey="doanhThu" fill="#1a56db" radius={[3, 3, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
+      </div>
+
+      <div className="bg-white rounded-lg border border-slate-200 p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-slate-800">Đã bán theo sản phẩm</h2>
+          <div className="flex gap-1">
+            {RANGE_OPTIONS.map(r => (
+              <button key={r.key} onClick={() => setUnitsRange(r.key)}
+                className={`text-xs px-2.5 py-1 rounded cursor-pointer transition-colors ${unitsRange === r.key ? 'text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                style={unitsRange === r.key ? { background: '#1a56db' } : undefined}>{r.label}</button>
+            ))}
+          </div>
+        </div>
+        {unitsLoading ? <Spinner /> : unitsSold.length === 0 ? (
+          <div className="text-xs text-slate-400 py-8 text-center">Chưa có đơn hàng nào trong khoảng thời gian này</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+            {unitsSold.slice(0, 10).map(p => (
+              <button key={p.productId} onClick={() => onNav('product-detail', p.productId)}
+                className="flex items-center justify-between w-full text-xs py-1.5 border-b border-slate-50 last:border-0 hover:underline cursor-pointer text-left">
+                <span className="text-slate-700 truncate min-w-0">{p.ten} <span className="text-slate-400 font-mono">({p.sku})</span></span>
+                <span className="font-semibold text-slate-800 flex-shrink-0 ml-2">{p.soLuong} sp</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {preorderAlerts.length > 0 && (

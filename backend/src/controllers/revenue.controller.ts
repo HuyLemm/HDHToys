@@ -36,6 +36,11 @@ export async function getByProduct(req: Request, res: Response) {
   res.json(await revenueService.getByProduct(tuNgay, denNgay))
 }
 
+export async function getUnitsSoldByProduct(req: Request, res: Response) {
+  const { tuNgay, denNgay } = parseRange(req.query)
+  res.json(await revenueService.getUnitsSoldByProduct(tuNgay, denNgay))
+}
+
 export async function getByStaff(req: Request, res: Response) {
   const { tuNgay, denNgay } = parseRange(req.query)
   res.json(await revenueService.getByStaff(tuNgay, denNgay))

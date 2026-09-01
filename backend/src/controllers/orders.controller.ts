@@ -3,6 +3,7 @@ import { z } from "zod"
 import QRCode from "qrcode"
 import { badRequest } from "../errors/HttpError.js"
 import * as ordersService from "../services/orders.service.js"
+import * as productsService from "../services/products.service.js"
 import { renderInvoicePdf } from "../lib/invoicePdf.js"
 
 const listQuerySchema = z.object({
@@ -48,7 +49,9 @@ export async function get(req: Request, res: Response) {
 /** Phiếu tạm tính (PDF) cho đơn chưa Hoàn thành — xem invoicePdf.ts#renderInvoicePdf provisional. */
 export async function getPreviewPdf(req: Request, res: Response) {
   const order = await ordersService.getForPreviewPdf(req.params.id)
-  await renderInvoicePdf({ soHoaDon: order.ma, createdAt: order.createdAt, provisional: true, order }, res)
+  const images = await productsService.getImagesForProducts(order.items.map((i) => i.productId))
+  const orderWithImages = { ...order, items: order.items.map((i) => ({ ...i, product: { ...i.product, anh: images.get(i.productId) } })) }
+  await renderInvoicePdf({ soHoaDon: order.ma, createdAt: order.createdAt, provisional: true, order: orderWithImages }, res)
 }
 
 /** Ảnh QR VietQR (PNG) cho một đơn hàng đang chờ thanh toán qua QR — xem SDS mục 4.14. */

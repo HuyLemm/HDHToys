@@ -604,6 +604,9 @@ export const api = {
       get<{ items: { danhMuc: string; doanhThu: number; giaVon: number; loiNhuan: number }[] }>(`/revenue/by-category${qs(params)}`),
     byProduct: (params?: { range?: RangeKey }) =>
       get<{ items: { ten: string; sku: string; soLuong: number; doanhThu: number; giaVon: number; loiNhuan: number }[] }>(`/revenue/by-product${qs(params)}`),
+    /** Số lượng "đã bán" theo sản phẩm trong kỳ (tính mọi đơn trừ Hủy/Hoàn tiền, khớp Product.daBan) — dùng để đặt hàng bổ sung với NCC, khác byProduct (chỉ tính đơn Hoàn thành, dùng cho báo cáo doanh thu). */
+    unitsSoldByProduct: (params?: { range?: RangeKey }) =>
+      get<{ items: { productId: string; sku: string; ten: string; soLuong: number }[] }>(`/revenue/units-sold-by-product${qs(params)}`),
     byStaff: (params?: { range?: RangeKey }) =>
       get<{ items: { hoTen: string; doanhThu: number; soDon: number }[] }>(`/revenue/by-staff${qs(params)}`),
     byPaymentMethod: (params?: { range?: RangeKey }) =>
