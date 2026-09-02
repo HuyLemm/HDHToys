@@ -108,11 +108,12 @@ function ProductImagePanel({ productId }: { productId: string }) {
   )
 }
 
-export function ProductDetailScreen({ productId, onBack }: { productId: string; onBack: () => void }) {
+export function ProductDetailScreen({ productId, onBack, onViewCustomer }: { productId: string; onBack: () => void; onViewCustomer?: (customerId: string) => void }) {
   const dialog = useDialog()
   const [product, setProduct] = useState<Product | null>(null)
   const [tab, setTab] = useState('Thông tin chung')
   const [history, setHistory] = useState<InventoryTransaction[]>([])
+  const [buyers, setBuyers] = useState<Awaited<ReturnType<typeof api.products.buyers>>['items']>([])
   const [showEdit, setShowEdit] = useState(false)
   const [showAdjust, setShowAdjust] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -150,6 +151,8 @@ export function ProductDetailScreen({ productId, onBack }: { productId: string; 
   useEffect(() => {
     if (tab === 'Lịch sử kho') {
       api.inventory.history({ productId, pageSize: 50 }).then(res => setHistory(res.items))
+    } else if (tab === 'Khách đã mua') {
+      api.products.buyers(productId).then(res => setBuyers(res.items))
     }
   }, [tab, productId])
 
@@ -210,7 +213,7 @@ export function ProductDetailScreen({ productId, onBack }: { productId: string; 
         </div>
 
         <div className="lg:col-span-3 bg-white rounded-lg border border-slate-200">
-          <Tabs tabs={['Thông tin chung', 'Lịch sử kho']} active={tab} onChange={setTab} />
+          <Tabs tabs={['Thông tin chung', 'Lịch sử kho', 'Khách đã mua']} active={tab} onChange={setTab} />
           <div className="p-4">
             {tab === 'Thông tin chung' && (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
@@ -249,6 +252,20 @@ export function ProductDetailScreen({ productId, onBack }: { productId: string; 
                     String(h.tonTruoc), String(h.tonSau),
                     <span className="block max-w-[140px] truncate" title={h.nguoiThucHien.hoTen}>{h.nguoiThucHien.hoTen}</span>,
                     h.thamChieu ?? '—',
+                  ])}
+                />
+              )
+            )}
+            {tab === 'Khách đã mua' && (
+              buyers.length === 0 ? <div className="text-xs text-slate-400 py-8 text-center">Chưa có khách hàng nào mua sản phẩm này</div> : (
+                <Table
+                  cols={['Khách hàng', 'SĐT', 'Tổng SL mua', 'Số lần mua', 'Lần mua gần nhất', 'Tổng chi tiêu']}
+                  rows={buyers.map(b => [
+                    onViewCustomer ? (
+                      <button onClick={() => onViewCustomer(b.customerId)} className="font-medium hover:underline cursor-pointer text-left" style={{ color: '#1a56db' }}>{b.hoTen}</button>
+                    ) : <span className="font-medium text-slate-800">{b.hoTen}</span>,
+                    b.sdt || '—', String(b.tongSoLuong), `${b.soLanMua} lần`,
+                    new Date(b.lanMuaGanNhat).toLocaleDateString('vi-VN'), `${b.tongChiTieu.toLocaleString('vi-VN')} VNĐ`,
                   ])}
                 />
               )

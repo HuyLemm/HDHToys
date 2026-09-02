@@ -10,6 +10,7 @@ const mutationRoles = ["ADMIN", "MANAGER", "INVENTORY_STAFF"] as const
 
 productsRouter.get("/products", productsController.list)
 productsRouter.get("/products/:id", productsController.get)
+productsRouter.get("/products/:id/buyers", productsController.getBuyers)
 productsRouter.post("/products", requireRole(...mutationRoles), productsController.create)
 productsRouter.patch("/products/:id", requireRole(...mutationRoles), productsController.update)
 productsRouter.post("/products/:id/discontinue", requireRole("ADMIN", "MANAGER"), productsController.discontinue)

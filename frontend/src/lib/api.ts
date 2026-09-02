@@ -457,6 +457,12 @@ export const api = {
     imageBlob: (id: string) => fetchAuthenticatedBlob(`/products/${id}/image`),
     uploadImage: (id: string, file: File) => uploadFile<{ ok: true }>(`/products/${id}/image`, 'image', file),
     deleteImage: (id: string) => del<void>(`/products/${id}/image`),
+    /** Khách hàng đã mua sản phẩm này (chỉ tính đơn Hoàn thành) — chiều ngược lại của customers.products. */
+    buyers: (id: string) =>
+      get<{
+        items: { customerId: string; hoTen: string; sdt: string | null; tongSoLuong: number; soLanMua: number; lanMuaGanNhat: string; tongChiTieu: number }[]
+        total: number
+      }>(`/products/${id}/buyers`),
   },
 
   customers: {

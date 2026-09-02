@@ -40,6 +40,10 @@ export async function get(req: Request, res: Response) {
   res.json(await productsService.get(req.params.id))
 }
 
+export async function getBuyers(req: Request, res: Response) {
+  res.json(await productsService.getBuyers(req.params.id))
+}
+
 const createSchema = z.object({
   sku: z.string().min(1),
   ten: z.string().min(1),

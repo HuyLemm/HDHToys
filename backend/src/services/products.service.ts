@@ -52,6 +52,58 @@ export async function get(id: string) {
 }
 
 /**
+ * Danh sách khách hàng đã mua sản phẩm này — chỉ tính đơn Hoàn thành (giao
+ * dịch thật đã hoàn tất), giống hệt quy ước của customersService.getProductsBought
+ * (chiều ngược lại: 1 khách hàng mua những sản phẩm nào).
+ */
+export async function getBuyers(productId: string) {
+  const items = await prisma.orderItem.findMany({
+    where: { productId, order: { trangThai: "HOAN_THANH" } },
+    include: { order: { select: { id: true, createdAt: true, khachHang: { select: { id: true, hoTen: true, sdt: true } } } } },
+  })
+
+  const byCustomer = new Map<
+    string,
+    { customerId: string; hoTen: string; sdt: string | null; tongSoLuong: number; soLan: Set<string>; lanMuaGanNhat: Date; tongChiTieu: number }
+  >()
+
+  for (const item of items) {
+    const c = item.order.khachHang
+    const existing = byCustomer.get(c.id)
+    if (existing) {
+      existing.tongSoLuong += item.soLuong
+      existing.soLan.add(item.orderId)
+      existing.tongChiTieu += item.thanhTien
+      if (item.order.createdAt > existing.lanMuaGanNhat) existing.lanMuaGanNhat = item.order.createdAt
+    } else {
+      byCustomer.set(c.id, {
+        customerId: c.id,
+        hoTen: c.hoTen,
+        sdt: c.sdt,
+        tongSoLuong: item.soLuong,
+        soLan: new Set([item.orderId]),
+        lanMuaGanNhat: item.order.createdAt,
+        tongChiTieu: item.thanhTien,
+      })
+    }
+  }
+
+  const result = [...byCustomer.values()]
+    .map((c) => ({
+      customerId: c.customerId,
+      hoTen: c.hoTen,
+      sdt: c.sdt,
+      tongSoLuong: c.tongSoLuong,
+      soLanMua: c.soLan.size,
+      lanMuaGanNhat: c.lanMuaGanNhat,
+      tongChiTieu: c.tongChiTieu,
+    }))
+    .sort((a, b) => b.lanMuaGanNhat.getTime() - a.lanMuaGanNhat.getTime())
+
+  return { items: result, total: result.length }
+}
+
+/**
  * Sản phẩm "có sẵn" thì không giữ ngày dự kiến về của lần chọn pre-order
  * trước đó. Ngược lại, Pre-order được phép chưa có ngày dự kiến (điền sau
  * khi biết) — mọi sản phẩm Pre-order đều tự động nhắc khi ngày dự kiến tới
