@@ -242,16 +242,22 @@ export function Pagination({ total, page, pageSize = 20, onChange }: { total: nu
   )
 }
 
-export function Tabs({ tabs, active, onChange }: { tabs: string[]; active: string; onChange: (t: string) => void }) {
+export type TabItem = string | { key: string; label: React.ReactNode }
+
+export function Tabs({ tabs, active, onChange }: { tabs: TabItem[]; active: string; onChange: (t: string) => void }) {
   return (
     <div className="flex border-b border-slate-200 overflow-x-auto">
-      {tabs.map(t => (
-        <button key={t} onClick={() => onChange(t)}
-          className={`px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${active === t ? 'border-b-2 text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}
-          style={active === t ? { borderBottomColor: '#1a56db', color: '#1a56db' } : undefined}>
-          {t}
-        </button>
-      ))}
+      {tabs.map(t => {
+        const key = typeof t === 'string' ? t : t.key
+        const label = typeof t === 'string' ? t : t.label
+        return (
+          <button key={key} onClick={() => onChange(key)}
+            className={`px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${active === key ? 'border-b-2 text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}
+            style={active === key ? { borderBottomColor: '#1a56db', color: '#1a56db' } : undefined}>
+            {label}
+          </button>
+        )
+      })}
     </div>
   )
 }

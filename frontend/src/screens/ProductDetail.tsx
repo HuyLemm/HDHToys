@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Package, AlertTriangle, PackageCheck } from 'lucide-react'
-import { BackBtn, Badge, Btn, KpiCard, Tabs, Table, Spinner, Modal, Field, Input, Select, ErrorBox } from '../components/ui'
+import { BackBtn, Badge, Btn, KpiCard, Tabs, Table, Spinner, Modal, Field, Input, Select, ErrorBox, FilterBar } from '../components/ui'
 import { api, ApiError, type Product, type InventoryTransaction, type LoaiSanPham } from '../lib/api'
-import { productStatusLabel, inventoryTransactionTypeLabel, loaiSanPhamLabel, orderStatusLabel } from '../lib/labels'
+import { productStatusLabel, inventoryTransactionTypeLabel, loaiSanPhamLabel, orderStatusLabel, reverseLookup } from '../lib/labels'
 import { preorderDueStatus } from '../lib/preorderStatus'
 import { useDialog } from '../lib/dialog'
 import { StockModal } from './Inventory'
@@ -116,6 +116,11 @@ export function ProductDetailScreen({ productId, onBack, onViewCustomer, onViewO
   const [tab, setTab] = useState('Thông tin chung')
   const [history, setHistory] = useState<InventoryTransaction[]>([])
   const [buyers, setBuyers] = useState<Awaited<ReturnType<typeof api.products.buyers>>['items']>([])
+  const [buyerStatus, setBuyerStatus] = useState('')
+  const [buyerTuNgay, setBuyerTuNgay] = useState('')
+  const [buyerDenNgay, setBuyerDenNgay] = useState('')
+  const [buyerTienTu, setBuyerTienTu] = useState(0)
+  const [buyerTienDen, setBuyerTienDen] = useState(0)
   const [showEdit, setShowEdit] = useState(false)
   const [showAdjust, setShowAdjust] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -159,6 +164,15 @@ export function ProductDetailScreen({ productId, onBack, onViewCustomer, onViewO
   }, [tab, productId])
 
   if (!product) return <Spinner />
+
+  const filteredBuyers = buyers.filter(b => {
+    if (buyerStatus && b.trangThai !== reverseLookup(orderStatusLabel, buyerStatus)) return false
+    if (buyerTuNgay && b.createdAt.slice(0, 10) < buyerTuNgay) return false
+    if (buyerDenNgay && b.createdAt.slice(0, 10) > buyerDenNgay) return false
+    if (buyerTienTu > 0 && b.thanhTien < buyerTienTu) return false
+    if (buyerTienDen > 0 && b.thanhTien > buyerTienDen) return false
+    return true
+  })
 
   return (
     <div className="p-5 space-y-4 overflow-y-auto h-full">
@@ -215,7 +229,21 @@ export function ProductDetailScreen({ productId, onBack, onViewCustomer, onViewO
         </div>
 
         <div className="lg:col-span-3 bg-white rounded-lg border border-slate-200">
-          <Tabs tabs={['Thông tin chung', 'Lịch sử kho', 'Khách đã mua']} active={tab} onChange={setTab} />
+          <Tabs tabs={[
+            'Thông tin chung',
+            'Lịch sử kho',
+            {
+              key: 'Khách đã mua',
+              label: (
+                <span className="flex items-center gap-1.5">
+                  Khách đã mua
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${tab === 'Khách đã mua' ? 'bg-orange-500 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                    {filteredBuyers.length}
+                  </span>
+                </span>
+              ),
+            },
+          ]} active={tab} onChange={setTab} />
           <div className="p-4">
             {tab === 'Thông tin chung' && (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
@@ -259,10 +287,22 @@ export function ProductDetailScreen({ productId, onBack, onViewCustomer, onViewO
               )
             )}
             {tab === 'Khách đã mua' && (
-              buyers.length === 0 ? <div className="text-xs text-slate-400 py-8 text-center">Chưa có đơn hàng nào mua sản phẩm này</div> : (
+              <>
+                {buyers.length > 0 && (
+                  <FilterBar>
+                    <div className="w-32"><Select placeholder="Trạng thái" options={Object.values(orderStatusLabel)} value={buyerStatus} onChange={setBuyerStatus} /></div>
+                    <div className="w-32"><Input type="date" title="Từ ngày mua" value={buyerTuNgay} onChange={e => setBuyerTuNgay(e.target.value)} /></div>
+                    <span className="text-xs text-slate-400">đến</span>
+                    <div className="w-32"><Input type="date" title="Đến ngày mua" value={buyerDenNgay} onChange={e => setBuyerDenNgay(e.target.value)} /></div>
+                    <div className="w-28"><Input type="number" min={0} placeholder="Tiền từ" value={buyerTienTu === 0 ? '' : buyerTienTu} onChange={e => setBuyerTienTu(Number(e.target.value))} /></div>
+                    <div className="w-28"><Input type="number" min={0} placeholder="Tiền đến" value={buyerTienDen === 0 ? '' : buyerTienDen} onChange={e => setBuyerTienDen(Number(e.target.value))} /></div>
+                  </FilterBar>
+                )}
+                {buyers.length === 0 ? <div className="text-xs text-slate-400 py-8 text-center">Chưa có đơn hàng nào mua sản phẩm này</div> :
+                 filteredBuyers.length === 0 ? <div className="text-xs text-slate-400 py-8 text-center">Không có đơn hàng nào khớp bộ lọc</div> : (
                 <Table
                   cols={['Mã đơn', 'Khách hàng', 'SĐT', 'Trạng thái', 'Số lượng', 'Thành tiền', 'Ngày mua']}
-                  rows={buyers.map(b => [
+                  rows={filteredBuyers.map(b => [
                     onViewOrder ? (
                       <button onClick={() => onViewOrder(b.orderId)} className="font-mono text-[10px] font-semibold hover:underline cursor-pointer" style={{ color: '#1a56db' }}>{b.ma}</button>
                     ) : <span className="font-mono text-[10px] font-semibold">{b.ma}</span>,
@@ -275,7 +315,8 @@ export function ProductDetailScreen({ productId, onBack, onViewCustomer, onViewO
                     new Date(b.createdAt).toLocaleDateString('vi-VN'),
                   ])}
                 />
-              )
+                )}
+              </>
             )}
           </div>
         </div>
