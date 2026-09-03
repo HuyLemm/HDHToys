@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Package, AlertTriangle, PackageCheck } from 'lucide-react'
 import { BackBtn, Badge, Btn, KpiCard, Tabs, Table, Spinner, Modal, Field, Input, Select, ErrorBox } from '../components/ui'
 import { api, ApiError, type Product, type InventoryTransaction, type LoaiSanPham } from '../lib/api'
-import { productStatusLabel, inventoryTransactionTypeLabel, loaiSanPhamLabel } from '../lib/labels'
+import { productStatusLabel, inventoryTransactionTypeLabel, loaiSanPhamLabel, orderStatusLabel } from '../lib/labels'
 import { preorderDueStatus } from '../lib/preorderStatus'
 import { useDialog } from '../lib/dialog'
 import { StockModal } from './Inventory'
@@ -108,7 +108,9 @@ function ProductImagePanel({ productId }: { productId: string }) {
   )
 }
 
-export function ProductDetailScreen({ productId, onBack, onViewCustomer }: { productId: string; onBack: () => void; onViewCustomer?: (customerId: string) => void }) {
+export function ProductDetailScreen({ productId, onBack, onViewCustomer, onViewOrder }: {
+  productId: string; onBack: () => void; onViewCustomer?: (customerId: string) => void; onViewOrder?: (orderId: string) => void
+}) {
   const dialog = useDialog()
   const [product, setProduct] = useState<Product | null>(null)
   const [tab, setTab] = useState('Thông tin chung')
@@ -257,15 +259,20 @@ export function ProductDetailScreen({ productId, onBack, onViewCustomer }: { pro
               )
             )}
             {tab === 'Khách đã mua' && (
-              buyers.length === 0 ? <div className="text-xs text-slate-400 py-8 text-center">Chưa có khách hàng nào mua sản phẩm này</div> : (
+              buyers.length === 0 ? <div className="text-xs text-slate-400 py-8 text-center">Chưa có đơn hàng nào mua sản phẩm này</div> : (
                 <Table
-                  cols={['Khách hàng', 'SĐT', 'Tổng SL mua', 'Số lần mua', 'Lần mua gần nhất', 'Tổng chi tiêu']}
+                  cols={['Mã đơn', 'Khách hàng', 'SĐT', 'Trạng thái', 'Số lượng', 'Thành tiền', 'Ngày mua']}
                   rows={buyers.map(b => [
+                    onViewOrder ? (
+                      <button onClick={() => onViewOrder(b.orderId)} className="font-mono text-[10px] font-semibold hover:underline cursor-pointer" style={{ color: '#1a56db' }}>{b.ma}</button>
+                    ) : <span className="font-mono text-[10px] font-semibold">{b.ma}</span>,
                     onViewCustomer ? (
                       <button onClick={() => onViewCustomer(b.customerId)} className="font-medium hover:underline cursor-pointer text-left" style={{ color: '#1a56db' }}>{b.hoTen}</button>
                     ) : <span className="font-medium text-slate-800">{b.hoTen}</span>,
-                    b.sdt || '—', String(b.tongSoLuong), `${b.soLanMua} lần`,
-                    new Date(b.lanMuaGanNhat).toLocaleDateString('vi-VN'), `${b.tongChiTieu.toLocaleString('vi-VN')} VNĐ`,
+                    b.sdt || '—',
+                    <Badge label={orderStatusLabel[b.trangThai]} />,
+                    String(b.soLuong), `${b.thanhTien.toLocaleString('vi-VN')} VNĐ`,
+                    new Date(b.createdAt).toLocaleDateString('vi-VN'),
                   ])}
                 />
               )

@@ -113,7 +113,7 @@ function AppShell() {
       case 'inventory': return <InventoryScreen onHistory={() => go('inventory-history')} />
       case 'inventory-history': return <InventoryHistoryScreen onBack={() => go('inventory')} />
       case 'products': return <ProductsScreen onDetail={id => go('product-detail', id)} />
-      case 'product-detail': return <ProductDetailScreen productId={nav.id!} onBack={() => go('products')} onViewCustomer={id => go('customer-detail', id)} />
+      case 'product-detail': return <ProductDetailScreen productId={nav.id!} onBack={() => go('products')} onViewCustomer={id => go('customer-detail', id)} onViewOrder={id => go('order-detail', id)} />
       case 'customers': return <CustomersScreen onDetail={id => go('customer-detail', id)} />
       case 'customer-detail': return <CustomerDetailScreen customerId={nav.id!} onBack={() => go('customers')} onOrderDetail={id => go('order-detail', id)} />
       case 'invoices': return <InvoicesScreen onDetail={id => go('invoice-detail', id)} />

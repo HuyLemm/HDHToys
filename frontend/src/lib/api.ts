@@ -457,10 +457,10 @@ export const api = {
     imageBlob: (id: string) => fetchAuthenticatedBlob(`/products/${id}/image`),
     uploadImage: (id: string, file: File) => uploadFile<{ ok: true }>(`/products/${id}/image`, 'image', file),
     deleteImage: (id: string) => del<void>(`/products/${id}/image`),
-    /** Khách hàng đã mua sản phẩm này (chỉ tính đơn Hoàn thành) — chiều ngược lại của customers.products. */
+    /** Đơn hàng có mua sản phẩm này (đang xử lý lẫn Hoàn thành, trừ Hủy/Hoàn tiền) — mỗi dòng 1 đơn, kèm trạng thái để nhảy sang xem đơn. */
     buyers: (id: string) =>
       get<{
-        items: { customerId: string; hoTen: string; sdt: string | null; tongSoLuong: number; soLanMua: number; lanMuaGanNhat: string; tongChiTieu: number }[]
+        items: { orderId: string; ma: string; trangThai: OrderStatus; createdAt: string; customerId: string; hoTen: string; sdt: string | null; soLuong: number; thanhTien: number }[]
         total: number
       }>(`/products/${id}/buyers`),
   },

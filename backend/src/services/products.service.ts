@@ -52,54 +52,50 @@ export async function get(id: string) {
 }
 
 /**
- * Danh sách khách hàng đã mua sản phẩm này — chỉ tính đơn Hoàn thành (giao
- * dịch thật đã hoàn tất), giống hệt quy ước của customersService.getProductsBought
- * (chiều ngược lại: 1 khách hàng mua những sản phẩm nào).
+ * Danh sách đơn hàng có mua sản phẩm này — mỗi dòng là 1 đơn hàng (không gộp
+ * theo khách hàng) để hiện được đúng trạng thái + link nhảy sang từng đơn.
+ * Tính cả đơn đang xử lý (Mới/Đang xử lý), không chỉ đơn Hoàn thành — khớp
+ * quy ước "đã bán" hiện tại (orders.service.ts#create, tính ngay lúc tạo
+ * đơn), chỉ loại trừ đơn đã Hủy hoặc đã Hoàn tiền (không còn hiệu lực).
  */
 export async function getBuyers(productId: string) {
   const items = await prisma.orderItem.findMany({
-    where: { productId, order: { trangThai: "HOAN_THANH" } },
-    include: { order: { select: { id: true, createdAt: true, khachHang: { select: { id: true, hoTen: true, sdt: true } } } } },
+    where: { productId, order: { trangThai: { notIn: ["DA_HUY", "HOAN_TIEN"] } } },
+    include: {
+      order: {
+        select: { id: true, ma: true, trangThai: true, createdAt: true, khachHang: { select: { id: true, hoTen: true, sdt: true } } },
+      },
+    },
   })
 
-  const byCustomer = new Map<
+  // Gộp theo orderId phòng khi 1 đơn có sản phẩm này ở nhiều dòng (hiếm nhưng
+  // có thể xảy ra) — mỗi đơn vẫn chỉ hiện đúng 1 dòng trong danh sách.
+  const byOrder = new Map<
     string,
-    { customerId: string; hoTen: string; sdt: string | null; tongSoLuong: number; soLan: Set<string>; lanMuaGanNhat: Date; tongChiTieu: number }
+    { orderId: string; ma: string; trangThai: string; createdAt: Date; customerId: string; hoTen: string; sdt: string | null; soLuong: number; thanhTien: number }
   >()
 
   for (const item of items) {
-    const c = item.order.khachHang
-    const existing = byCustomer.get(c.id)
+    const existing = byOrder.get(item.orderId)
     if (existing) {
-      existing.tongSoLuong += item.soLuong
-      existing.soLan.add(item.orderId)
-      existing.tongChiTieu += item.thanhTien
-      if (item.order.createdAt > existing.lanMuaGanNhat) existing.lanMuaGanNhat = item.order.createdAt
+      existing.soLuong += item.soLuong
+      existing.thanhTien += item.thanhTien
     } else {
-      byCustomer.set(c.id, {
-        customerId: c.id,
-        hoTen: c.hoTen,
-        sdt: c.sdt,
-        tongSoLuong: item.soLuong,
-        soLan: new Set([item.orderId]),
-        lanMuaGanNhat: item.order.createdAt,
-        tongChiTieu: item.thanhTien,
+      byOrder.set(item.orderId, {
+        orderId: item.orderId,
+        ma: item.order.ma,
+        trangThai: item.order.trangThai,
+        createdAt: item.order.createdAt,
+        customerId: item.order.khachHang.id,
+        hoTen: item.order.khachHang.hoTen,
+        sdt: item.order.khachHang.sdt,
+        soLuong: item.soLuong,
+        thanhTien: item.thanhTien,
       })
     }
   }
 
-  const result = [...byCustomer.values()]
-    .map((c) => ({
-      customerId: c.customerId,
-      hoTen: c.hoTen,
-      sdt: c.sdt,
-      tongSoLuong: c.tongSoLuong,
-      soLanMua: c.soLan.size,
-      lanMuaGanNhat: c.lanMuaGanNhat,
-      tongChiTieu: c.tongChiTieu,
-    }))
-    .sort((a, b) => b.lanMuaGanNhat.getTime() - a.lanMuaGanNhat.getTime())
-
+  const result = [...byOrder.values()].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
   return { items: result, total: result.length }
 }
 
