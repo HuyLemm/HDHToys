@@ -7,6 +7,7 @@ export const revenueRouter = Router()
 revenueRouter.use(requireAuth)
 
 revenueRouter.get("/revenue/summary", revenueController.getSummary)
+revenueRouter.get("/revenue/projected-summary", revenueController.getProjectedSummary)
 revenueRouter.get("/revenue/by-time", revenueController.getByTime)
 revenueRouter.get("/revenue/by-category", revenueController.getByCategory)
 revenueRouter.get("/revenue/by-product", revenueController.getByProduct)

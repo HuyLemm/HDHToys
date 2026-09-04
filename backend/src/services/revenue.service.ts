@@ -39,6 +39,32 @@ export async function getSummary(tuNgay: Date, denNgay: Date) {
   return { tongDoanhThu, tongSoDon, giaTriDonTrungBinh, loiNhuanGop, tongGiamGia, tongHoanTien }
 }
 
+/**
+ * Doanh thu "dự kiến" — tính trên mọi đơn còn hiệu lực (Mới/Đang xử lý/Hoàn
+ * thành), không chỉ đơn đã Hoàn thành như getSummary ở trên. Cho biết tổng
+ * giá trị đơn hàng đang "cam kết" trong kỳ dù chưa giao/thu tiền xong hết —
+ * khác "Thực nhận" (getSummary) chỉ tính tiền đã thực sự hoàn tất. Không có
+ * tongHoanTien vì khái niệm hoàn tiền chỉ áp dụng cho đơn đã Hoàn thành rồi
+ * bị đảo ngược, không liên quan tới "dự kiến".
+ */
+export async function getProjectedSummary(tuNgay: Date, denNgay: Date) {
+  const orders = await prisma.order.findMany({
+    where: { trangThai: { notIn: ["DA_HUY", "HOAN_TIEN"] }, createdAt: { gte: tuNgay, lte: denNgay } },
+    include: { items: true },
+  })
+
+  const tongDoanhThu = orders.reduce((sum, o) => sum + o.tongCong, 0)
+  const tongSoDon = orders.length
+  const giaTriDonTrungBinh = tongSoDon > 0 ? Math.round(tongDoanhThu / tongSoDon) : 0
+  const tongGiamGia = orders.reduce((sum, o) => sum + o.giamGia, 0)
+  const loiNhuanGop = orders.reduce(
+    (sum, o) => sum + o.items.reduce((s, i) => s + (i.thanhTien - i.soLuong * i.giaVon), 0),
+    0,
+  )
+
+  return { tongDoanhThu, tongSoDon, giaTriDonTrungBinh, loiNhuanGop, tongGiamGia }
+}
+
 export async function getByTime(tuNgay: Date, denNgay: Date) {
   const orders = await prisma.order.findMany({
     where: { trangThai: "HOAN_THANH", createdAt: { gte: tuNgay, lte: denNgay } },

@@ -21,6 +21,11 @@ export async function getSummary(req: Request, res: Response) {
   res.json(await revenueService.getSummary(tuNgay, denNgay))
 }
 
+export async function getProjectedSummary(req: Request, res: Response) {
+  const { tuNgay, denNgay } = parseRange(req.query)
+  res.json(await revenueService.getProjectedSummary(tuNgay, denNgay))
+}
+
 export async function getByTime(req: Request, res: Response) {
   const { tuNgay, denNgay } = parseRange(req.query)
   res.json(await revenueService.getByTime(tuNgay, denNgay))

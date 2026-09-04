@@ -5,7 +5,7 @@ import { ApiError } from '../lib/api'
 
 export function LoginScreen() {
   const { login } = useAuth()
-  const [email, setEmail] = useState('admin@hdhtoys.vn')
+  const [email, setEmail] = useState('')
   const [pass, setPass] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [error, setError] = useState('')
@@ -82,9 +82,6 @@ export function LoginScreen() {
               <div className="flex-1 h-px bg-slate-200" />
               <span>Chỉ dành cho nhân viên được ủy quyền</span>
               <div className="flex-1 h-px bg-slate-200" />
-            </div>
-            <div className="bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 text-xs text-blue-600">
-              Demo: <strong>admin@hdhtoys.vn</strong> / <strong>admin123</strong>
             </div>
           </div>
         </div>

@@ -26,6 +26,7 @@ export function RevenueScreen() {
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [summary, setSummary] = useState<Awaited<ReturnType<typeof api.revenue.summary>> | null>(null)
+  const [projected, setProjected] = useState<Awaited<ReturnType<typeof api.revenue.projectedSummary>> | null>(null)
   const [byTime, setByTime] = useState<{ ngay: string; doanhThu: number; soDon: number }[]>([])
   const [byPayment, setByPayment] = useState<{ phuongThuc: string; doanhThu: number; soDon: number }[]>([])
   const [byProduct, setByProduct] = useState<Awaited<ReturnType<typeof api.revenue.byProduct>>['items']>([])
@@ -38,13 +39,14 @@ export function RevenueScreen() {
     setLoading(true)
     Promise.all([
       api.revenue.summary({ range }),
+      api.revenue.projectedSummary({ range }),
       api.revenue.byTime({ range }),
       api.revenue.byPaymentMethod({ range }),
       api.revenue.byProduct({ range }),
       api.revenue.inventoryTurnover({ range }),
       api.revenue.repeatCustomers({ range }),
-    ]).then(([s, t, p, bp, inv, rc]) => {
-      setSummary(s); setByTime(t.items); setByPayment(p.items); setByProduct(bp.items); setTurnover(inv.items); setRepeatCustomers(rc); setLoading(false)
+    ]).then(([s, proj, t, p, bp, inv, rc]) => {
+      setSummary(s); setProjected(proj); setByTime(t.items); setByPayment(p.items); setByProduct(bp.items); setTurnover(inv.items); setRepeatCustomers(rc); setLoading(false)
     })
     setPage(1)
   }, [range])
@@ -68,15 +70,29 @@ export function RevenueScreen() {
         </Btn>
       </div>
 
-      {loading || !summary ? <Spinner /> : (
+      {loading || !summary || !projected ? <Spinner /> : (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <div className="bg-white rounded-lg border border-slate-200 px-4 py-3"><div className="text-xs text-slate-500">Tổng doanh thu</div><div className="text-sm font-bold mt-1">{summary.tongDoanhThu.toLocaleString('vi-VN')} VNĐ</div></div>
-            <div className="bg-white rounded-lg border border-slate-200 px-4 py-3"><div className="text-xs text-slate-500">Tổng số đơn</div><div className="text-sm font-bold mt-1">{summary.tongSoDon} đơn</div></div>
-            <div className="bg-white rounded-lg border border-slate-200 px-4 py-3"><div className="text-xs text-slate-500">Giá trị đơn TB</div><div className="text-sm font-bold mt-1">{summary.giaTriDonTrungBinh.toLocaleString('vi-VN')} VNĐ</div></div>
-            <div className="bg-white rounded-lg border border-slate-200 px-4 py-3"><div className="text-xs text-slate-500">Lợi nhuận gộp</div><div className="text-sm font-bold mt-1">{summary.loiNhuanGop.toLocaleString('vi-VN')} VNĐ</div></div>
-            <div className="bg-white rounded-lg border border-slate-200 px-4 py-3"><div className="text-xs text-slate-500">Tổng giảm giá</div><div className="text-sm font-bold mt-1">{summary.tongGiamGia.toLocaleString('vi-VN')} VNĐ</div></div>
-            <div className="bg-white rounded-lg border border-slate-200 px-4 py-3"><div className="text-xs text-slate-500">Tổng hoàn tiền</div><div className="text-sm font-bold mt-1">{summary.tongHoanTien.toLocaleString('vi-VN')} VNĐ</div></div>
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <div className="text-xs font-semibold text-amber-700 mb-2">Doanh thu dự kiến (đơn Mới + Đang xử lý + Hoàn thành — chưa chắc đã thu đủ tiền)</div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              <div className="bg-white rounded-lg border border-amber-100 px-4 py-3"><div className="text-xs text-slate-500">Tổng doanh thu</div><div className="text-sm font-bold mt-1">{projected.tongDoanhThu.toLocaleString('vi-VN')} VNĐ</div></div>
+              <div className="bg-white rounded-lg border border-amber-100 px-4 py-3"><div className="text-xs text-slate-500">Tổng số đơn</div><div className="text-sm font-bold mt-1">{projected.tongSoDon} đơn</div></div>
+              <div className="bg-white rounded-lg border border-amber-100 px-4 py-3"><div className="text-xs text-slate-500">Giá trị đơn TB</div><div className="text-sm font-bold mt-1">{projected.giaTriDonTrungBinh.toLocaleString('vi-VN')} VNĐ</div></div>
+              <div className="bg-white rounded-lg border border-amber-100 px-4 py-3"><div className="text-xs text-slate-500">Lợi nhuận gộp</div><div className="text-sm font-bold mt-1">{projected.loiNhuanGop.toLocaleString('vi-VN')} VNĐ</div></div>
+              <div className="bg-white rounded-lg border border-amber-100 px-4 py-3"><div className="text-xs text-slate-500">Tổng giảm giá</div><div className="text-sm font-bold mt-1">{projected.tongGiamGia.toLocaleString('vi-VN')} VNĐ</div></div>
+            </div>
+          </div>
+
+          <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+            <div className="text-xs font-semibold text-emerald-700 mb-2">Doanh thu thực nhận (chỉ đơn đã Hoàn thành)</div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div className="bg-white rounded-lg border border-emerald-100 px-4 py-3"><div className="text-xs text-slate-500">Tổng doanh thu</div><div className="text-sm font-bold mt-1">{summary.tongDoanhThu.toLocaleString('vi-VN')} VNĐ</div></div>
+              <div className="bg-white rounded-lg border border-emerald-100 px-4 py-3"><div className="text-xs text-slate-500">Tổng số đơn</div><div className="text-sm font-bold mt-1">{summary.tongSoDon} đơn</div></div>
+              <div className="bg-white rounded-lg border border-emerald-100 px-4 py-3"><div className="text-xs text-slate-500">Giá trị đơn TB</div><div className="text-sm font-bold mt-1">{summary.giaTriDonTrungBinh.toLocaleString('vi-VN')} VNĐ</div></div>
+              <div className="bg-white rounded-lg border border-emerald-100 px-4 py-3"><div className="text-xs text-slate-500">Lợi nhuận gộp</div><div className="text-sm font-bold mt-1">{summary.loiNhuanGop.toLocaleString('vi-VN')} VNĐ</div></div>
+              <div className="bg-white rounded-lg border border-emerald-100 px-4 py-3"><div className="text-xs text-slate-500">Tổng giảm giá</div><div className="text-sm font-bold mt-1">{summary.tongGiamGia.toLocaleString('vi-VN')} VNĐ</div></div>
+              <div className="bg-white rounded-lg border border-emerald-100 px-4 py-3"><div className="text-xs text-slate-500">Tổng hoàn tiền</div><div className="text-sm font-bold mt-1">{summary.tongHoanTien.toLocaleString('vi-VN')} VNĐ</div></div>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

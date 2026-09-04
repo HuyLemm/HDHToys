@@ -605,6 +605,11 @@ export const api = {
       get<{ tongDoanhThu: number; tongSoDon: number; giaTriDonTrungBinh: number; loiNhuanGop: number; tongGiamGia: number; tongHoanTien: number }>(
         `/revenue/summary${qs(params)}`,
       ),
+    /** Doanh thu "dự kiến" — tính trên mọi đơn còn hiệu lực (Mới/Đang xử lý/Hoàn thành), khác summary() chỉ tính đơn đã Hoàn thành. */
+    projectedSummary: (params?: { range?: RangeKey; tuNgay?: string; denNgay?: string }) =>
+      get<{ tongDoanhThu: number; tongSoDon: number; giaTriDonTrungBinh: number; loiNhuanGop: number; tongGiamGia: number }>(
+        `/revenue/projected-summary${qs(params)}`,
+      ),
     byTime: (params?: { range?: RangeKey }) => get<{ items: { ngay: string; doanhThu: number; soDon: number }[] }>(`/revenue/by-time${qs(params)}`),
     byCategory: (params?: { range?: RangeKey }) =>
       get<{ items: { danhMuc: string; doanhThu: number; giaVon: number; loiNhuan: number }[] }>(`/revenue/by-category${qs(params)}`),
