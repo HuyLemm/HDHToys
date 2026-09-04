@@ -23,7 +23,7 @@ const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus[]>> = {
   HOAN_THANH: ['HOAN_TIEN'],
 }
 
-export function OrderDetailScreen({ orderId, onBack }: { orderId: string; onBack: () => void }) {
+export function OrderDetailScreen({ orderId, onBack, onViewProduct }: { orderId: string; onBack: () => void; onViewProduct?: (productId: string) => void }) {
   const dialog = useDialog()
   const { staff } = useAuth()
   const [order, setOrder] = useState<Order | null>(null)
@@ -223,11 +223,19 @@ export function OrderDetailScreen({ orderId, onBack }: { orderId: string; onBack
             <Table
               cols={['Sản phẩm', 'SKU', 'Số lượng', 'Đơn giá', 'Thành tiền']}
               rows={order.items.map(i => [
-                <span className="flex items-center gap-2 flex-wrap">
-                  <ProductThumb productId={i.product.id} size={32} />
-                  <span className="min-w-0">{i.product.ten}</span>
-                  {i.product.loaiSanPham === 'PRE_ORDER' && <Badge label={loaiSanPhamLabel.PRE_ORDER} />}
-                </span>,
+                onViewProduct ? (
+                  <button onClick={() => onViewProduct(i.product.id)} className="flex items-center gap-2 flex-wrap hover:underline cursor-pointer text-left">
+                    <ProductThumb productId={i.product.id} size={32} />
+                    <span className="min-w-0">{i.product.ten}</span>
+                    {i.product.loaiSanPham === 'PRE_ORDER' && <Badge label={loaiSanPhamLabel.PRE_ORDER} />}
+                  </button>
+                ) : (
+                  <span className="flex items-center gap-2 flex-wrap">
+                    <ProductThumb productId={i.product.id} size={32} />
+                    <span className="min-w-0">{i.product.ten}</span>
+                    {i.product.loaiSanPham === 'PRE_ORDER' && <Badge label={loaiSanPhamLabel.PRE_ORDER} />}
+                  </span>
+                ),
                 i.product.sku, String(i.soLuong),
                 `${i.donGia.toLocaleString('vi-VN')} VNĐ`, `${i.thanhTien.toLocaleString('vi-VN')} VNĐ`,
               ])}

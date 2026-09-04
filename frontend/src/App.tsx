@@ -108,7 +108,7 @@ function AppShell() {
     switch (nav.screen) {
       case 'dashboard': return <DashboardScreen onNav={go} />
       case 'orders': return <OrdersScreen onDetail={id => go('order-detail', id)} onCreate={() => go('create-order')} onViewCustomer={id => go('customer-detail', id)} />
-      case 'order-detail': return <OrderDetailScreen orderId={nav.id!} onBack={() => go('orders')} />
+      case 'order-detail': return <OrderDetailScreen orderId={nav.id!} onBack={() => go('orders')} onViewProduct={id => go('product-detail', id)} />
       case 'create-order': return <CreateOrderScreen onBack={() => go('orders')} onCreated={id => go('order-detail', id)} />
       case 'inventory': return <InventoryScreen onHistory={() => go('inventory-history')} />
       case 'inventory-history': return <InventoryHistoryScreen onBack={() => go('inventory')} />
