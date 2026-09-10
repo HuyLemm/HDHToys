@@ -28,6 +28,7 @@ export function RevenueScreen() {
   const [summary, setSummary] = useState<Awaited<ReturnType<typeof api.revenue.summary>> | null>(null)
   const [projected, setProjected] = useState<Awaited<ReturnType<typeof api.revenue.projectedSummary>> | null>(null)
   const [byTime, setByTime] = useState<{ ngay: string; doanhThu: number; soDon: number }[]>([])
+  const [projectedByTime, setProjectedByTime] = useState<{ ngay: string; doanhThu: number; soDon: number }[]>([])
   const [byPayment, setByPayment] = useState<{ phuongThuc: string; doanhThu: number; soDon: number }[]>([])
   const [byProduct, setByProduct] = useState<Awaited<ReturnType<typeof api.revenue.byProduct>>['items']>([])
   const [turnover, setTurnover] = useState<Awaited<ReturnType<typeof api.revenue.inventoryTurnover>>['items']>([])
@@ -41,12 +42,13 @@ export function RevenueScreen() {
       api.revenue.summary({ range }),
       api.revenue.projectedSummary({ range }),
       api.revenue.byTime({ range }),
+      api.revenue.projectedByTime({ range }),
       api.revenue.byPaymentMethod({ range }),
       api.revenue.byProduct({ range }),
       api.revenue.inventoryTurnover({ range }),
       api.revenue.repeatCustomers({ range }),
-    ]).then(([s, proj, t, p, bp, inv, rc]) => {
-      setSummary(s); setProjected(proj); setByTime(t.items); setByPayment(p.items); setByProduct(bp.items); setTurnover(inv.items); setRepeatCustomers(rc); setLoading(false)
+    ]).then(([s, proj, t, projT, p, bp, inv, rc]) => {
+      setSummary(s); setProjected(proj); setByTime(t.items); setProjectedByTime(projT.items); setByPayment(p.items); setByProduct(bp.items); setTurnover(inv.items); setRepeatCustomers(rc); setLoading(false)
     })
     setPage(1)
   }, [range])
@@ -54,6 +56,20 @@ export function RevenueScreen() {
   useEffect(() => {
     api.revenue.detail({ range, page, pageSize }).then(setDetail)
   }, [range, page])
+
+  // Gộp 2 nguồn theo ngày để vẽ chung 1 biểu đồ — projectedByTime luôn phủ
+  // đủ mọi ngày mà byTime có (Hoàn thành là tập con của "còn hiệu lực"), nên
+  // duyệt nó trước rồi đè giá trị Thực nhận lên là đủ, không sợ thiếu ngày.
+  const chartData = (() => {
+    const map = new Map<string, { ngay: string; duKien: number; thucNhan: number }>()
+    for (const t of projectedByTime) map.set(t.ngay, { ngay: t.ngay, duKien: t.doanhThu, thucNhan: 0 })
+    for (const t of byTime) {
+      const existing = map.get(t.ngay)
+      if (existing) existing.thucNhan = t.doanhThu
+      else map.set(t.ngay, { ngay: t.ngay, duKien: t.doanhThu, thucNhan: t.doanhThu })
+    }
+    return [...map.values()].sort((a, b) => a.ngay.localeCompare(b.ngay))
+  })()
 
   return (
     <div className="p-5 space-y-4 overflow-y-auto h-full">
@@ -98,14 +114,16 @@ export function RevenueScreen() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 bg-white rounded-lg border border-slate-200 p-4">
               <SectionHeader title="Doanh thu theo thời gian" />
-              {byTime.length === 0 ? <div className="text-xs text-slate-400 py-12 text-center">Chưa có dữ liệu</div> : (
+              {chartData.length === 0 ? <div className="text-xs text-slate-400 py-12 text-center">Chưa có dữ liệu</div> : (
                 <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={byTime} margin={{ top: 0, right: 16, left: 0, bottom: 0 }}>
+                  <LineChart data={chartData} margin={{ top: 0, right: 16, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                     <XAxis dataKey="ngay" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={v => (v / 1000000).toFixed(0) + 'M'} />
-                    <Tooltip formatter={(v: any) => [Number(v).toLocaleString('vi-VN') + ' VNĐ', 'Doanh thu']} contentStyle={{ fontSize: 12, borderRadius: 6 }} />
-                    <Line type="monotone" dataKey="doanhThu" stroke="#1a56db" strokeWidth={2} dot={{ r: 3, fill: '#1a56db' }} />
+                    <Tooltip formatter={(v: any, name: any) => [Number(v).toLocaleString('vi-VN') + ' VNĐ', name]} contentStyle={{ fontSize: 12, borderRadius: 6 }} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Line type="monotone" dataKey="duKien" name="Dự kiến" stroke="#f59e0b" strokeWidth={2} dot={{ r: 3, fill: '#f59e0b' }} />
+                    <Line type="monotone" dataKey="thucNhan" name="Thực nhận" stroke="#10b981" strokeWidth={2} dot={{ r: 3, fill: '#10b981' }} />
                   </LineChart>
                 </ResponsiveContainer>
               )}

@@ -615,6 +615,8 @@ export const api = {
         `/revenue/projected-summary${qs(params)}`,
       ),
     byTime: (params?: { range?: RangeKey }) => get<{ items: { ngay: string; doanhThu: number; soDon: number }[] }>(`/revenue/by-time${qs(params)}`),
+    /** Bản "dự kiến" của byTime (mọi đơn còn hiệu lực, không chỉ Hoàn thành). */
+    projectedByTime: (params?: { range?: RangeKey }) => get<{ items: { ngay: string; doanhThu: number; soDon: number }[] }>(`/revenue/projected-by-time${qs(params)}`),
     byCategory: (params?: { range?: RangeKey }) =>
       get<{ items: { danhMuc: string; doanhThu: number; giaVon: number; loiNhuan: number }[] }>(`/revenue/by-category${qs(params)}`),
     byProduct: (params?: { range?: RangeKey }) =>

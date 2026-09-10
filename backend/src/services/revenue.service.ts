@@ -83,6 +83,25 @@ export async function getByTime(tuNgay: Date, denNgay: Date) {
   return { items: [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([ngay, v]) => ({ ngay, ...v })) }
 }
 
+/** Bản "dự kiến" của getByTime — cùng logic tính với getProjectedSummary (mọi đơn còn hiệu lực), không chỉ đơn Hoàn thành. */
+export async function getProjectedByTime(tuNgay: Date, denNgay: Date) {
+  const orders = await prisma.order.findMany({
+    where: { trangThai: { notIn: ["DA_HUY", "HOAN_TIEN"] }, createdAt: { gte: tuNgay, lte: denNgay } },
+    select: { createdAt: true, tongCong: true },
+  })
+
+  const byDay = new Map<string, { doanhThu: number; soDon: number }>()
+  for (const o of orders) {
+    const key = dayKey(o.createdAt)
+    const bucket = byDay.get(key) ?? { doanhThu: 0, soDon: 0 }
+    bucket.doanhThu += o.tongCong
+    bucket.soDon += 1
+    byDay.set(key, bucket)
+  }
+
+  return { items: [...byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([ngay, v]) => ({ ngay, ...v })) }
+}
+
 export async function getByCategory(tuNgay: Date, denNgay: Date) {
   const items = await prisma.orderItem.findMany({
     where: { order: { trangThai: "HOAN_THANH", createdAt: { gte: tuNgay, lte: denNgay } } },
