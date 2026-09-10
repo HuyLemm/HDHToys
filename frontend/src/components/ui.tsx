@@ -42,6 +42,9 @@ export const statusColor: Record<string, string> = {
   'GrabExpress': 'bg-green-50 text-green-700 border-green-200',
   'Có sẵn': 'bg-emerald-50 text-emerald-700 border-emerald-200',
   'Pre-order': 'bg-purple-50 text-purple-700 border-purple-200',
+  'Chưa cọc': 'bg-slate-100 text-slate-500 border-slate-200',
+  'Cọc một phần': 'bg-amber-50 text-amber-700 border-amber-200',
+  'Đã cọc đủ': 'bg-emerald-50 text-emerald-700 border-emerald-200',
 }
 
 export function Badge({ label }: { label: string }) {

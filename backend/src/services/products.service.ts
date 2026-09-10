@@ -63,7 +63,10 @@ export async function getBuyers(productId: string) {
     where: { productId, order: { trangThai: { notIn: ["DA_HUY", "HOAN_TIEN"] } } },
     include: {
       order: {
-        select: { id: true, ma: true, trangThai: true, createdAt: true, khachHang: { select: { id: true, hoTen: true, sdt: true } } },
+        select: {
+          id: true, ma: true, trangThai: true, createdAt: true,
+          khachHang: { select: { id: true, hoTen: true, sdt: true, nguonKhachHang: true, linkFacebook: true } },
+        },
       },
     },
   })
@@ -72,7 +75,11 @@ export async function getBuyers(productId: string) {
   // có thể xảy ra) — mỗi đơn vẫn chỉ hiện đúng 1 dòng trong danh sách.
   const byOrder = new Map<
     string,
-    { orderId: string; ma: string; trangThai: string; createdAt: Date; customerId: string; hoTen: string; sdt: string | null; soLuong: number; thanhTien: number }
+    {
+      orderId: string; ma: string; trangThai: string; createdAt: Date
+      customerId: string; hoTen: string; sdt: string | null; nguonKhachHang: string; linkFacebook: string | null
+      soLuong: number; thanhTien: number
+    }
   >()
 
   for (const item of items) {
@@ -89,6 +96,8 @@ export async function getBuyers(productId: string) {
         customerId: item.order.khachHang.id,
         hoTen: item.order.khachHang.hoTen,
         sdt: item.order.khachHang.sdt,
+        nguonKhachHang: item.order.khachHang.nguonKhachHang,
+        linkFacebook: item.order.khachHang.linkFacebook,
         soLuong: item.soLuong,
         thanhTien: item.thanhTien,
       })

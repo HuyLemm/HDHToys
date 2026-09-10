@@ -109,3 +109,10 @@ export const loaiSanPhamLabel: Record<string, string> = {
 export function reverseLookup(map: Record<string, string>, label: string): string | undefined {
   return Object.entries(map).find(([, v]) => v === label)?.[0]
 }
+
+/** Trạng thái cọc tiền của đơn — dùng cho cột "Trạng thái cọc" ở danh sách đơn hàng. */
+export function depositStatusLabel(tienCoc: number, tongCong: number): string {
+  if (tienCoc <= 0) return 'Chưa cọc'
+  if (tienCoc >= tongCong) return 'Đã cọc đủ'
+  return 'Cọc một phần'
+}

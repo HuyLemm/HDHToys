@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Package, AlertTriangle, PackageCheck } from 'lucide-react'
-import { BackBtn, Badge, Btn, KpiCard, Tabs, Table, Spinner, Modal, Field, Input, Select, ErrorBox, FilterBar } from '../components/ui'
+import { BackBtn, Badge, Btn, KpiCard, Tabs, Table, Spinner, Modal, Field, Input, Select, ErrorBox, FilterBar, SearchInput } from '../components/ui'
 import { api, ApiError, type Product, type InventoryTransaction, type LoaiSanPham } from '../lib/api'
-import { productStatusLabel, inventoryTransactionTypeLabel, loaiSanPhamLabel, orderStatusLabel, reverseLookup } from '../lib/labels'
+import { productStatusLabel, inventoryTransactionTypeLabel, loaiSanPhamLabel, orderStatusLabel, reverseLookup, salesChannelLabel } from '../lib/labels'
 import { preorderDueStatus } from '../lib/preorderStatus'
 import { useDialog } from '../lib/dialog'
 import { StockModal } from './Inventory'
@@ -116,6 +116,7 @@ export function ProductDetailScreen({ productId, onBack, onViewCustomer, onViewO
   const [tab, setTab] = useState('Thông tin chung')
   const [history, setHistory] = useState<InventoryTransaction[]>([])
   const [buyers, setBuyers] = useState<Awaited<ReturnType<typeof api.products.buyers>>['items']>([])
+  const [buyerSearch, setBuyerSearch] = useState('')
   const [buyerStatus, setBuyerStatus] = useState('')
   const [buyerTuNgay, setBuyerTuNgay] = useState('')
   const [buyerDenNgay, setBuyerDenNgay] = useState('')
@@ -166,6 +167,7 @@ export function ProductDetailScreen({ productId, onBack, onViewCustomer, onViewO
   if (!product) return <Spinner />
 
   const filteredBuyers = buyers.filter(b => {
+    if (buyerSearch.trim() && !b.hoTen.toLowerCase().includes(buyerSearch.trim().toLowerCase()) && !(b.sdt ?? '').includes(buyerSearch.trim())) return false
     if (buyerStatus && b.trangThai !== reverseLookup(orderStatusLabel, buyerStatus)) return false
     if (buyerTuNgay && b.createdAt.slice(0, 10) < buyerTuNgay) return false
     if (buyerDenNgay && b.createdAt.slice(0, 10) > buyerDenNgay) return false
@@ -290,6 +292,7 @@ export function ProductDetailScreen({ productId, onBack, onViewCustomer, onViewO
               <>
                 {buyers.length > 0 && (
                   <FilterBar>
+                    <SearchInput placeholder="Tìm tên khách hoặc SĐT..." width="w-48" value={buyerSearch} onChange={setBuyerSearch} />
                     <div className="w-32"><Select placeholder="Trạng thái" options={Object.values(orderStatusLabel)} value={buyerStatus} onChange={setBuyerStatus} /></div>
                     <div className="w-32"><Input type="date" title="Từ ngày mua" value={buyerTuNgay} onChange={e => setBuyerTuNgay(e.target.value)} /></div>
                     <span className="text-xs text-slate-400">đến</span>
@@ -301,7 +304,7 @@ export function ProductDetailScreen({ productId, onBack, onViewCustomer, onViewO
                 {buyers.length === 0 ? <div className="text-xs text-slate-400 py-8 text-center">Chưa có đơn hàng nào mua sản phẩm này</div> :
                  filteredBuyers.length === 0 ? <div className="text-xs text-slate-400 py-8 text-center">Không có đơn hàng nào khớp bộ lọc</div> : (
                 <Table
-                  cols={['Mã đơn', 'Khách hàng', 'SĐT', 'Trạng thái', 'Số lượng', 'Thành tiền', 'Ngày mua']}
+                  cols={['Mã đơn', 'Khách hàng', 'SĐT', 'Nguồn khách', 'Trang cá nhân', 'Trạng thái', 'Số lượng', 'Thành tiền', 'Ngày mua']}
                   rows={filteredBuyers.map(b => [
                     onViewOrder ? (
                       <button onClick={() => onViewOrder(b.orderId)} className="font-mono text-[10px] font-semibold hover:underline cursor-pointer" style={{ color: '#1a56db' }}>{b.ma}</button>
@@ -310,6 +313,10 @@ export function ProductDetailScreen({ productId, onBack, onViewCustomer, onViewO
                       <button onClick={() => onViewCustomer(b.customerId)} className="font-medium hover:underline cursor-pointer text-left" style={{ color: '#1a56db' }}>{b.hoTen}</button>
                     ) : <span className="font-medium text-slate-800">{b.hoTen}</span>,
                     b.sdt || '—',
+                    <Badge label={salesChannelLabel[b.nguonKhachHang] ?? b.nguonKhachHang} />,
+                    b.linkFacebook ? (
+                      <a href={b.linkFacebook} target="_blank" rel="noopener noreferrer" className="hover:underline cursor-pointer" style={{ color: '#1a56db' }} onClick={e => e.stopPropagation()}>Xem trang</a>
+                    ) : <span className="text-slate-300">—</span>,
                     <Badge label={orderStatusLabel[b.trangThai]} />,
                     String(b.soLuong), `${b.thanhTien.toLocaleString('vi-VN')} VNĐ`,
                     new Date(b.createdAt).toLocaleDateString('vi-VN'),

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Plus, Trophy, Eye, FileDown } from 'lucide-react'
 import { Btn, FilterBar, SearchInput, Select, Table, Pagination, TinyBtn, Badge, Spinner } from '../components/ui'
 import { api, ApiError, type Order, type OrderStatus, type PaymentMethod, type DeliveryMethod } from '../lib/api'
-import { orderStatusLabel, paymentMethodLabel, deliveryMethodLabel, shippingCarrierLabel, reverseLookup } from '../lib/labels'
+import { orderStatusLabel, paymentMethodLabel, deliveryMethodLabel, shippingCarrierLabel, reverseLookup, depositStatusLabel } from '../lib/labels'
 import { useDialog } from '../lib/dialog'
 import { ProductThumb } from './ProductDetail'
 
@@ -111,7 +111,7 @@ export function OrdersScreen({ onDetail, onCreate, onViewCustomer }: {
           <div className="text-xs text-slate-400 py-12 text-center">Không có đơn hàng nào</div>
         ) : (
           <Table
-            cols={['Thao tác', 'Mã đơn', 'Ngày tạo', 'Khách hàng', 'SĐT', 'Sản phẩm', 'Số SP', 'Tổng tiền', 'Thanh toán', 'Trạng thái', 'Đã thu tiền', 'Nhận hàng', 'Mã vận đơn', 'Nhân viên']}
+            cols={['Thao tác', 'Mã đơn', 'Ngày tạo', 'Khách hàng', 'SĐT', 'Sản phẩm', 'Số SP', 'Tổng tiền', 'Thanh toán', 'Trạng thái', 'Đã thu tiền', 'Trạng thái cọc', 'Nhận hàng', 'Mã vận đơn', 'Nhân viên']}
             rows={items.map(o => [
               <div className="flex gap-1">
                 <TinyBtn title="Xem" onClick={() => onDetail(o.id)}><Eye size={12} strokeWidth={1.75} /></TinyBtn>
@@ -142,6 +142,7 @@ export function OrdersScreen({ onDetail, onCreate, onViewCustomer }: {
               <span className="font-semibold">{o.tongCong.toLocaleString('vi-VN')} VNĐ</span>,
               paymentMethodLabel[o.phuongThucThanhToan], <Badge label={orderStatusLabel[o.trangThai]} />,
               <Badge label={o.daThanhToan ? 'Đã thanh toán' : 'Chưa thanh toán'} />,
+              <Badge label={depositStatusLabel(o.tienCoc, o.tongCong)} />,
               <Badge label={o.phuongThucNhanHang === 'SHIP' && o.donViVanChuyen ? shippingCarrierLabel[o.donViVanChuyen] : deliveryMethodLabel[o.phuongThucNhanHang]} />,
               o.maVanDon ? <span className="font-mono text-[10px] text-slate-700">{o.maVanDon}</span> : <span className="text-slate-300">—</span>,
               <span className="block max-w-[140px] truncate" title={o.nhanVien.hoTen}>{o.nhanVien.hoTen}</span>,

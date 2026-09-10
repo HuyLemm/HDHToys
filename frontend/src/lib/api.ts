@@ -460,7 +460,11 @@ export const api = {
     /** Đơn hàng có mua sản phẩm này (đang xử lý lẫn Hoàn thành, trừ Hủy/Hoàn tiền) — mỗi dòng 1 đơn, kèm trạng thái để nhảy sang xem đơn. */
     buyers: (id: string) =>
       get<{
-        items: { orderId: string; ma: string; trangThai: OrderStatus; createdAt: string; customerId: string; hoTen: string; sdt: string | null; soLuong: number; thanhTien: number }[]
+        items: {
+          orderId: string; ma: string; trangThai: OrderStatus; createdAt: string
+          customerId: string; hoTen: string; sdt: string | null; nguonKhachHang: SalesChannel; linkFacebook: string | null
+          soLuong: number; thanhTien: number
+        }[]
         total: number
       }>(`/products/${id}/buyers`),
   },
