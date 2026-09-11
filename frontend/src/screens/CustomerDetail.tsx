@@ -4,6 +4,7 @@ import { BackBtn, Badge, Btn, KpiCard, Tabs, Table, Spinner, Field, Input, Error
 import { api, ApiError, type Customer, type CustomerNote, type Order, type Invoice, type SalesChannel } from '../lib/api'
 import { customerTierLabel, orderStatusLabel, paymentMethodLabel, salesChannelLabel } from '../lib/labels'
 import { useDialog } from '../lib/dialog'
+import { ProductThumb } from './ProductDetail'
 
 type Overview = {
   customer: Customer
@@ -162,10 +163,20 @@ function OrdersTab({ customerId, onOrderDetail }: { customerId: string; onOrderD
   if (orders.length === 0) return <div className="text-xs text-slate-400 py-8 text-center">Chưa có lịch sử mua hàng</div>
   return (
     <Table
-      cols={['Mã đơn', 'Ngày', 'Số sản phẩm', 'Tổng tiền', 'Thanh toán', 'Trạng thái']}
+      cols={['Mã đơn', 'Ngày', 'Sản phẩm', 'Tổng tiền', 'Thanh toán', 'Trạng thái']}
       rows={orders.map(o => [
         <button onClick={() => onOrderDetail(o.id)} className="font-mono text-[10px] font-semibold hover:underline cursor-pointer" style={{ color: '#1a56db' }}>{o.ma}</button>,
-        new Date(o.createdAt).toLocaleDateString('vi-VN'), `${o.items.length} sản phẩm`, `${o.tongCong.toLocaleString('vi-VN')} VNĐ`,
+        new Date(o.createdAt).toLocaleDateString('vi-VN'),
+        o.items[0] ? (
+          <div className="flex items-center gap-1.5 max-w-[170px]">
+            <ProductThumb productId={o.items[0].product.id} size={26} />
+            <span className="min-w-0 truncate" title={o.items[0].product.ten}>
+              {o.items[0].product.ten}
+              {o.items.length > 1 && <span className="text-slate-400"> +{o.items.length - 1}</span>}
+            </span>
+          </div>
+        ) : <span className="text-slate-300">—</span>,
+        `${o.tongCong.toLocaleString('vi-VN')} VNĐ`,
         paymentMethodLabel[o.phuongThucThanhToan], <Badge label={orderStatusLabel[o.trangThai]} />,
       ])}
     />
