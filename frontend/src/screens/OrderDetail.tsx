@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { FileDown } from 'lucide-react'
 import { BackBtn, Badge, Btn, Table, Spinner, ErrorBox, Input } from '../components/ui'
-import { api, ApiError, type Order, type OrderStatus, type DeliveryMethod, type ShippingCarrier } from '../lib/api'
+import { api, ApiError, type Order, type OrderItem, type OrderStatus, type DeliveryMethod, type ShippingCarrier } from '../lib/api'
 import { orderStatusLabel, paymentMethodLabel, salesChannelLabel, deliveryMethodLabel, shippingCarrierLabel, loaiSanPhamLabel } from '../lib/labels'
 import { useAuth } from '../lib/auth'
 import { useDialog } from '../lib/dialog'
@@ -236,7 +236,7 @@ export function OrderDetailScreen({ orderId, onBack, onViewProduct }: { orderId:
                     {i.product.loaiSanPham === 'PRE_ORDER' && <Badge label={loaiSanPhamLabel.PRE_ORDER} />}
                   </span>
                 ),
-                i.product.sku, String(i.soLuong),
+                i.product.sku, <ItemQuantityField order={order} item={i} onSaved={setOrder} />,
                 `${i.donGia.toLocaleString('vi-VN')} VNĐ`, `${i.thanhTien.toLocaleString('vi-VN')} VNĐ`,
               ])}
             />
@@ -411,6 +411,51 @@ function ShippingFeeField({ order, onSaved }: { order: Order; onSaved: (o: Order
           className="text-xs px-2 py-1.5 border border-slate-200 rounded-md focus:outline-none focus:border-blue-400 w-24" placeholder="0" />
         <span className="text-[10px] text-slate-400">VNĐ</span>
         <Btn small disabled={saving || !dirty} onClick={handleSave}>{saving ? 'Đang lưu...' : 'Lưu'}</Btn>
+      </div>
+      {error && <div className="text-[10px] text-red-500 mt-1">{error}</div>}
+    </div>
+  )
+}
+
+/**
+ * Số lượng của 1 dòng hàng — chỉ sửa được khi đơn Mới/Đang xử lý, cùng lý do
+ * với DepositField (Hoàn thành thì tongCong đã chốt vào Hóa đơn + sổ Thu/Chi,
+ * xem orders.service.ts#updateItemQuantity). Tồn kho + "đã bán" tự bù đúng
+ * phần chênh lệch ở backend, không cần làm gì thêm ở đây.
+ */
+function ItemQuantityField({ order, item, onSaved }: { order: Order; item: OrderItem; onSaved: (o: Order) => void }) {
+  const editable = order.trangThai === 'MOI' || order.trangThai === 'DANG_XU_LY'
+  const [value, setValue] = useState(String(item.soLuong))
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => { setValue(String(item.soLuong)) }, [item.id, item.soLuong])
+
+  if (!editable) return <span className="font-semibold">{item.soLuong}</span>
+
+  const soLuongMoi = Number(value) || 0
+  const dirty = soLuongMoi !== item.soLuong
+
+  async function handleSave() {
+    if (soLuongMoi < 1) { setError('Số lượng phải lớn hơn 0.'); return }
+    setError(null)
+    setSaving(true)
+    try {
+      const updated = await api.orders.updateItemQuantity(order.id, item.id, soLuongMoi)
+      onSaved(updated)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Không thể cập nhật số lượng.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-1.5">
+        <input type="number" min={1} value={value} onChange={e => setValue(e.target.value)}
+          className="w-14 text-center text-xs border border-slate-200 rounded px-1 py-1 focus:outline-none focus:border-blue-400" />
+        {dirty && <Btn small disabled={saving} onClick={handleSave}>{saving ? '...' : 'Lưu'}</Btn>}
       </div>
       {error && <div className="text-[10px] text-red-500 mt-1">{error}</div>}
     </div>

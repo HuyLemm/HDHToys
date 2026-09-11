@@ -547,6 +547,8 @@ export const api = {
     updateTrackingCode: (id: string, maVanDon: string) => patch<Order>(`/orders/${id}/tracking-code`, { maVanDon }),
     updateShippingFee: (id: string, phiShip: number) => patch<Order>(`/orders/${id}/shipping-fee`, { phiShip }),
     updateDeposit: (id: string, tienCoc: number) => patch<Order>(`/orders/${id}/deposit`, { tienCoc }),
+    /** Chỉ sửa được khi đơn Mới/Đang xử lý — Hoàn thành/Hủy/Hoàn tiền thì bị chặn ở backend. */
+    updateItemQuantity: (id: string, itemId: string, soLuong: number) => patch<Order>(`/orders/${id}/items/${itemId}/quantity`, { soLuong }),
     /** Ảnh QR VietQR (PNG) của đơn hàng — dùng với URL.createObjectURL để hiển thị inline. */
     qrImageBlob: (id: string) => fetchAuthenticatedBlob(`/orders/${id}/qr.png`),
     /** Phiếu tạm tính (PDF) cho đơn chưa Hoàn thành — chưa có Hóa đơn chính thức, xem invoice trên Order. */

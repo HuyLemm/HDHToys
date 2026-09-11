@@ -174,3 +174,13 @@ export async function updateDeposit(req: Request, res: Response) {
   const order = await ordersService.updateDeposit(req.params.id, parsed.data.tienCoc, req.auth!.sub)
   res.json(order)
 }
+
+const itemQuantitySchema = z.object({ soLuong: z.number().int().min(1) })
+
+export async function updateItemQuantity(req: Request, res: Response) {
+  const parsed = itemQuantitySchema.safeParse(req.body)
+  if (!parsed.success) throw badRequest("Số lượng không hợp lệ.")
+
+  const order = await ordersService.updateItemQuantity(req.params.id, req.params.itemId, parsed.data.soLuong, req.auth!.sub)
+  res.json(order)
+}

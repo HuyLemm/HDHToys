@@ -621,6 +621,57 @@ export async function updateDeposit(orderId: string, tienCoc: number, nguoiThucH
 }
 
 /**
+ * Sửa số lượng của 1 dòng hàng trong đơn — chỉ cho sửa khi đơn CHƯA Hoàn
+ * thành, cùng lý do với updateShippingFee/updateDeposit (applyOrderCompletion
+ * đã "chốt" tongCong vào Hóa đơn + sổ Thu/Chi). Tồn kho và "đã bán"
+ * (Product.daBan) đã bị trừ/cộng theo số lượng CŨ ngay lúc tạo đơn (xem
+ * create()) — ở đây chỉ bù đúng phần chênh lệch, không tính lại từ đầu.
+ */
+export async function updateItemQuantity(orderId: string, itemId: string, soLuongMoi: number, nguoiThucHienId: string) {
+  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { items: true } })
+  if (!order) throw notFound("Không tìm thấy đơn hàng.")
+  if (order.trangThai !== "MOI" && order.trangThai !== "DANG_XU_LY") {
+    throw badRequest("Đơn hàng đã Hoàn thành/Hủy/Hoàn tiền — không thể sửa số lượng.")
+  }
+
+  const item = order.items.find((i) => i.id === itemId)
+  if (!item) throw notFound("Không tìm thấy dòng hàng này trong đơn.")
+
+  const delta = soLuongMoi - item.soLuong
+  if (delta === 0) {
+    return prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: orderInclude, relationLoadStrategy: "join" })
+  }
+
+  const lineTotalMoi = soLuongMoi * item.donGia
+  if (item.giamGia > lineTotalMoi) {
+    throw badRequest(
+      `Số lượng mới làm giảm giá (${item.giamGia.toLocaleString("vi-VN")} VNĐ) vượt quá giá trị dòng hàng — vui lòng sửa giảm giá trước.`,
+    )
+  }
+  const thanhTienMoi = lineTotalMoi - item.giamGia
+  const tamTinhMoi = order.tamTinh - item.soLuong * item.donGia + lineTotalMoi
+  const tongCongMoi = tamTinhMoi - order.giamGia + order.phiShip
+  if (order.tienCoc > tongCongMoi) {
+    throw badRequest("Số lượng mới làm tổng tiền đơn nhỏ hơn tiền cọc đã nhận — vui lòng kiểm tra lại.")
+  }
+
+  return prisma.$transaction(async (tx) => {
+    await applyInventoryTransaction(tx, {
+      productId: item.productId,
+      loai: delta > 0 ? "XUAT" : "TRA_HANG",
+      soLuongThayDoi: -delta,
+      nguoiThucHienId,
+      thamChieu: order.ma,
+      ghiChu: `Điều chỉnh số lượng đơn hàng ${order.ma}`,
+    })
+    await tx.product.update({ where: { id: item.productId }, data: { daBan: { increment: delta } } })
+    await tx.orderItem.update({ where: { id: itemId }, data: { soLuong: soLuongMoi, thanhTien: thanhTienMoi } })
+    await tx.order.update({ where: { id: orderId }, data: { tamTinh: tamTinhMoi, tongCong: tongCongMoi } })
+    return tx.order.findUniqueOrThrow({ where: { id: orderId }, include: orderInclude, relationLoadStrategy: "join" })
+  })
+}
+
+/**
  * Kích hoạt bởi payments.service khi đối soát thanh toán QR khớp (webhook
  * ngân hàng). Cho phép nhảy thẳng MOI/DANG_XU_LY -> HOAN_THANH — một ngoại
  * lệ có chủ đích của máy trạng thái ở canTransition (SRS FR-ORD.4, FR-PAY.4).
