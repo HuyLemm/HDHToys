@@ -5,6 +5,7 @@ import { api, ApiError, type InventoryTransaction, type InventoryTransactionType
 import { inventoryTransactionTypeLabel, reverseLookup } from '../lib/labels'
 import { useAuth } from '../lib/auth'
 import { useDialog } from '../lib/dialog'
+import { useScreenState } from '../lib/screenState'
 
 const typeColor: Record<string, string> = {
   'Nhập kho': 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -18,9 +19,9 @@ export function InventoryHistoryScreen({ onBack }: { onBack: () => void }) {
   const { staff } = useAuth()
   const [items, setItems] = useState<InventoryTransaction[]>([])
   const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [q, setQ] = useState('')
-  const [loai, setLoai] = useState('')
+  const [page, setPage] = useScreenState('inventoryHistory.page', 1)
+  const [q, setQ] = useScreenState('inventoryHistory.q', '')
+  const [loai, setLoai] = useScreenState('inventoryHistory.loai', '')
   const [loading, setLoading] = useState(true)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const pageSize = 15

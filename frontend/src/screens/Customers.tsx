@@ -4,16 +4,17 @@ import { Btn, FilterBar, SearchInput, Select, Table, Pagination, TinyBtn, Badge,
 import { api, ApiError, type Customer, type CustomerTier, type SalesChannel } from '../lib/api'
 import { customerTierLabel, salesChannelLabel, reverseLookup } from '../lib/labels'
 import { useDialog } from '../lib/dialog'
+import { useScreenState } from '../lib/screenState'
 import { NewCustomerModal } from './CreateOrder'
 
 export function CustomersScreen({ onDetail }: { onDetail: (id: string) => void }) {
   const dialog = useDialog()
   const [items, setItems] = useState<Customer[]>([])
   const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [q, setQ] = useState('')
-  const [hang, setHang] = useState('')
-  const [nguon, setNguon] = useState('')
+  const [page, setPage] = useScreenState('customers.page', 1)
+  const [q, setQ] = useScreenState('customers.q', '')
+  const [hang, setHang] = useScreenState('customers.hang', '')
+  const [nguon, setNguon] = useScreenState('customers.nguon', '')
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)

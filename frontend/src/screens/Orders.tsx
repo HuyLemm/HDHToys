@@ -4,6 +4,7 @@ import { Btn, FilterBar, SearchInput, Select, Table, Pagination, TinyBtn, Badge,
 import { api, ApiError, type Order, type OrderStatus, type PaymentMethod, type DeliveryMethod } from '../lib/api'
 import { orderStatusLabel, paymentMethodLabel, deliveryMethodLabel, shippingCarrierLabel, reverseLookup, depositStatusLabel } from '../lib/labels'
 import { useDialog } from '../lib/dialog'
+import { useScreenState } from '../lib/screenState'
 import { ProductThumb } from './ProductDetail'
 
 const SORT_OPTIONS = {
@@ -52,14 +53,14 @@ export function OrdersScreen({ onDetail, onCreate, onViewCustomer }: {
   const dialog = useDialog()
   const [items, setItems] = useState<Order[]>([])
   const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [q, setQ] = useState('')
-  const [trangThai, setTrangThai] = useState('')
-  const [phuongThuc, setPhuongThuc] = useState('')
-  const [thanhToan, setThanhToan] = useState('')
-  const [nhanHang, setNhanHang] = useState('')
-  const [maVanDonFilter, setMaVanDonFilter] = useState('')
-  const [sort, setSort] = useState<keyof typeof SORT_OPTIONS>('Ngày mới nhất')
+  const [page, setPage] = useScreenState('orders.page', 1)
+  const [q, setQ] = useScreenState('orders.q', '')
+  const [trangThai, setTrangThai] = useScreenState('orders.trangThai', '')
+  const [phuongThuc, setPhuongThuc] = useScreenState('orders.phuongThuc', '')
+  const [thanhToan, setThanhToan] = useScreenState('orders.thanhToan', '')
+  const [nhanHang, setNhanHang] = useScreenState('orders.nhanHang', '')
+  const [maVanDonFilter, setMaVanDonFilter] = useScreenState('orders.maVanDonFilter', '')
+  const [sort, setSort] = useScreenState<keyof typeof SORT_OPTIONS>('orders.sort', 'Ngày mới nhất')
   const [loading, setLoading] = useState(true)
   const pageSize = 10
 

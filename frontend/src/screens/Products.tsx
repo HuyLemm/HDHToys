@@ -4,17 +4,18 @@ import { Btn, FilterBar, SearchInput, Select, Table, Pagination, TinyBtn, Badge,
 import { api, ApiError, type LoaiSanPham, type Product, type ProductStatus } from '../lib/api'
 import { loaiSanPhamLabel, productStatusLabel, reverseLookup } from '../lib/labels'
 import { useDialog } from '../lib/dialog'
+import { useScreenState } from '../lib/screenState'
 import { ProductThumb } from './ProductDetail'
 
 export function ProductsScreen({ onDetail }: { onDetail: (id: string) => void }) {
   const dialog = useDialog()
   const [items, setItems] = useState<Product[]>([])
   const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [q, setQ] = useState('')
-  const [danhMuc, setDanhMuc] = useState('')
-  const [trangThai, setTrangThai] = useState('')
-  const [loaiSanPham, setLoaiSanPham] = useState('')
+  const [page, setPage] = useScreenState('products.page', 1)
+  const [q, setQ] = useScreenState('products.q', '')
+  const [danhMuc, setDanhMuc] = useScreenState('products.danhMuc', '')
+  const [trangThai, setTrangThai] = useScreenState('products.trangThai', '')
+  const [loaiSanPham, setLoaiSanPham] = useScreenState('products.loaiSanPham', '')
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)

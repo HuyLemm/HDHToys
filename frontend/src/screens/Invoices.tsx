@@ -5,14 +5,15 @@ import { api, ApiError, type Invoice } from '../lib/api'
 import { paymentMethodLabel } from '../lib/labels'
 import { useAuth } from '../lib/auth'
 import { useDialog } from '../lib/dialog'
+import { useScreenState } from '../lib/screenState'
 
 export function InvoicesScreen({ onDetail }: { onDetail: (id: string) => void }) {
   const dialog = useDialog()
   const { staff } = useAuth()
   const [items, setItems] = useState<Invoice[]>([])
   const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [q, setQ] = useState('')
+  const [page, setPage] = useScreenState('invoices.page', 1)
+  const [q, setQ] = useScreenState('invoices.q', '')
   const [loading, setLoading] = useState(true)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const pageSize = 10
