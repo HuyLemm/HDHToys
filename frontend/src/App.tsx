@@ -68,19 +68,29 @@ function navToUrl(nav: Nav): string {
 
 function AppShell() {
   const { staff, loading } = useAuth()
-  const [nav, setNav] = useState<Nav>(() => navFromLocation())
+  // navStack ghi lại toàn bộ đường đi đã qua (không chỉ màn hiện tại) — nút
+  // "Quay lại" của từng màn trước đây gọi go(<màn cha cố định>) nên luôn về
+  // đúng 1 nơi bất kể đi từ đâu tới (VD xem sản phẩm từ tab "Khách đã mua" ->
+  // mở 1 đơn hàng -> bấm Quay lại thì lẽ ra phải về lại trang sản phẩm đó,
+  // nhưng lại về thẳng danh sách Đơn hàng). goBack() dưới đây bỏ đúng 1 bước
+  // vừa đi, về đúng màn trước đó bất kể đường đi thế nào.
+  const [navStack, setNavStack] = useState<Nav[]>(() => [navFromLocation()])
+  const nav = navStack[navStack.length - 1]
   const [collapsed, setCollapsed] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const isMobile = useIsMobile()
 
   // Đồng bộ với URL trình duyệt (query string) + nút Back/Forward của
   // trình duyệt/chuột — trước đây điều hướng chỉ là state nội bộ, nút back
-  // của trình duyệt không có tác dụng gì cả.
+  // của trình duyệt không có tác dụng gì cả. Lưu cả navStack (không chỉ màn
+  // hiện tại) vào history.state để nút back/forward CỦA TRÌNH DUYỆT cũng đi
+  // đúng từng bước một thay vì nhảy thẳng.
   useEffect(() => {
-    window.history.replaceState(nav, '', navToUrl(nav))
+    window.history.replaceState(navStack, '', navToUrl(nav))
 
     function onPopState(e: PopStateEvent) {
-      setNav((e.state as Nav | null) ?? navFromLocation())
+      const state = e.state as Nav[] | null
+      setNavStack(state && state.length > 0 ? state : [navFromLocation()])
     }
     window.addEventListener('popstate', onPopState)
     return () => window.removeEventListener('popstate', onPopState)
@@ -89,8 +99,17 @@ function AppShell() {
 
   function go(screen: Screen, id?: string) {
     const next: Nav = { screen, id }
-    window.history.pushState(next, '', navToUrl(next))
-    setNav(next)
+    const nextStack = [...navStack, next]
+    window.history.pushState(nextStack, '', navToUrl(next))
+    setNavStack(nextStack)
+  }
+
+  /** Bỏ đúng 1 bước vừa đi, về lại màn hình trước đó — dùng cho mọi nút "Quay lại". */
+  function goBack() {
+    if (navStack.length <= 1) return
+    const nextStack = navStack.slice(0, -1)
+    window.history.pushState(nextStack, '', navToUrl(nextStack[nextStack.length - 1]))
+    setNavStack(nextStack)
   }
 
   function toggleSidebar() {
@@ -108,16 +127,16 @@ function AppShell() {
     switch (nav.screen) {
       case 'dashboard': return <DashboardScreen onNav={go} />
       case 'orders': return <OrdersScreen onDetail={id => go('order-detail', id)} onCreate={() => go('create-order')} onViewCustomer={id => go('customer-detail', id)} />
-      case 'order-detail': return <OrderDetailScreen orderId={nav.id!} onBack={() => go('orders')} onViewProduct={id => go('product-detail', id)} />
-      case 'create-order': return <CreateOrderScreen onBack={() => go('orders')} onCreated={id => go('order-detail', id)} />
+      case 'order-detail': return <OrderDetailScreen orderId={nav.id!} onBack={goBack} onViewProduct={id => go('product-detail', id)} />
+      case 'create-order': return <CreateOrderScreen onBack={goBack} onCreated={id => go('order-detail', id)} />
       case 'inventory': return <InventoryScreen onHistory={() => go('inventory-history')} />
-      case 'inventory-history': return <InventoryHistoryScreen onBack={() => go('inventory')} />
+      case 'inventory-history': return <InventoryHistoryScreen onBack={goBack} />
       case 'products': return <ProductsScreen onDetail={id => go('product-detail', id)} />
-      case 'product-detail': return <ProductDetailScreen productId={nav.id!} onBack={() => go('products')} onViewCustomer={id => go('customer-detail', id)} onViewOrder={id => go('order-detail', id)} />
+      case 'product-detail': return <ProductDetailScreen productId={nav.id!} onBack={goBack} onViewCustomer={id => go('customer-detail', id)} onViewOrder={id => go('order-detail', id)} />
       case 'customers': return <CustomersScreen onDetail={id => go('customer-detail', id)} />
-      case 'customer-detail': return <CustomerDetailScreen customerId={nav.id!} onBack={() => go('customers')} onOrderDetail={id => go('order-detail', id)} />
+      case 'customer-detail': return <CustomerDetailScreen customerId={nav.id!} onBack={goBack} onOrderDetail={id => go('order-detail', id)} />
       case 'invoices': return <InvoicesScreen onDetail={id => go('invoice-detail', id)} />
-      case 'invoice-detail': return <InvoiceDetailScreen invoiceId={nav.id!} onBack={() => go('invoices')} onViewOrder={id => go('order-detail', id)} />
+      case 'invoice-detail': return <InvoiceDetailScreen invoiceId={nav.id!} onBack={goBack} onViewOrder={id => go('order-detail', id)} />
       case 'revenue': return <RevenueScreen />
       case 'thu-chi': return <ThuChiScreen />
       case 'ke-toan': return <KeToanScreen />

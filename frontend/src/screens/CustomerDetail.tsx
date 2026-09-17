@@ -4,6 +4,7 @@ import { BackBtn, Badge, Btn, KpiCard, Tabs, Table, Spinner, Field, Input, Error
 import { api, ApiError, type Customer, type CustomerNote, type Order, type Invoice, type SalesChannel } from '../lib/api'
 import { customerTierLabel, orderStatusLabel, paymentMethodLabel, salesChannelLabel } from '../lib/labels'
 import { useDialog } from '../lib/dialog'
+import { useScreenState } from '../lib/screenState'
 import { ProductThumb } from './ProductDetail'
 
 type Overview = {
@@ -20,7 +21,7 @@ export function CustomerDetailScreen({ customerId, onBack, onOrderDetail }: {
 }) {
   const dialog = useDialog()
   const [overview, setOverview] = useState<Overview | null>(null)
-  const [tab, setTab] = useState('Tổng quan')
+  const [tab, setTab] = useScreenState('customerDetail.tab', 'Tổng quan')
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [showEdit, setShowEdit] = useState(false)
 

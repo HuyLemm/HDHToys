@@ -4,6 +4,7 @@ import { BackBtn, Badge, Btn, KpiCard, Tabs, Table, Spinner, Modal, Field, Input
 import { api, ApiError, type Product, type InventoryTransaction, type LoaiSanPham } from '../lib/api'
 import { productStatusLabel, inventoryTransactionTypeLabel, loaiSanPhamLabel, orderStatusLabel, reverseLookup, salesChannelLabel } from '../lib/labels'
 import { preorderDueStatus } from '../lib/preorderStatus'
+import { useScreenState } from '../lib/screenState'
 import { useDialog } from '../lib/dialog'
 import { StockModal } from './Inventory'
 
@@ -113,7 +114,7 @@ export function ProductDetailScreen({ productId, onBack, onViewCustomer, onViewO
 }) {
   const dialog = useDialog()
   const [product, setProduct] = useState<Product | null>(null)
-  const [tab, setTab] = useState('Thông tin chung')
+  const [tab, setTab] = useScreenState('productDetail.tab', 'Thông tin chung')
   const [history, setHistory] = useState<InventoryTransaction[]>([])
   const [buyers, setBuyers] = useState<Awaited<ReturnType<typeof api.products.buyers>>['items']>([])
   const [buyerSearch, setBuyerSearch] = useState('')
