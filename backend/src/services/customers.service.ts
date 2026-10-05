@@ -22,6 +22,10 @@ export async function list(params: {
             { hoTen: { contains: q, mode: "insensitive" } },
             { sdt: { contains: q } },
             { email: { contains: q, mode: "insensitive" } },
+            // SĐT lưu toàn chữ số, nhưng người dùng hay gõ/dán theo cách có
+            // phân cách (VD "081 939 5978") — thử thêm bản đã bỏ hết ký tự
+            // không phải số để vẫn khớp được.
+            ...(q.replace(/\D/g, "") ? [{ sdt: { contains: q.replace(/\D/g, "") } }] : []),
           ],
         }
       : {}),

@@ -55,6 +55,10 @@ export async function list(params: {
             { ma: { contains: q, mode: "insensitive" } },
             { khachHang: { hoTen: { contains: q, mode: "insensitive" } } },
             { khachHang: { sdt: { contains: q } } },
+            // SĐT lưu toàn chữ số (không dấu cách/gạch ngang), nhưng người
+            // dùng hay gõ/dán theo cách có phân cách (VD "081 939 5978") —
+            // thử thêm bản đã bỏ hết ký tự không phải số để vẫn khớp được.
+            ...(q.replace(/\D/g, "") ? [{ khachHang: { sdt: { contains: q.replace(/\D/g, "") } } }] : []),
           ],
         }
       : {}),

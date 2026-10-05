@@ -5,6 +5,11 @@ const LIMIT = 5
 export async function search(q: string) {
   if (q.length < 2) return { khachHang: [], donHang: [], hoaDon: [], sanPham: [] }
 
+  // SĐT lưu toàn chữ số, nhưng người dùng hay gõ/dán theo cách có phân cách
+  // (VD "081 939 5978") — thử thêm bản đã bỏ hết ký tự không phải số để vẫn
+  // khớp được.
+  const qDigits = q.replace(/\D/g, "")
+
   const [khachHang, donHang, hoaDon, sanPham] = await Promise.all([
     prisma.customer.findMany({
       where: {
@@ -12,6 +17,7 @@ export async function search(q: string) {
           { hoTen: { contains: q, mode: "insensitive" } },
           { sdt: { contains: q } },
           { email: { contains: q, mode: "insensitive" } },
+          ...(qDigits ? [{ sdt: { contains: qDigits } }] : []),
         ],
       },
       select: { id: true, hoTen: true, sdt: true, email: true, hangKhachHang: true },
@@ -23,6 +29,7 @@ export async function search(q: string) {
           { ma: { contains: q, mode: "insensitive" } },
           { khachHang: { hoTen: { contains: q, mode: "insensitive" } } },
           { khachHang: { sdt: { contains: q } } },
+          ...(qDigits ? [{ khachHang: { sdt: { contains: qDigits } } }] : []),
         ],
       },
       select: {

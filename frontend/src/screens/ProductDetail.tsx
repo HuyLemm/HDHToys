@@ -302,6 +302,18 @@ export function ProductDetailScreen({ productId, onBack, onViewCustomer, onViewO
                     <div className="w-28"><Input type="number" min={0} placeholder="Tiền đến" value={buyerTienDen === 0 ? '' : buyerTienDen} onChange={e => setBuyerTienDen(Number(e.target.value))} /></div>
                   </FilterBar>
                 )}
+                {filteredBuyers.length > 0 && (
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div className="bg-slate-50 rounded-lg px-4 py-3">
+                      <div className="text-xs text-slate-500">Tổng số lượng</div>
+                      <div className="text-sm font-bold mt-1">{filteredBuyers.reduce((s, b) => s + b.soLuong, 0)} sp</div>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg px-4 py-3">
+                      <div className="text-xs text-slate-500">Tổng tiền</div>
+                      <div className="text-sm font-bold mt-1">{filteredBuyers.reduce((s, b) => s + b.thanhTien, 0).toLocaleString('vi-VN')} VNĐ</div>
+                    </div>
+                  </div>
+                )}
                 {buyers.length === 0 ? <div className="text-xs text-slate-400 py-8 text-center">Chưa có đơn hàng nào mua sản phẩm này</div> :
                  filteredBuyers.length === 0 ? <div className="text-xs text-slate-400 py-8 text-center">Không có đơn hàng nào khớp bộ lọc</div> : (
                 <Table
