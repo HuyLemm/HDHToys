@@ -303,7 +303,7 @@ export function ProductDetailScreen({ productId, onBack, onViewCustomer, onViewO
                   </FilterBar>
                 )}
                 {filteredBuyers.length > 0 && (
-                  <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
                     <div className="bg-slate-50 rounded-lg px-4 py-3">
                       <div className="text-xs text-slate-500">Tổng số lượng</div>
                       <div className="text-sm font-bold mt-1">{filteredBuyers.reduce((s, b) => s + b.soLuong, 0)} sp</div>
@@ -312,12 +312,20 @@ export function ProductDetailScreen({ productId, onBack, onViewCustomer, onViewO
                       <div className="text-xs text-slate-500">Tổng tiền</div>
                       <div className="text-sm font-bold mt-1">{filteredBuyers.reduce((s, b) => s + b.thanhTien, 0).toLocaleString('vi-VN')} VNĐ</div>
                     </div>
+                    <div className="bg-slate-50 rounded-lg px-4 py-3">
+                      <div className="text-xs text-slate-500">Tổng đã cọc</div>
+                      <div className="text-sm font-bold mt-1">{filteredBuyers.reduce((s, b) => s + b.tienCoc, 0).toLocaleString('vi-VN')} VNĐ</div>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg px-4 py-3">
+                      <div className="text-xs text-slate-500">Tổng còn phải thu</div>
+                      <div className="text-sm font-bold mt-1 text-amber-600">{filteredBuyers.reduce((s, b) => s + (b.daThanhToan ? 0 : Math.max(0, b.tongCong - b.tienCoc)), 0).toLocaleString('vi-VN')} VNĐ</div>
+                    </div>
                   </div>
                 )}
                 {buyers.length === 0 ? <div className="text-xs text-slate-400 py-8 text-center">Chưa có đơn hàng nào mua sản phẩm này</div> :
                  filteredBuyers.length === 0 ? <div className="text-xs text-slate-400 py-8 text-center">Không có đơn hàng nào khớp bộ lọc</div> : (
                 <Table
-                  cols={['Mã đơn', 'Khách hàng', 'SĐT', 'Nguồn khách', 'Trang cá nhân', 'Trạng thái', 'Số lượng', 'Thành tiền', 'Ngày mua']}
+                  cols={['Mã đơn', 'Khách hàng', 'SĐT', 'Nguồn khách', 'Trang cá nhân', 'Trạng thái', 'Số lượng', 'Thành tiền', 'Tổng đơn', 'Đã cọc', 'Còn lại', 'Ngày mua']}
                   rows={filteredBuyers.map(b => [
                     onViewOrder ? (
                       <button onClick={() => onViewOrder(b.orderId)} className="font-mono text-[10px] font-semibold hover:underline cursor-pointer" style={{ color: '#1a56db' }}>{b.ma}</button>
@@ -332,6 +340,17 @@ export function ProductDetailScreen({ productId, onBack, onViewCustomer, onViewO
                     ) : <span className="text-slate-300">—</span>,
                     <Badge label={orderStatusLabel[b.trangThai]} />,
                     String(b.soLuong), `${b.thanhTien.toLocaleString('vi-VN')} VNĐ`,
+                    `${b.tongCong.toLocaleString('vi-VN')} VNĐ`,
+                    b.tienCoc > 0 ? `${b.tienCoc.toLocaleString('vi-VN')} VNĐ` : '—',
+                    (() => {
+                      // daThanhToan là cờ nhân viên tự đánh dấu "đã thu đủ tiền" (độc lập với
+                      // tienCoc — VD khách trả tiền mặt khi nhận hàng, không đi qua cọc) nên
+                      // ưu tiên nó trước, không chỉ dựa vào phép tính tongCong - tienCoc.
+                      const conLai = b.tongCong - b.tienCoc
+                      return b.daThanhToan || conLai <= 0 ? (
+                        <span className="font-semibold text-emerald-600">Đã đủ</span>
+                      ) : <span className="font-semibold text-amber-600">{conLai.toLocaleString('vi-VN')} VNĐ</span>
+                    })(),
                     new Date(b.createdAt).toLocaleDateString('vi-VN'),
                   ])}
                 />

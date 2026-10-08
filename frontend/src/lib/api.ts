@@ -464,6 +464,7 @@ export const api = {
           orderId: string; ma: string; trangThai: OrderStatus; createdAt: string
           customerId: string; hoTen: string; sdt: string | null; nguonKhachHang: SalesChannel; linkFacebook: string | null
           soLuong: number; thanhTien: number
+          tongCong: number; tienCoc: number; daThanhToan: boolean
         }[]
         total: number
       }>(`/products/${id}/buyers`),

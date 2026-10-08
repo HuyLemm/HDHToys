@@ -64,7 +64,7 @@ export async function getBuyers(productId: string) {
     include: {
       order: {
         select: {
-          id: true, ma: true, trangThai: true, createdAt: true,
+          id: true, ma: true, trangThai: true, createdAt: true, tongCong: true, tienCoc: true, daThanhToan: true,
           khachHang: { select: { id: true, hoTen: true, sdt: true, nguonKhachHang: true, linkFacebook: true } },
         },
       },
@@ -72,13 +72,16 @@ export async function getBuyers(productId: string) {
   })
 
   // Gộp theo orderId phòng khi 1 đơn có sản phẩm này ở nhiều dòng (hiếm nhưng
-  // có thể xảy ra) — mỗi đơn vẫn chỉ hiện đúng 1 dòng trong danh sách.
+  // có thể xảy ra) — mỗi đơn vẫn chỉ hiện đúng 1 dòng trong danh sách. tongCong/
+  // tienCoc là của CẢ ĐƠN (không phải riêng dòng sản phẩm này) — cọc tính theo
+  // đơn, không tách riêng theo từng sản phẩm trong đơn.
   const byOrder = new Map<
     string,
     {
       orderId: string; ma: string; trangThai: string; createdAt: Date
       customerId: string; hoTen: string; sdt: string | null; nguonKhachHang: string; linkFacebook: string | null
       soLuong: number; thanhTien: number
+      tongCong: number; tienCoc: number; daThanhToan: boolean
     }
   >()
 
@@ -100,6 +103,9 @@ export async function getBuyers(productId: string) {
         linkFacebook: item.order.khachHang.linkFacebook,
         soLuong: item.soLuong,
         thanhTien: item.thanhTien,
+        tongCong: item.order.tongCong,
+        tienCoc: item.order.tienCoc,
+        daThanhToan: item.order.daThanhToan,
       })
     }
   }
