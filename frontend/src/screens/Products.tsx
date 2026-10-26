@@ -174,16 +174,18 @@ function CreateProductModal({ onClose, onCreated }: { onClose: () => void; onCre
 
   return (
     <Modal title="Thêm sản phẩm mới" onClose={onClose} width="max-w-lg">
-      <div className="flex items-center gap-1 mb-3 border-b border-slate-200 overflow-x-auto">
-        {drafts.map((d, i) => (
-          <button key={i} onClick={() => setActiveIndex(i)}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs whitespace-nowrap border-b-2 cursor-pointer transition-colors ${i === activeIndex ? 'border-blue-600 text-blue-700 font-medium' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-            {d.ten || d.sku || `Sản phẩm ${i + 1}`}
-            {drafts.length > 1 && (
-              <span onClick={e => { e.stopPropagation(); handleCloseTab(i) }} className="hover:text-red-500 cursor-pointer">✕</span>
-            )}
-          </button>
-        ))}
+      <div className="flex items-center gap-1 mb-3 border-b border-slate-200">
+        <div className="flex items-center min-w-0 flex-1">
+          {drafts.map((d, i) => (
+            <button key={i} onClick={() => setActiveIndex(i)}
+              className={`flex items-center gap-1.5 px-2.5 py-2 text-xs border-b-2 cursor-pointer transition-colors min-w-0 flex-1 max-w-[160px] ${i === activeIndex ? 'border-blue-600 text-blue-700 font-medium' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+              <span className="truncate">{d.ten || d.sku || `Sản phẩm ${i + 1}`}</span>
+              {drafts.length > 1 && (
+                <span onClick={e => { e.stopPropagation(); handleCloseTab(i) }} className="hover:text-red-500 cursor-pointer flex-shrink-0">✕</span>
+              )}
+            </button>
+          ))}
+        </div>
         <button onClick={handleAddTab} disabled={submitting} title="Thêm sản phẩm khác"
           className="px-2 py-2 text-slate-400 hover:text-slate-700 cursor-pointer flex-shrink-0">
           <Plus size={14} strokeWidth={2} />
