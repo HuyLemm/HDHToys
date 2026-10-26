@@ -119,6 +119,8 @@ function validateProductDraft(d: ProductDraft): string | null {
  * cũ vẫn xem/sửa được bình thường — không bắt phải điền xong 1 cái mới được
  * mở cái tiếp theo. "Tạo tất cả" validate rồi gửi lần lượt từng tab.
  */
+const MAX_PRODUCT_TABS = 10
+
 function CreateProductModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [drafts, setDrafts] = useState<ProductDraft[]>([emptyProductDraft()])
   const [activeIndex, setActiveIndex] = useState(0)
@@ -132,6 +134,7 @@ function CreateProductModal({ onClose, onCreated }: { onClose: () => void; onCre
   }
 
   function handleAddTab() {
+    if (drafts.length >= MAX_PRODUCT_TABS) return
     setDrafts(prev => [...prev, emptyProductDraft()])
     setActiveIndex(drafts.length)
     setError(null)
@@ -173,21 +176,22 @@ function CreateProductModal({ onClose, onCreated }: { onClose: () => void; onCre
   }
 
   return (
-    <Modal title="Thêm sản phẩm mới" onClose={onClose} width="max-w-lg">
+    <Modal title="Thêm sản phẩm mới" onClose={onClose} width="max-w-2xl">
       <div className="flex items-center gap-1 mb-3 border-b border-slate-200">
         <div className="flex items-center min-w-0 flex-1">
           {drafts.map((d, i) => (
             <button key={i} onClick={() => setActiveIndex(i)}
-              className={`flex items-center gap-1.5 px-2.5 py-2 text-xs border-b-2 cursor-pointer transition-colors min-w-0 flex-1 max-w-[160px] ${i === activeIndex ? 'border-blue-600 text-blue-700 font-medium' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-              <span className="truncate">{d.ten || d.sku || `Sản phẩm ${i + 1}`}</span>
+              className={`flex items-center gap-1.5 px-2.5 py-2 text-xs border-b-2 cursor-pointer transition-colors min-w-0 flex-1 max-w-[90px] ${i === activeIndex ? 'border-blue-600 text-blue-700 font-medium' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+              <span className="truncate">SP{i + 1}</span>
               {drafts.length > 1 && (
                 <span onClick={e => { e.stopPropagation(); handleCloseTab(i) }} className="hover:text-red-500 cursor-pointer flex-shrink-0">✕</span>
               )}
             </button>
           ))}
         </div>
-        <button onClick={handleAddTab} disabled={submitting} title="Thêm sản phẩm khác"
-          className="px-2 py-2 text-slate-400 hover:text-slate-700 cursor-pointer flex-shrink-0">
+        <button onClick={handleAddTab} disabled={submitting || drafts.length >= MAX_PRODUCT_TABS}
+          title={drafts.length >= MAX_PRODUCT_TABS ? `Tối đa ${MAX_PRODUCT_TABS} sản phẩm mỗi lượt` : 'Thêm sản phẩm khác'}
+          className="px-2 py-2 text-slate-400 hover:text-slate-700 cursor-pointer flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed">
           <Plus size={14} strokeWidth={2} />
         </button>
       </div>
