@@ -113,54 +113,50 @@ function validateProductDraft(d: ProductDraft): string | null {
   return null
 }
 
-function isDraftEmpty(d: ProductDraft) {
-  return !d.sku && !d.ten && !d.danhMuc && !d.nhaCungCap && d.giaVon === 0 && d.giaBan === 0
-}
-
 /**
- * Cho tạo nhiều sản phẩm trong 1 lượt — bấm "Thêm sản phẩm khác" để đưa sản
- * phẩm đang nhập vào danh sách chờ rồi mở form trống tiếp, thay vì phải lưu
- * xong, đóng modal, mở lại modal mới cho từng sản phẩm một. "Tạo tất cả" gửi
- * lần lượt từng sản phẩm đã chờ (gộp luôn sản phẩm đang nhập dở nếu có).
+ * Cho tạo nhiều sản phẩm trong 1 lượt, kiểu tab trình duyệt: mỗi sản phẩm
+ * đang nhập dở là 1 tab riêng, bấm "+" mở tab mới trống, bấm qua lại các tab
+ * cũ vẫn xem/sửa được bình thường — không bắt phải điền xong 1 cái mới được
+ * mở cái tiếp theo. "Tạo tất cả" validate rồi gửi lần lượt từng tab.
  */
 function CreateProductModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [current, setCurrent] = useState<ProductDraft>(emptyProductDraft())
-  const [staged, setStaged] = useState<ProductDraft[]>([])
+  const [drafts, setDrafts] = useState<ProductDraft[]>([emptyProductDraft()])
+  const [activeIndex, setActiveIndex] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
+  const active = drafts[activeIndex]
+
   function update(patch: Partial<ProductDraft>) {
-    setCurrent(prev => ({ ...prev, ...patch }))
+    setDrafts(prev => prev.map((d, i) => i === activeIndex ? { ...d, ...patch } : d))
   }
 
-  function handleAddAnother() {
-    const err = validateProductDraft(current)
-    if (err) { setError(err); return }
+  function handleAddTab() {
+    setDrafts(prev => [...prev, emptyProductDraft()])
+    setActiveIndex(drafts.length)
     setError(null)
-    setStaged(prev => [...prev, current])
-    setCurrent(emptyProductDraft())
   }
 
-  function handleRemoveStaged(index: number) {
-    setStaged(prev => prev.filter((_, i) => i !== index))
+  function handleCloseTab(index: number) {
+    if (drafts.length === 1) return
+    setDrafts(prev => prev.filter((_, i) => i !== index))
+    setActiveIndex(prev => {
+      if (index < prev) return prev - 1
+      if (index === prev) return Math.max(0, prev - (index === drafts.length - 1 ? 1 : 0))
+      return prev
+    })
   }
-
-  const currentHasData = !isDraftEmpty(current)
-  const totalCount = staged.length + (currentHasData ? 1 : 0)
 
   async function handleSubmitAll() {
-    let all = staged
-    if (currentHasData) {
-      const err = validateProductDraft(current)
-      if (err) { setError(err); return }
-      all = [...staged, current]
+    for (let i = 0; i < drafts.length; i++) {
+      const err = validateProductDraft(drafts[i])
+      if (err) { setActiveIndex(i); setError(drafts.length > 1 ? `Sản phẩm ở tab ${i + 1}: ${err}` : err); return }
     }
-    if (all.length === 0) { setError('Vui lòng nhập ít nhất một sản phẩm.'); return }
 
     setError(null)
     setSubmitting(true)
     try {
-      for (const d of all) {
+      for (const d of drafts) {
         await api.products.create({
           sku: d.sku, ten: d.ten, danhMuc: d.danhMuc, nhaCungCap: d.nhaCungCap,
           giaVon: d.giaVon, phiVanChuyen: d.phiVanChuyen, giaBan: d.giaBan, tonKho: d.tonKho, tonKhoToiThieu: d.tonKhoToiThieu,
@@ -178,44 +174,48 @@ function CreateProductModal({ onClose, onCreated }: { onClose: () => void; onCre
 
   return (
     <Modal title="Thêm sản phẩm mới" onClose={onClose} width="max-w-lg">
+      <div className="flex items-center gap-1 mb-3 border-b border-slate-200 overflow-x-auto">
+        {drafts.map((d, i) => (
+          <button key={i} onClick={() => setActiveIndex(i)}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs whitespace-nowrap border-b-2 cursor-pointer transition-colors ${i === activeIndex ? 'border-blue-600 text-blue-700 font-medium' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+            {d.ten || d.sku || `Sản phẩm ${i + 1}`}
+            {drafts.length > 1 && (
+              <span onClick={e => { e.stopPropagation(); handleCloseTab(i) }} className="hover:text-red-500 cursor-pointer">✕</span>
+            )}
+          </button>
+        ))}
+        <button onClick={handleAddTab} disabled={submitting} title="Thêm sản phẩm khác"
+          className="px-2 py-2 text-slate-400 hover:text-slate-700 cursor-pointer flex-shrink-0">
+          <Plus size={14} strokeWidth={2} />
+        </button>
+      </div>
       <ErrorBox message={error} />
-      {staged.length > 0 && (
-        <div className="mb-3 border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-32 overflow-y-auto">
-          {staged.map((d, i) => (
-            <div key={i} className="flex items-center justify-between px-3 py-1.5 text-xs">
-              <span className="truncate"><span className="font-semibold text-slate-800">{d.ten || '(chưa đặt tên)'}</span> <span className="text-slate-400 font-mono">({d.sku || '—'})</span></span>
-              <button onClick={() => handleRemoveStaged(i)} className="text-slate-400 hover:text-red-500 cursor-pointer flex-shrink-0 ml-2">✕</button>
-            </div>
-          ))}
-        </div>
-      )}
       <div className="grid grid-cols-2 gap-3">
-        <Field label="SKU" required><Input value={current.sku} onChange={e => update({ sku: e.target.value })} placeholder="LEGO-60320" /></Field>
-        <Field label="Tên sản phẩm" required><Input value={current.ten} onChange={e => update({ ten: e.target.value })} /></Field>
-        <Field label="Danh mục" required><Input value={current.danhMuc} onChange={e => update({ danhMuc: e.target.value })} placeholder="LEGO" /></Field>
-        <Field label="Nhà cung cấp" required><Input value={current.nhaCungCap} onChange={e => update({ nhaCungCap: e.target.value })} /></Field>
-        <Field label="Giá vốn" required><Input type="number" min={0} value={current.giaVon === 0 ? '' : current.giaVon} onChange={e => update({ giaVon: Number(e.target.value) })} /></Field>
-        <Field label="Phí vận chuyển"><Input type="number" min={0} value={current.phiVanChuyen === 0 ? '' : current.phiVanChuyen} onChange={e => update({ phiVanChuyen: Number(e.target.value) })} /></Field>
-        <Field label="Giá bán" required><Input type="number" min={0} value={current.giaBan === 0 ? '' : current.giaBan} onChange={e => update({ giaBan: Number(e.target.value) })} /></Field>
-        <Field label="Tồn kho ban đầu"><Input type="number" min={0} value={current.tonKho === 0 ? '' : current.tonKho} onChange={e => update({ tonKho: Number(e.target.value) })} /></Field>
-        <Field label="Ngưỡng tồn tối thiểu"><Input type="number" min={0} value={current.tonKhoToiThieu === 0 ? '' : current.tonKhoToiThieu} onChange={e => update({ tonKhoToiThieu: Number(e.target.value) })} /></Field>
+        <Field label="SKU" required><Input value={active.sku} onChange={e => update({ sku: e.target.value })} placeholder="LEGO-60320" /></Field>
+        <Field label="Tên sản phẩm" required><Input value={active.ten} onChange={e => update({ ten: e.target.value })} /></Field>
+        <Field label="Danh mục" required><Input value={active.danhMuc} onChange={e => update({ danhMuc: e.target.value })} placeholder="LEGO" /></Field>
+        <Field label="Nhà cung cấp" required><Input value={active.nhaCungCap} onChange={e => update({ nhaCungCap: e.target.value })} /></Field>
+        <Field label="Giá vốn" required><Input type="number" min={0} value={active.giaVon === 0 ? '' : active.giaVon} onChange={e => update({ giaVon: Number(e.target.value) })} /></Field>
+        <Field label="Phí vận chuyển"><Input type="number" min={0} value={active.phiVanChuyen === 0 ? '' : active.phiVanChuyen} onChange={e => update({ phiVanChuyen: Number(e.target.value) })} /></Field>
+        <Field label="Giá bán" required><Input type="number" min={0} value={active.giaBan === 0 ? '' : active.giaBan} onChange={e => update({ giaBan: Number(e.target.value) })} /></Field>
+        <Field label="Tồn kho ban đầu"><Input type="number" min={0} value={active.tonKho === 0 ? '' : active.tonKho} onChange={e => update({ tonKho: Number(e.target.value) })} /></Field>
+        <Field label="Ngưỡng tồn tối thiểu"><Input type="number" min={0} value={active.tonKhoToiThieu === 0 ? '' : active.tonKhoToiThieu} onChange={e => update({ tonKhoToiThieu: Number(e.target.value) })} /></Field>
         <Field label="Loại sản phẩm" required>
-          <Select placeholder="Loại sản phẩm" options={['Có sẵn', 'Pre-order']} value={loaiSanPhamLabel[current.loaiSanPham]}
+          <Select placeholder="Loại sản phẩm" options={['Có sẵn', 'Pre-order']} value={loaiSanPhamLabel[active.loaiSanPham]}
             onChange={v => update({ loaiSanPham: v === 'Pre-order' ? 'PRE_ORDER' : 'CO_SAN' })} />
         </Field>
-        {current.loaiSanPham === 'PRE_ORDER' && (
+        {active.loaiSanPham === 'PRE_ORDER' && (
           <Field label="Thời gian hàng về (dự kiến)">
-            <Input type="date" value={current.ngayDuKienVe} onChange={e => update({ ngayDuKienVe: e.target.value })} />
+            <Input type="date" value={active.ngayDuKienVe} onChange={e => update({ ngayDuKienVe: e.target.value })} />
           </Field>
         )}
       </div>
       <div className="text-xs text-slate-500 mb-2 flex justify-between px-1">
         <span>Tổng giá vốn (giá vốn + phí vận chuyển)</span>
-        <span className="font-semibold text-slate-800">{(current.giaVon + current.phiVanChuyen).toLocaleString('vi-VN')} VNĐ</span>
+        <span className="font-semibold text-slate-800">{(active.giaVon + active.phiVanChuyen).toLocaleString('vi-VN')} VNĐ</span>
       </div>
       <div className="flex gap-2 mt-2 flex-wrap">
-        <Btn variant="secondary" small onClick={handleAddAnother} disabled={submitting}><Plus size={13} strokeWidth={2} /> Thêm sản phẩm khác</Btn>
-        <Btn onClick={handleSubmitAll} disabled={submitting}>{submitting ? 'Đang lưu...' : totalCount > 1 ? `Tạo tất cả (${totalCount})` : 'Lưu sản phẩm'}</Btn>
+        <Btn onClick={handleSubmitAll} disabled={submitting}>{submitting ? 'Đang lưu...' : drafts.length > 1 ? `Tạo tất cả (${drafts.length})` : 'Lưu sản phẩm'}</Btn>
         <Btn variant="secondary" onClick={onClose} disabled={submitting}>Hủy</Btn>
       </div>
     </Modal>
