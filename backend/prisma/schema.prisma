@@ -416,6 +416,7 @@ model SecurityLog {
 
 enum NotificationType {
   PREORDER_DEN_HAN
+  CONG_NO_QUA_HAN
 }
 
 // Thông báo hiện ở chuông navbar. Hiện chỉ có 1 nguồn sinh: sản phẩm

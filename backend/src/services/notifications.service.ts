@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma.js"
-import { startOfDay, endOfDay } from "../lib/dateRange.js"
+import { startOfDay, endOfDay, startOfWeek } from "../lib/dateRange.js"
+import { resolveDebtStatus } from "../lib/debtStatus.js"
 
 /**
  * Quét các sản phẩm Pre-order có ngày dự kiến về rơi đúng hôm nay (giờ VN),
@@ -35,8 +36,45 @@ async function generateDueNotifications() {
   }
 }
 
+/**
+ * Nhắc thu công nợ phải thu quá hạn — quét 1 lần, gộp thành ĐÚNG 1 thông báo
+ * mỗi tuần (không phải 1 thông báo/khoản nợ, kẻo spam) tóm tắt tổng số
+ * khoản + tổng tiền còn phải thu. Không dùng unique constraint như
+ * generateDueNotifications (productId null thì Postgres không coi 2 NULL là
+ * trùng nên upsert theo productId không chặn được trùng) — kiểm tra bằng
+ * findFirst trước khi tạo, chấp nhận được vì tần suất gọi thấp (không phải
+ * đường găng), nhắc trùng vài giây hiếm khi xảy ra cũng không hại gì.
+ */
+async function generateDebtReminder() {
+  const now = new Date()
+  const weekStart = startOfWeek(now)
+
+  const alreadySent = await prisma.notification.findFirst({
+    where: { loai: "CONG_NO_QUA_HAN", ngayApDung: { gte: weekStart } },
+    select: { id: true },
+  })
+  if (alreadySent) return
+
+  const debts = await prisma.debt.findMany({ where: { loai: "PHAI_THU" }, select: { soTien: true, daThanhToan: true, ngayDenHan: true } })
+  const overdue = debts
+    .map((d) => ({ conLai: d.soTien - d.daThanhToan, trangThai: resolveDebtStatus(d.soTien - d.daThanhToan, d.ngayDenHan, now) }))
+    .filter((d) => d.trangThai === "QUA_HAN")
+  if (overdue.length === 0) return
+
+  const tongConLai = overdue.reduce((sum, d) => sum + d.conLai, 0)
+  await prisma.notification.create({
+    data: {
+      loai: "CONG_NO_QUA_HAN",
+      tieuDe: "Công nợ phải thu quá hạn",
+      noiDung: `${overdue.length} khoản phải thu đã quá hạn, tổng còn lại ${tongConLai.toLocaleString("vi-VN")} VNĐ — nhắc khách thanh toán.`,
+      ngayApDung: weekStart,
+    },
+  })
+}
+
 export async function list(params: { page: number; pageSize: number }) {
   await generateDueNotifications()
+  await generateDebtReminder()
   const [items, total, unread] = await Promise.all([
     prisma.notification.findMany({
       orderBy: { createdAt: "desc" },

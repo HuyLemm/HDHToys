@@ -34,6 +34,14 @@ function addDays(d: Date, days: number) {
   return new Date(d.getTime() + days * 86_400_000)
 }
 
+/** Đầu tuần (thứ Hai, 00:00 giờ VN) chứa thời điểm d — dùng làm mốc "mỗi tuần 1 lần" cho các nhắc nhở định kỳ. */
+export function startOfWeek(d: Date) {
+  const { year, month, day } = vnWallClockParts(d)
+  const dow = new Date(Date.UTC(year, month, day)).getUTCDay() // 0=CN, 1=Thứ Hai, ... 6=Thứ Bảy
+  const daysSinceMonday = dow === 0 ? 6 : dow - 1
+  return startOfVnDay(year, month, day - daysSinceMonday)
+}
+
 export function resolveDateRange(range: RangeKey, tuNgay?: Date, denNgay?: Date) {
   const now = new Date()
   const { year, month } = vnWallClockParts(now)

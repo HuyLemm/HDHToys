@@ -386,7 +386,7 @@ export type IncomeExpense = {
   nguoiTao: { id: string; hoTen: string }
 }
 
-export type NotificationType = 'PREORDER_DEN_HAN'
+export type NotificationType = 'PREORDER_DEN_HAN' | 'CONG_NO_QUA_HAN'
 export type Notification = {
   id: string
   loai: NotificationType
