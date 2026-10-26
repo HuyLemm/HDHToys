@@ -112,7 +112,7 @@ export function OrdersScreen({ onDetail, onCreate, onViewCustomer }: {
           <div className="text-xs text-slate-400 py-12 text-center">Không có đơn hàng nào</div>
         ) : (
           <Table
-            cols={['Thao tác', 'Mã đơn', 'Ngày tạo', 'Khách hàng', 'SĐT', 'Sản phẩm', 'Số SP', 'Tổng tiền', 'Thanh toán', 'Trạng thái', 'Đã thu tiền', 'Trạng thái cọc', 'Nhận hàng', 'Mã vận đơn', 'Nhân viên']}
+            cols={['Thao tác', 'Mã đơn', 'Ngày tạo', 'Khách hàng', 'SĐT', 'Sản phẩm', 'Số SP', 'Tổng tiền', 'Thanh toán', 'Trạng thái', 'Đã thu tiền', 'Trạng thái cọc', 'Nhận hàng', 'Mã vận đơn']}
             rows={items.map(o => [
               <div className="flex gap-1">
                 <TinyBtn title="Xem" onClick={() => onDetail(o.id)}><Eye size={12} strokeWidth={1.75} /></TinyBtn>
@@ -146,7 +146,6 @@ export function OrdersScreen({ onDetail, onCreate, onViewCustomer }: {
               <Badge label={depositStatusLabel(o.tienCoc, o.tongCong)} />,
               <Badge label={o.phuongThucNhanHang === 'SHIP' && o.donViVanChuyen ? shippingCarrierLabel[o.donViVanChuyen] : deliveryMethodLabel[o.phuongThucNhanHang]} />,
               o.maVanDon ? <span className="font-mono text-[10px] text-slate-700">{o.maVanDon}</span> : <span className="text-slate-300">—</span>,
-              <span className="block max-w-[140px] truncate" title={o.nhanVien.hoTen}>{o.nhanVien.hoTen}</span>,
             ])}
           />
         )}

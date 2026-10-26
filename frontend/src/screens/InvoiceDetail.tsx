@@ -49,7 +49,7 @@ export function InvoiceDetailScreen({ invoiceId, onBack, onViewOrder }: {
       {error && <ErrorBox message={error} />}
 
       <div className="max-w-2xl mx-auto bg-white rounded-lg border border-slate-200 overflow-hidden">
-        <div className="p-6 text-center border-b border-slate-200" style={{ background: '#0f2952' }}>
+        <div className="p-6 text-center border-b border-slate-200" style={{ background: '#0f172a' }}>
           <HdhLogo />
         </div>
 
@@ -62,7 +62,6 @@ export function InvoiceDetailScreen({ invoiceId, onBack, onViewOrder }: {
             <div className="text-right text-xs text-slate-600 space-y-0.5">
               <div><span className="font-semibold">Ngày:</span> {d.toLocaleDateString('vi-VN')}</div>
               <div><span className="font-semibold">Giờ:</span> {d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</div>
-              <div><span className="font-semibold">Nhân viên:</span> {order.nhanVien.hoTen}</div>
               <div><span className="font-semibold">Mã đơn:</span> {order.ma}</div>
             </div>
           </div>

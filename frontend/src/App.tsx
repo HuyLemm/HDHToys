@@ -20,7 +20,6 @@ import { InvoiceDetailScreen } from './screens/InvoiceDetail'
 import { RevenueScreen } from './screens/Revenue'
 import { ThuChiScreen } from './screens/ThuChi'
 import { KeToanScreen } from './screens/KeToan'
-import { BaoCaoScreen } from './screens/BaoCao'
 import { CaiDatScreen } from './screens/CaiDat'
 import type { Screen } from './types'
 
@@ -40,7 +39,6 @@ const titles: Record<string, string> = {
   revenue: 'Doanh thu',
   'thu-chi': 'Quản lý thu / chi',
   'ke-toan': 'Kế toán',
-  'bao-cao': 'Báo cáo',
   'cai-dat': 'Cài đặt',
 }
 
@@ -140,7 +138,6 @@ function AppShell() {
       case 'revenue': return <RevenueScreen />
       case 'thu-chi': return <ThuChiScreen />
       case 'ke-toan': return <KeToanScreen />
-      case 'bao-cao': return <BaoCaoScreen onNav={go} />
       case 'cai-dat': return <CaiDatScreen />
       default: return null
     }

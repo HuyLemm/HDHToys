@@ -4,4 +4,4 @@ export type Screen =
   | 'products' | 'product-detail'
   | 'customers' | 'customer-detail'
   | 'invoices' | 'invoice-detail'
-  | 'revenue' | 'thu-chi' | 'ke-toan' | 'bao-cao' | 'cai-dat'
+  | 'revenue' | 'thu-chi' | 'ke-toan' | 'cai-dat'

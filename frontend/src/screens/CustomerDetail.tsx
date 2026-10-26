@@ -194,7 +194,7 @@ function ActiveOrdersTab({ orders, onOrderDetail }: { orders: Order[]; onOrderDe
             <span className="font-mono text-sm font-bold" style={{ color: '#1a56db' }}>{o.ma}</span>
             <Badge label={orderStatusLabel[o.trangThai]} />
           </div>
-          <div className="text-xs text-slate-500">{new Date(o.createdAt).toLocaleDateString('vi-VN')} · {o.nhanVien.hoTen}</div>
+          <div className="text-xs text-slate-500">{new Date(o.createdAt).toLocaleDateString('vi-VN')}</div>
           <div className="space-y-1 text-xs text-slate-700">
             {o.items.map(i => <div key={i.id}>• {i.product.ten} × {i.soLuong}</div>)}
           </div>

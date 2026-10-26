@@ -4,6 +4,7 @@ import { Btn, FilterBar, SearchInput, Select, Table, Pagination, Spinner, Modal,
 import { api, ApiError, type IncomeExpense, type RangeKey, type TransactionKind, type IncomeExpenseCategory } from '../lib/api'
 import { incomeExpenseCategoryLabel, transactionKindLabel, reverseLookup } from '../lib/labels'
 import { useDialog } from '../lib/dialog'
+import { useScreenState } from '../lib/screenState'
 
 const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
   { key: 'hom_nay', label: 'Hôm nay' },
@@ -14,13 +15,13 @@ const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
 
 export function ThuChiScreen() {
   const dialog = useDialog()
-  const [range, setRange] = useState<RangeKey>('30_ngay')
+  const [range, setRange] = useScreenState<RangeKey>('thuChi.range', '30_ngay')
   const [items, setItems] = useState<IncomeExpense[]>([])
   const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [loai, setLoai] = useState('')
-  const [danhMuc, setDanhMuc] = useState('')
-  const [q, setQ] = useState('')
+  const [page, setPage] = useScreenState('thuChi.page', 1)
+  const [loai, setLoai] = useScreenState('thuChi.loai', '')
+  const [danhMuc, setDanhMuc] = useScreenState('thuChi.danhMuc', '')
+  const [q, setQ] = useScreenState('thuChi.q', '')
   const [loading, setLoading] = useState(true)
   const [summary, setSummary] = useState<{ tongThu: number; tongChi: number; dongTienRong: number } | null>(null)
   const [modal, setModal] = useState<TransactionKind | null>(null)

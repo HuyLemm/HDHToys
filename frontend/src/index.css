@@ -4,10 +4,10 @@
 @theme {
   --font-sans: 'Inter', system-ui, sans-serif;
   --color-primary: #1a56db;
-  --color-primary-dark: #0f2952;
+  --color-primary-dark: #0f172a;
   --color-accent: #f97316;
   --color-bg: #f0f2f7;
-  --color-sidebar: #0f2952;
+  --color-sidebar: #0f172a;
 }
 
 * {

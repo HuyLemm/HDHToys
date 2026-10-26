@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   LayoutDashboard, ClipboardList, Boxes, Package, Users,
-  ReceiptText, ChartColumn, Wallet, Calculator, FileText, Settings,
+  ReceiptText, ChartColumn, Wallet, Calculator, Settings,
   Search, Bell, Menu, LogOut, PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react'
 import { HdhLogo, Badge } from './ui'
@@ -80,7 +80,6 @@ const navItems = [
   { key: 'revenue', Icon: ChartColumn, label: 'Doanh thu' },
   { key: 'thu-chi', Icon: Wallet, label: 'Thu / Chi' },
   { key: 'ke-toan', Icon: Calculator, label: 'Kế toán' },
-  { key: 'bao-cao', Icon: FileText, label: 'Báo cáo' },
   { key: 'cai-dat', Icon: Settings, label: 'Cài đặt' },
 ]
 
@@ -103,7 +102,7 @@ export function Sidebar({ active, onNav, collapsed, onToggleCollapsed, mobileOpe
         className={`flex flex-col h-screen flex-shrink-0 transition-transform md:transition-[width] duration-200
           fixed inset-y-0 left-0 z-40 md:static md:translate-x-0
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}
-        style={{ width: collapsed ? 56 : 208, background: '#0f2952' }}
+        style={{ width: collapsed ? 56 : 208, background: '#0f172a' }}
       >
         <div className={`flex items-center gap-2 px-3 py-4 border-b border-white/10 ${collapsed ? 'flex-col' : ''}`}>
           {collapsed ? (
@@ -112,7 +111,7 @@ export function Sidebar({ active, onNav, collapsed, onToggleCollapsed, mobileOpe
               <img src={logoUrl} alt="HDH Toys" width={32} height={32}
                 className="w-8 h-8 rounded-full object-cover transition-opacity group-hover:opacity-0" />
               <span className="absolute inset-0 rounded-full flex items-center justify-center bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{ color: '#94b8d4' }}>
+                style={{ color: '#94a3b8' }}>
                 <PanelLeftOpen size={18} strokeWidth={1.75} />
               </span>
             </button>
@@ -121,7 +120,7 @@ export function Sidebar({ active, onNav, collapsed, onToggleCollapsed, mobileOpe
               <HdhLogo />
               <button onClick={onToggleCollapsed} title="Thu gọn thanh bên"
                 className="ml-auto w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 active:bg-white/15 transition-colors cursor-pointer flex-shrink-0"
-                style={{ color: '#94b8d4' }}>
+                style={{ color: '#94a3b8' }}>
                 <PanelLeftClose size={18} strokeWidth={1.75} />
               </button>
             </>
@@ -136,7 +135,7 @@ export function Sidebar({ active, onNav, collapsed, onToggleCollapsed, mobileOpe
               <button key={item.key} onClick={() => { onNav(item.key as Screen); onCloseMobile() }} title={collapsed ? item.label : undefined}
                 className="w-full flex items-center gap-3 px-3 py-2.5 text-sm transition-colors cursor-pointer"
                 style={{
-                  color: isActive ? '#fff' : '#94b8d4',
+                  color: isActive ? '#fff' : '#94a3b8',
                   background: isActive ? 'rgba(255,255,255,0.12)' : undefined,
                   fontWeight: isActive ? 600 : 400,
                   borderLeft: isActive ? '3px solid #f97316' : '3px solid transparent',
@@ -156,10 +155,10 @@ export function Sidebar({ active, onNav, collapsed, onToggleCollapsed, mobileOpe
               </div>
               <div className="min-w-0">
                 <div className="text-white text-xs font-medium truncate">{staff?.hoTen ?? 'Admin'}</div>
-                <div className="text-xs truncate" style={{ color: '#7ba7d4' }}>{staffRoleLabel[staff?.vaiTro ?? 'ADMIN']}</div>
+                <div className="text-xs truncate" style={{ color: '#64748b' }}>{staffRoleLabel[staff?.vaiTro ?? 'ADMIN']}</div>
               </div>
             </div>
-            <button onClick={logout} className="w-full text-xs py-1.5 rounded flex items-center justify-center gap-1.5 hover:bg-white/10 transition-colors cursor-pointer" style={{ color: '#94b8d4' }}>
+            <button onClick={logout} className="w-full text-xs py-1.5 rounded flex items-center justify-center gap-1.5 hover:bg-white/10 transition-colors cursor-pointer" style={{ color: '#94a3b8' }}>
               <LogOut size={13} strokeWidth={1.75} /> Đăng xuất
             </button>
           </div>

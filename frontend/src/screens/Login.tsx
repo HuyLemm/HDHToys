@@ -26,7 +26,7 @@ export function LoginScreen() {
 
   return (
     <div className="min-h-screen flex" style={{ background: '#f0f4fa' }}>
-      <div className="hidden lg:flex flex-col justify-between w-2/5 p-10 text-white" style={{ background: '#0f2952' }}>
+      <div className="hidden lg:flex flex-col justify-between w-2/5 p-10 text-white" style={{ background: '#0f172a' }}>
         <HdhLogo />
         <div>
           <h1 className="text-3xl font-bold mb-3 leading-tight">Hệ thống quản lý<br />bán lẻ đồ chơi</h1>

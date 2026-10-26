@@ -7,6 +7,7 @@ import { FileDown } from 'lucide-react'
 import { api, ApiError, type RangeKey } from '../lib/api'
 import { paymentMethodLabel } from '../lib/labels'
 import { useDialog } from '../lib/dialog'
+import { useScreenState } from '../lib/screenState'
 
 const COLORS = ['#1a56db', '#f97316', '#10b981', '#a855f7', '#f59e0b']
 
@@ -22,8 +23,8 @@ const RANGE_OPTIONS: { key: RangeKey; label: string }[] = [
 
 export function RevenueScreen() {
   const dialog = useDialog()
-  const [range, setRange] = useState<RangeKey>('30_ngay')
-  const [page, setPage] = useState(1)
+  const [range, setRange] = useScreenState<RangeKey>('revenue.range', '30_ngay')
+  const [page, setPage] = useScreenState('revenue.page', 1)
   const [loading, setLoading] = useState(true)
   const [summary, setSummary] = useState<Awaited<ReturnType<typeof api.revenue.summary>> | null>(null)
   const [projected, setProjected] = useState<Awaited<ReturnType<typeof api.revenue.projectedSummary>> | null>(null)

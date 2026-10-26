@@ -7,6 +7,7 @@ import { KpiCard, SectionHeader, LinkBtn, Badge, Table, Spinner } from '../compo
 import { api, type Order, type RangeKey } from '../lib/api'
 import { orderStatusLabel } from '../lib/labels'
 import { preorderDueStatus, type PreorderDueStatus } from '../lib/preorderStatus'
+import { useScreenState } from '../lib/screenState'
 import type { Screen } from '../types'
 
 const COLORS = ['#1a56db', '#f97316', '#10b981', '#a855f7', '#f59e0b']
@@ -25,7 +26,7 @@ function pctChange(today: number, yesterday: number) {
 }
 
 export function DashboardScreen({ onNav }: { onNav: (s: Screen, id?: string) => void }) {
-  const [range, setRange] = useState<RangeKey>('7_ngay')
+  const [range, setRange] = useScreenState<RangeKey>('dashboard.range', '7_ngay')
   const [loading, setLoading] = useState(true)
   const [kpi, setKpi] = useState<{
     doanhThuHomNay: number; doanhThuChange: number
@@ -44,7 +45,7 @@ export function DashboardScreen({ onNav }: { onNav: (s: Screen, id?: string) => 
   // Số lượng "đã bán" theo sản phẩm — để đặt hàng bổ sung với NCC, có bộ lọc
   // thời gian riêng (mặc định Hôm nay) vì mục đích khác với biểu đồ doanh thu
   // phía trên (không tính doanh thu, tính mọi đơn trừ Hủy/Hoàn tiền).
-  const [unitsRange, setUnitsRange] = useState<RangeKey>('hom_nay')
+  const [unitsRange, setUnitsRange] = useScreenState<RangeKey>('dashboard.unitsRange', 'hom_nay')
   const [unitsSold, setUnitsSold] = useState<{ productId: string; sku: string; ten: string; soLuong: number }[]>([])
   const [unitsLoading, setUnitsLoading] = useState(true)
 
@@ -266,14 +267,13 @@ export function DashboardScreen({ onNav }: { onNav: (s: Screen, id?: string) => 
         <SectionHeader title="Đơn hàng gần đây" action={<LinkBtn onClick={() => onNav('orders')}>Xem tất cả →</LinkBtn>} />
         {recentOrders.length === 0 ? <div className="text-xs text-slate-400 py-8 text-center">Chưa có đơn hàng</div> : (
           <Table
-            cols={['Mã đơn', 'Ngày', 'Khách hàng', 'Tổng tiền', 'Trạng thái', 'Nhân viên']}
+            cols={['Mã đơn', 'Ngày', 'Khách hàng', 'Tổng tiền', 'Trạng thái']}
             rows={recentOrders.map(o => [
               <button onClick={() => onNav('order-detail', o.id)} className="font-mono text-[10px] font-semibold hover:underline cursor-pointer" style={{ color: '#1a56db' }}>{o.ma}</button>,
               new Date(o.createdAt).toLocaleDateString('vi-VN'),
               <span className="block max-w-[140px] truncate" title={o.khachHang.hoTen}>{o.khachHang.hoTen}</span>,
               `${o.tongCong.toLocaleString('vi-VN')} VNĐ`,
               <Badge label={orderStatusLabel[o.trangThai]} />,
-              <span className="block max-w-[140px] truncate" title={o.nhanVien.hoTen}>{o.nhanVien.hoTen}</span>,
             ])}
           />
         )}

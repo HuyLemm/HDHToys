@@ -167,7 +167,6 @@ export function OrderDetailScreen({ orderId, onBack, onViewProduct }: { orderId:
                 ['Mã đơn', order.ma],
                 ['Ngày tạo', new Date(order.createdAt).toLocaleDateString('vi-VN')],
                 ['Giờ tạo', new Date(order.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })],
-                ['Nhân viên', order.nhanVien.hoTen],
                 ['Phương thức TT', paymentMethodLabel[order.phuongThucThanhToan]],
                 ['Kênh bán', salesChannelLabel[order.kenhBan]],
                 ['Ghi chú', order.ghiChu || '—'],

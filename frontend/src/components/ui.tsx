@@ -57,10 +57,7 @@ export function HdhLogo({ compact = false }: { compact?: boolean }) {
     <div className={`flex items-center gap-2.5 ${compact ? 'justify-center' : ''}`}>
       <img src={logoUrl} alt="HDH Toys" width={32} height={32} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
       {!compact && (
-        <div>
-          <div className="text-white font-bold text-sm leading-tight tracking-wide">HDH Toys</div>
-          <div className="text-[10px] leading-tight whitespace-nowrap" style={{ color: '#7ba7d4' }}>Management System</div>
-        </div>
+        <div className="text-white font-bold text-sm leading-tight tracking-wide">HDH Toys</div>
       )}
     </div>
   )

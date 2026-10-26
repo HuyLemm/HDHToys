@@ -5,9 +5,10 @@ import { SectionHeader, Tabs, Table, Badge, Spinner, Btn, Field, Input, ErrorBox
 import { api, type Debt, type DebtType, type PaymentTransaction, ApiError } from '../lib/api'
 import { debtStatusLabel, debtTypeLabel, reverseLookup, paymentReconciliationStatusLabel } from '../lib/labels'
 import { useDialog } from '../lib/dialog'
+import { useScreenState } from '../lib/screenState'
 
 export function KeToanScreen() {
-  const [tab, setTab] = useState('Tổng quan')
+  const [tab, setTab] = useScreenState('keToan.tab', 'Tổng quan')
 
   return (
     <div className="p-5 space-y-4 overflow-y-auto h-full">
@@ -106,7 +107,7 @@ function OverviewTab() {
 
 function DebtsTab() {
   const dialog = useDialog()
-  const [subTab, setSubTab] = useState<'Tất cả' | 'Phải thu' | 'Phải trả'>('Tất cả')
+  const [subTab, setSubTab] = useScreenState<'Tất cả' | 'Phải thu' | 'Phải trả'>('keToan.debts.subTab', 'Tất cả')
   const [items, setItems] = useState<Debt[]>([])
   const [summary, setSummary] = useState<{ tongPhaiThu: number; quaHanPhaiThu: number; tongPhaiTra: number; quaHanPhaiTra: number } | null>(null)
   const [showCreate, setShowCreate] = useState(false)
@@ -295,7 +296,7 @@ function BalanceSheetTab() {
         </div>
 
         <div className="border border-slate-200 rounded-lg overflow-hidden">
-          <div className="px-4 py-2.5 font-bold text-sm text-white" style={{ background: '#0f2952' }}>NGUỒN VỐN</div>
+          <div className="px-4 py-2.5 font-bold text-sm text-white" style={{ background: '#0f172a' }}>NGUỒN VỐN</div>
           <div className="px-4 py-2 text-xs font-semibold text-slate-500 bg-slate-50 border-b border-slate-200">Nợ phải trả</div>
           {[
             ['Công nợ nhà cung cấp', nguonVon.noPhaiTra.congNoNhaCungCap],

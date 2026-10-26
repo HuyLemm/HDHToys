@@ -3,6 +3,7 @@ import { History, PackagePlus, PackageMinus, SlidersHorizontal } from 'lucide-re
 import { Btn, FilterBar, SearchInput, Select, Table, Pagination, TinyBtn, Badge, Spinner, Modal, Field, Input, ErrorBox } from '../components/ui'
 import { api, ApiError, type Product, type ProductStatus } from '../lib/api'
 import { productStatusLabel, reverseLookup } from '../lib/labels'
+import { useScreenState } from '../lib/screenState'
 import type { Screen } from '../types'
 
 type StockMode = 'in' | 'out' | 'adjust'
@@ -10,10 +11,10 @@ type StockMode = 'in' | 'out' | 'adjust'
 export function InventoryScreen({ onHistory }: { onHistory: () => void; onNav?: (s: Screen) => void }) {
   const [items, setItems] = useState<(Product & { giaTriTon: number })[]>([])
   const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [q, setQ] = useState('')
-  const [danhMuc, setDanhMuc] = useState('')
-  const [trangThai, setTrangThai] = useState('')
+  const [page, setPage] = useScreenState('inventory.page', 1)
+  const [q, setQ] = useScreenState('inventory.q', '')
+  const [danhMuc, setDanhMuc] = useScreenState('inventory.danhMuc', '')
+  const [trangThai, setTrangThai] = useScreenState('inventory.trangThai', '')
   const [loading, setLoading] = useState(true)
   const [summary, setSummary] = useState<{ tongSku: number; tongSoLuongTon: number; giaTriTonKho: number; sanPhamSapHet: number; sanPhamHetHang: number } | null>(null)
   const [modal, setModal] = useState<{ mode: StockMode; product?: Product } | null>(null)

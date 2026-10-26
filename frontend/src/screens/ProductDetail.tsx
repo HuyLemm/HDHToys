@@ -93,7 +93,7 @@ function ProductImagePanel({ productId }: { productId: string }) {
   }
 
   return (
-    <div className="w-full flex flex-col items-center">
+    <div className="flex-shrink-0 flex flex-col items-center">
       <div className="w-32 h-32 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden">
         {imgUrl ? <img src={imgUrl} alt="" className="w-full h-full object-cover" /> : <Package size={40} className="text-slate-300" strokeWidth={1.25} />}
       </div>
@@ -222,16 +222,15 @@ export function ProductDetailScreen({ productId, onBack, onViewCustomer, onViewO
         <KpiCard label="Doanh thu tạo ra" value={`${(product.daBan * product.giaBan).toLocaleString('vi-VN')} VNĐ`} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg border border-slate-200 p-4 flex flex-col items-center">
-          <ProductImagePanel productId={product.id} />
-          <div className="text-center mt-3">
-            <div className="font-mono text-xs text-slate-500 mb-1">{product.sku}</div>
-            {product.barcode && <div className="text-[10px] text-slate-400">Barcode: {product.barcode}</div>}
-          </div>
+      <div className="bg-white rounded-lg border border-slate-200 p-4 flex items-center justify-center gap-5 flex-wrap text-center sm:text-left">
+        <ProductImagePanel productId={product.id} />
+        <div>
+          <div className="font-mono text-xs text-slate-500 mb-1">{product.sku}</div>
+          {product.barcode && <div className="text-[10px] text-slate-400">Barcode: {product.barcode}</div>}
         </div>
+      </div>
 
-        <div className="lg:col-span-3 bg-white rounded-lg border border-slate-200">
+      <div className="bg-white rounded-lg border border-slate-200">
           <Tabs tabs={[
             'Thông tin chung',
             'Lịch sử kho',
@@ -359,7 +358,6 @@ export function ProductDetailScreen({ productId, onBack, onViewCustomer, onViewO
             )}
           </div>
         </div>
-      </div>
 
       {showAdjust && <StockModal mode="adjust" initialProduct={product} onClose={() => setShowAdjust(false)} onDone={() => { setShowAdjust(false); reload() }} />}
       {showEdit && <EditProductModal product={product} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); reload() }} />}
