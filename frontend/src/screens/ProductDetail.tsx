@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Package, AlertTriangle, PackageCheck } from 'lucide-react'
-import { BackBtn, Badge, Btn, KpiCard, Tabs, Table, Spinner, Modal, Field, Input, Select, ErrorBox, FilterBar, SearchInput } from '../components/ui'
+import { BackBtn, Badge, Btn, KpiCard, Tabs, Table, Spinner, Modal, Field, Input, Select, ErrorBox, FilterBar, SearchInput, ErrorState, errorMessage } from '../components/ui'
 import { api, ApiError, type Product, type InventoryTransaction, type LoaiSanPham } from '../lib/api'
 import { productStatusLabel, inventoryTransactionTypeLabel, loaiSanPhamLabel, orderStatusLabel, reverseLookup, salesChannelLabel } from '../lib/labels'
 import { preorderDueStatus } from '../lib/preorderStatus'
@@ -127,8 +127,12 @@ export function ProductDetailScreen({ productId, onBack, onViewCustomer, onViewO
   const [showAdjust, setShowAdjust] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [tabError, setTabError] = useState<string | null>(null)
+
   function reload() {
-    api.products.get(productId).then(setProduct)
+    setLoadError(null)
+    api.products.get(productId).then(setProduct).catch(err => setLoadError(errorMessage(err)))
   }
 
   useEffect(reload, [productId])
@@ -158,13 +162,20 @@ export function ProductDetailScreen({ productId, onBack, onViewCustomer, onViewO
   }
 
   useEffect(() => {
+    setTabError(null)
     if (tab === 'Lịch sử kho') {
-      api.inventory.history({ productId, pageSize: 50 }).then(res => setHistory(res.items))
+      api.inventory.history({ productId, pageSize: 50 }).then(res => setHistory(res.items)).catch(err => setTabError(errorMessage(err)))
     } else if (tab === 'Khách đã mua') {
-      api.products.buyers(productId).then(res => setBuyers(res.items))
+      api.products.buyers(productId).then(res => setBuyers(res.items)).catch(err => setTabError(errorMessage(err)))
     }
   }, [tab, productId])
 
+  if (loadError && !product) return (
+    <div className="p-5 space-y-4">
+      <BackBtn label="Quay lại sản phẩm" onClick={onBack} />
+      <ErrorState message={loadError} onRetry={reload} />
+    </div>
+  )
   if (!product) return <Spinner />
 
   const filteredBuyers = buyers.filter(b => {
@@ -187,7 +198,7 @@ export function ProductDetailScreen({ productId, onBack, onViewCustomer, onViewO
         <div className="ml-auto flex gap-2">
           <Btn variant="secondary" small onClick={() => setShowAdjust(true)}>Điều chỉnh tồn kho</Btn>
           {product.trangThai === 'NGUNG_KINH_DOANH' ? (
-            <Btn small onClick={() => api.products.reactivate(product.id).then(reload)}>Mở bán lại</Btn>
+            <Btn small onClick={() => api.products.reactivate(product.id).then(reload).catch(err => setDeleteError(err instanceof ApiError ? err.message : 'Không thể mở bán lại sản phẩm.'))}>Mở bán lại</Btn>
           ) : (
             <Btn variant="danger" small onClick={handleDiscontinue}>Ngừng kinh doanh</Btn>
           )}
@@ -247,6 +258,7 @@ export function ProductDetailScreen({ productId, onBack, onViewCustomer, onViewO
             },
           ]} active={tab} onChange={setTab} />
           <div className="p-4">
+            {tabError && <ErrorState message={tabError} />}
             {tab === 'Thông tin chung' && (
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
                 {[

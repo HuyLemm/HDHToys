@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { History, PackagePlus, PackageMinus, SlidersHorizontal } from 'lucide-react'
-import { Btn, FilterBar, SearchInput, Select, Table, Pagination, TinyBtn, Badge, Spinner, Modal, Field, Input, ErrorBox } from '../components/ui'
+import { Btn, FilterBar, SearchInput, Select, Table, Pagination, TinyBtn, Badge, Spinner, Modal, Field, Input, ErrorBox, ErrorState, errorMessage } from '../components/ui'
 import { api, ApiError, type Product, type ProductStatus } from '../lib/api'
 import { productStatusLabel, reverseLookup } from '../lib/labels'
 import { useScreenState } from '../lib/screenState'
@@ -16,12 +16,14 @@ export function InventoryScreen({ onHistory }: { onHistory: () => void; onNav?: 
   const [danhMuc, setDanhMuc] = useScreenState('inventory.danhMuc', '')
   const [trangThai, setTrangThai] = useScreenState('inventory.trangThai', '')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [summary, setSummary] = useState<{ tongSku: number; tongSoLuongTon: number; giaTriTonKho: number; sanPhamSapHet: number; sanPhamHetHang: number } | null>(null)
   const [modal, setModal] = useState<{ mode: StockMode; product?: Product } | null>(null)
   const pageSize = 10
 
   function reload() {
     setLoading(true)
+    setLoadError(null)
     api.inventory.list({
       q: q || undefined,
       danhMuc: danhMuc || undefined,
@@ -31,8 +33,9 @@ export function InventoryScreen({ onHistory }: { onHistory: () => void; onNav?: 
       setItems(res.items as (Product & { giaTriTon: number })[])
       setTotal(res.total)
       setLoading(false)
-    })
-    api.inventory.summary().then(setSummary)
+    }).catch(err => { setLoadError(errorMessage(err)); setLoading(false) })
+    // Thẻ tổng hợp là phần phụ: lỗi thì ẩn thẻ, không chặn bảng.
+    api.inventory.summary().then(setSummary).catch(() => setSummary(null))
   }
 
   useEffect(() => {
@@ -65,7 +68,7 @@ export function InventoryScreen({ onHistory }: { onHistory: () => void; onNav?: 
             <Btn small onClick={() => setModal({ mode: 'in' })}><PackagePlus size={13} strokeWidth={1.75} /> Nhập kho</Btn>
           </div>
         </div>
-        {loading ? <Spinner /> : (
+        {loading ? <Spinner /> : loadError ? <ErrorState message={loadError} onRetry={reload} /> : (
           <Table
             cols={['Thao tác', 'SKU', 'Sản phẩm', 'Danh mục', 'Tồn kho', 'Giá vốn', 'Giá bán', 'Giá trị tồn', 'Trạng thái']}
             rows={items.map(i => [
@@ -110,7 +113,7 @@ export function StockModal({ mode, initialProduct, onClose, onDone }: {
 
   useEffect(() => {
     if (product || query.trim().length < 2) { setResults([]); return }
-    const handle = setTimeout(() => api.products.list({ q: query, pageSize: 5 }).then(r => setResults(r.items)), 250)
+    const handle = setTimeout(() => api.products.list({ q: query, pageSize: 5 }).then(r => setResults(r.items)).catch(() => setResults([])), 250)
     return () => clearTimeout(handle)
   }, [query, product])
 

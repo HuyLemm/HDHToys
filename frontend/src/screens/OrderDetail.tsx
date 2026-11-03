@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { FileDown } from 'lucide-react'
-import { BackBtn, Badge, Btn, Table, Spinner, ErrorBox, Input } from '../components/ui'
+import { BackBtn, Badge, Btn, Table, Spinner, ErrorBox, Input, ErrorState, errorMessage } from '../components/ui'
 import { api, ApiError, type Order, type OrderItem, type OrderStatus, type DeliveryMethod, type ShippingCarrier } from '../lib/api'
 import { orderStatusLabel, paymentMethodLabel, salesChannelLabel, deliveryMethodLabel, shippingCarrierLabel, loaiSanPhamLabel } from '../lib/labels'
 import { useAuth } from '../lib/auth'
@@ -31,10 +31,13 @@ export function OrderDetailScreen({ orderId, onBack, onViewProduct }: { orderId:
   const [updating, setUpdating] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [updatingPayment, setUpdatingPayment] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [retryKey, setRetryKey] = useState(0)
 
   useEffect(() => {
-    api.orders.get(orderId).then(setOrder)
-  }, [orderId])
+    setLoadError(null)
+    api.orders.get(orderId).then(setOrder).catch(err => setLoadError(errorMessage(err)))
+  }, [orderId, retryKey])
 
   // Đơn đang chờ thanh toán QR: poll để phát hiện webhook đối soát tự hoàn
   // thành đơn (đổi trạng thái không qua nút bấm của nhân viên).
@@ -114,6 +117,12 @@ export function OrderDetailScreen({ orderId, onBack, onViewProduct }: { orderId:
     }
   }
 
+  if (loadError && !order) return (
+    <div className="p-5 space-y-4">
+      <BackBtn label="Quay lại" onClick={onBack} />
+      <ErrorState message={loadError} onRetry={() => setRetryKey(k => k + 1)} />
+    </div>
+  )
   if (!order) return <Spinner />
 
   const nextOptions = NEXT_STATUS[order.trangThai] ?? []

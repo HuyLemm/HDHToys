@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { CircleCheck, CircleAlert, RefreshCw, Wallet, Trash2 } from 'lucide-react'
-import { SectionHeader, Tabs, Table, Badge, Spinner, Btn, Field, Input, ErrorBox, TinyBtn } from '../components/ui'
+import { SectionHeader, Tabs, Table, Badge, Spinner, Btn, Field, Input, ErrorBox, TinyBtn, ErrorState, errorMessage } from '../components/ui'
 import { api, type Debt, type DebtType, type PaymentTransaction, ApiError } from '../lib/api'
 import { debtStatusLabel, debtTypeLabel, reverseLookup, paymentReconciliationStatusLabel } from '../lib/labels'
 import { useDialog } from '../lib/dialog'
@@ -34,10 +34,12 @@ export function KeToanScreen() {
 function PaymentReconciliationTab() {
   const [items, setItems] = useState<PaymentTransaction[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   function reload() {
     setLoading(true)
-    api.payments.unmatched({ pageSize: 50 }).then(res => setItems(res.items)).finally(() => setLoading(false))
+    setLoadError(null)
+    api.payments.unmatched({ pageSize: 50 }).then(res => setItems(res.items)).catch(err => setLoadError(errorMessage(err))).finally(() => setLoading(false))
   }
   useEffect(reload, [])
 
@@ -52,7 +54,7 @@ function PaymentReconciliationTab() {
         </button>
       </div>
 
-      {loading ? <Spinner /> : items.length === 0 ? (
+      {loading ? <Spinner /> : loadError ? <ErrorState message={loadError} onRetry={reload} /> : items.length === 0 ? (
         <div className="text-xs text-slate-400 py-8 text-center">Không có giao dịch nào cần xử lý — mọi thanh toán QR gần đây đều đã đối soát khớp.</div>
       ) : (
         <Table
@@ -72,7 +74,13 @@ function PaymentReconciliationTab() {
 
 function OverviewTab() {
   const [data, setData] = useState<Awaited<ReturnType<typeof api.accounting.overview>> | null>(null)
-  useEffect(() => { api.accounting.overview().then(setData) }, [])
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [retryKey, setRetryKey] = useState(0)
+  useEffect(() => {
+    setLoadError(null)
+    api.accounting.overview().then(setData).catch(err => setLoadError(errorMessage(err)))
+  }, [retryKey])
+  if (loadError && !data) return <ErrorState message={loadError} onRetry={() => setRetryKey(k => k + 1)} />
   if (!data) return <Spinner />
 
   return (
@@ -112,6 +120,7 @@ function DebtsTab() {
   const [summary, setSummary] = useState<{ tongPhaiThu: number; quaHanPhaiThu: number; tongPhaiTra: number; quaHanPhaiTra: number } | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   async function handleDelete(d: Debt) {
     if (!(await dialog.confirm(`Xóa khoản công nợ "${d.doiTuong}"? Không thể hoàn tác.`))) return
@@ -125,11 +134,12 @@ function DebtsTab() {
   }
 
   function reload() {
+    setLoadError(null)
     api.debts.list({
       loai: subTab === 'Tất cả' ? undefined : (reverseLookup(debtTypeLabel, subTab) as DebtType),
       pageSize: 50,
-    }).then(res => setItems(res.items))
-    api.debts.summary().then(setSummary)
+    }).then(res => setItems(res.items)).catch(err => setLoadError(errorMessage(err)))
+    api.debts.summary().then(setSummary).catch(() => setSummary(null))
   }
   useEffect(reload, [subTab])
 
@@ -155,7 +165,7 @@ function DebtsTab() {
       </div>
 
       <ErrorBox message={deleteError} />
-      {items.length === 0 ? <div className="text-xs text-slate-400 py-8 text-center">Chưa có công nợ nào</div> : (
+      {loadError ? <ErrorState message={loadError} onRetry={reload} /> : items.length === 0 ? <div className="text-xs text-slate-400 py-8 text-center">Chưa có công nợ nào</div> : (
         <Table
           cols={['Thao tác', 'Đối tượng', 'Loại', 'Ngày phát sinh', 'Ngày đến hạn', 'Tổng tiền', 'Đã thanh toán', 'Còn lại', 'Trạng thái']}
           rows={items.map(d => [
@@ -262,7 +272,13 @@ function CreateDebtModal({ onClose, onCreated }: { onClose: () => void; onCreate
 
 function BalanceSheetTab() {
   const [data, setData] = useState<Awaited<ReturnType<typeof api.accounting.balanceSheet>> | null>(null)
-  useEffect(() => { api.accounting.balanceSheet().then(setData) }, [])
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [retryKey, setRetryKey] = useState(0)
+  useEffect(() => {
+    setLoadError(null)
+    api.accounting.balanceSheet().then(setData).catch(err => setLoadError(errorMessage(err)))
+  }, [retryKey])
+  if (loadError && !data) return <ErrorState message={loadError} onRetry={() => setRetryKey(k => k + 1)} />
   if (!data) return <Spinner />
 
   const { taiSan, nguonVon } = data

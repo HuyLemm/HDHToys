@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Plus, Eye, Trash2 } from 'lucide-react'
-import { Btn, FilterBar, SearchInput, Select, Table, Pagination, TinyBtn, Badge, Spinner, Modal, Field, Input, ErrorBox } from '../components/ui'
+import { Btn, FilterBar, SearchInput, Select, Table, Pagination, TinyBtn, Badge, Spinner, Modal, Field, Input, ErrorBox, ErrorState, errorMessage } from '../components/ui'
 import { api, ApiError, type LoaiSanPham, type Product, type ProductStatus } from '../lib/api'
 import { loaiSanPhamLabel, productStatusLabel, reverseLookup } from '../lib/labels'
 import { useDialog } from '../lib/dialog'
@@ -17,6 +17,7 @@ export function ProductsScreen({ onDetail }: { onDetail: (id: string) => void })
   const [trangThai, setTrangThai] = useScreenState('products.trangThai', '')
   const [loaiSanPham, setLoaiSanPham] = useScreenState('products.loaiSanPham', '')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const pageSize = 10
@@ -34,6 +35,7 @@ export function ProductsScreen({ onDetail }: { onDetail: (id: string) => void })
 
   function reload() {
     setLoading(true)
+    setLoadError(null)
     api.products.list({
       q: q || undefined,
       danhMuc: danhMuc || undefined,
@@ -44,7 +46,7 @@ export function ProductsScreen({ onDetail }: { onDetail: (id: string) => void })
       setItems(res.items)
       setTotal(res.total)
       setLoading(false)
-    })
+    }).catch(err => { setLoadError(errorMessage(err)); setLoading(false) })
   }
 
   useEffect(() => {
@@ -68,7 +70,7 @@ export function ProductsScreen({ onDetail }: { onDetail: (id: string) => void })
           <Select placeholder="Trạng thái" options={Object.values(productStatusLabel)} value={trangThai} onChange={v => { setTrangThai(v); setPage(1) }} />
           <Select placeholder="Loại sản phẩm" options={Object.values(loaiSanPhamLabel)} value={loaiSanPham} onChange={v => { setLoaiSanPham(v); setPage(1) }} />
         </FilterBar>
-        {loading ? <Spinner /> : (
+        {loading ? <Spinner /> : loadError ? <ErrorState message={loadError} onRetry={reload} /> : (
           <Table
             cols={['Thao tác', 'Ảnh', 'SKU', 'Tên sản phẩm', 'Danh mục', 'Nhà cung cấp', 'Giá vốn', 'Giá bán', 'Tồn kho', 'Đã bán', 'Loại', 'Trạng thái']}
             rows={items.map(p => [

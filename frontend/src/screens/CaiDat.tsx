@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Lock, LockOpen, Trash2 } from 'lucide-react'
-import { Btn, Table, Badge, Spinner, Modal, Field, Input, ErrorBox, TinyBtn, FilterBar, Select, Pagination } from '../components/ui'
+import { Btn, Table, Badge, Spinner, Modal, Field, Input, ErrorBox, TinyBtn, FilterBar, Select, Pagination, ErrorState, errorMessage } from '../components/ui'
 import { api, ApiError, type Staff, type StaffRole, type SecurityLog } from '../lib/api'
 import { staffRoleLabel, staffStatusLabel } from '../lib/labels'
 import { useAuth } from '../lib/auth'
@@ -44,26 +44,33 @@ export function CaiDatScreen() {
   const [securityLogEvent, setSecurityLogEvent] = useState('')
   const [securityLogEventTypes, setSecurityLogEventTypes] = useState<string[]>([])
   const [securityLogLoading, setSecurityLogLoading] = useState(true)
+  const [usersError, setUsersError] = useState<string | null>(null)
+  const [securityLogError, setSecurityLogError] = useState<string | null>(null)
+  const [securityLogRetry, setSecurityLogRetry] = useState(0)
   const securityLogPageSize = 20
 
   function reload() {
     if (!isAdmin) { setLoading(false); return }
     setLoading(true)
+    setUsersError(null)
     api.staff.list().then(res => { setUsers(res); setLoading(false) })
+      .catch(err => { setUsersError(errorMessage(err)); setLoading(false) })
   }
   useEffect(reload, [isAdmin])
 
   useEffect(() => {
     if (!isAdmin) return
-    api.securityLogs.eventTypes().then(res => setSecurityLogEventTypes(res.items))
+    api.securityLogs.eventTypes().then(res => setSecurityLogEventTypes(res.items)).catch(() => setSecurityLogEventTypes([]))
   }, [isAdmin])
 
   useEffect(() => {
     if (!isAdmin) { setSecurityLogLoading(false); return }
     setSecurityLogLoading(true)
+    setSecurityLogError(null)
     api.securityLogs.list({ event: securityLogEvent || undefined, page: securityLogPage, pageSize: securityLogPageSize })
       .then(res => { setSecurityLogs(res.items); setSecurityLogTotal(res.total); setSecurityLogLoading(false) })
-  }, [isAdmin, securityLogEvent, securityLogPage])
+      .catch(err => { setSecurityLogError(errorMessage(err)); setSecurityLogLoading(false) })
+  }, [isAdmin, securityLogEvent, securityLogPage, securityLogRetry])
 
   async function toggleLock(u: Staff) {
     const locking = u.trangThai === 'ACTIVE'
@@ -114,7 +121,7 @@ export function CaiDatScreen() {
             <Btn small onClick={() => setShowCreate(true)}>+ Thêm người dùng</Btn>
           </div>
           {deleteError && <ErrorBox message={deleteError} />}
-          {loading ? <Spinner /> : (
+          {loading ? <Spinner /> : usersError ? <ErrorState message={usersError} onRetry={reload} /> : (
             <Table
               cols={['Thao tác', 'Họ tên', 'Email', 'Vai trò', 'Trạng thái']}
               rows={users.map(u => [
@@ -175,7 +182,7 @@ export function CaiDatScreen() {
               onChange={v => { setSecurityLogEvent(v); setSecurityLogPage(1) }}
             />
           </FilterBar>
-          {securityLogLoading ? <Spinner /> : securityLogs.length === 0 ? (
+          {securityLogLoading ? <Spinner /> : securityLogError ? <ErrorState message={securityLogError} onRetry={() => setSecurityLogRetry(k => k + 1)} /> : securityLogs.length === 0 ? (
             <div className="text-xs text-slate-400 py-8 text-center">Chưa có sự kiện bảo mật nào bị ghi nhận</div>
           ) : (
             <>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { FileDown } from 'lucide-react'
-import { BackBtn, Badge, Btn, HdhLogo, Spinner, ErrorBox } from '../components/ui'
+import { BackBtn, Badge, Btn, HdhLogo, Spinner, ErrorBox, ErrorState, errorMessage } from '../components/ui'
 import { api, ApiError, type Invoice } from '../lib/api'
 import { paymentMethodLabel, loaiSanPhamLabel, deliveryMethodLabel, shippingCarrierLabel, salesChannelLabel } from '../lib/labels'
 import { useAuth } from '../lib/auth'
@@ -14,8 +14,13 @@ export function InvoiceDetailScreen({ invoiceId, onBack, onViewOrder }: {
   const { staff } = useAuth()
   const [invoice, setInvoice] = useState<Invoice | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [retryKey, setRetryKey] = useState(0)
 
-  useEffect(() => { api.invoices.get(invoiceId).then(setInvoice) }, [invoiceId])
+  useEffect(() => {
+    setLoadError(null)
+    api.invoices.get(invoiceId).then(setInvoice).catch(err => setLoadError(errorMessage(err)))
+  }, [invoiceId, retryKey])
 
   async function handleDelete() {
     if (!invoice) return
@@ -29,6 +34,12 @@ export function InvoiceDetailScreen({ invoiceId, onBack, onViewOrder }: {
     }
   }
 
+  if (loadError && !invoice) return (
+    <div className="p-5 space-y-4">
+      <BackBtn label="Quay lại" onClick={onBack} />
+      <ErrorState message={loadError} onRetry={() => setRetryKey(k => k + 1)} />
+    </div>
+  )
   if (!invoice) return <Spinner />
   const d = new Date(invoice.createdAt)
   const { order } = invoice

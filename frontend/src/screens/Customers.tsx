@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Plus, Eye, Trash2 } from 'lucide-react'
-import { Btn, FilterBar, SearchInput, Select, Table, Pagination, TinyBtn, Badge, Spinner, ErrorBox } from '../components/ui'
+import { Btn, FilterBar, SearchInput, Select, Table, Pagination, TinyBtn, Badge, Spinner, ErrorBox, ErrorState, errorMessage } from '../components/ui'
 import { api, ApiError, type Customer, type CustomerTier, type SalesChannel } from '../lib/api'
 import { customerTierLabel, salesChannelLabel, reverseLookup } from '../lib/labels'
 import { useDialog } from '../lib/dialog'
@@ -16,6 +16,7 @@ export function CustomersScreen({ onDetail }: { onDetail: (id: string) => void }
   const [hang, setHang] = useScreenState('customers.hang', '')
   const [nguon, setNguon] = useScreenState('customers.nguon', '')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const pageSize = 10
@@ -33,12 +34,14 @@ export function CustomersScreen({ onDetail }: { onDetail: (id: string) => void }
 
   function reload() {
     setLoading(true)
+    setLoadError(null)
     api.customers.list({
       q: q || undefined,
       hangKhachHang: (reverseLookup(customerTierLabel, hang) as CustomerTier) || undefined,
       nguonKhachHang: (reverseLookup(salesChannelLabel, nguon) as SalesChannel) || undefined,
       page, pageSize,
     }).then(res => { setItems(res.items); setTotal(res.total); setLoading(false) })
+      .catch(err => { setLoadError(errorMessage(err)); setLoading(false) })
   }
 
   useEffect(() => {
@@ -62,7 +65,7 @@ export function CustomersScreen({ onDetail }: { onDetail: (id: string) => void }
           <Select placeholder="Hạng khách hàng" options={Object.values(customerTierLabel)} value={hang} onChange={v => { setHang(v); setPage(1) }} />
           <Select placeholder="Nguồn khách hàng" options={Object.values(salesChannelLabel)} value={nguon} onChange={v => { setNguon(v); setPage(1) }} />
         </FilterBar>
-        {loading ? <Spinner /> : (
+        {loading ? <Spinner /> : loadError ? <ErrorState message={loadError} onRetry={reload} /> : (
           <Table
             cols={['Thao tác', 'Khách hàng', 'SĐT', 'Email', 'Điểm tích lũy', 'Hạng', 'Nguồn khách']}
             rows={items.map(c => [

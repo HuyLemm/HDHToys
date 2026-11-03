@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { FileDown } from 'lucide-react'
-import { BackBtn, Badge, Btn, KpiCard, Tabs, Table, Spinner, Field, Input, ErrorBox, TinyBtn, Modal } from '../components/ui'
+import { BackBtn, Badge, Btn, KpiCard, Tabs, Table, Spinner, Field, Input, ErrorBox, TinyBtn, Modal, ErrorState, errorMessage } from '../components/ui'
 import { api, ApiError, type Customer, type CustomerNote, type Order, type Invoice, type SalesChannel } from '../lib/api'
 import { customerTierLabel, orderStatusLabel, paymentMethodLabel, salesChannelLabel } from '../lib/labels'
 import { useDialog } from '../lib/dialog'
@@ -24,9 +24,11 @@ export function CustomerDetailScreen({ customerId, onBack, onOrderDetail }: {
   const [tab, setTab] = useScreenState('customerDetail.tab', 'Tổng quan')
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [showEdit, setShowEdit] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   function reload() {
-    api.customers.overview(customerId).then(setOverview as (o: unknown) => void)
+    setLoadError(null)
+    api.customers.overview(customerId).then(setOverview as (o: unknown) => void).catch(err => setLoadError(errorMessage(err)))
   }
 
   useEffect(reload, [customerId])
@@ -43,6 +45,12 @@ export function CustomerDetailScreen({ customerId, onBack, onOrderDetail }: {
     }
   }
 
+  if (loadError && !overview) return (
+    <div className="p-5 space-y-4">
+      <BackBtn label="Danh sách khách hàng" onClick={onBack} />
+      <ErrorState message={loadError} onRetry={reload} />
+    </div>
+  )
   if (!overview) return <Spinner />
   const { customer, kpi } = overview
 
@@ -118,15 +126,17 @@ export function CustomerDetailScreen({ customerId, onBack, onOrderDetail }: {
 
 function OverviewTab({ overview, onOrderDetail }: { overview: Overview; onOrderDetail: (id: string) => void }) {
   const [recent, setRecent] = useState<Order[] | null>(null)
+  const [recentError, setRecentError] = useState<string | null>(null)
   useEffect(() => {
-    api.customers.orders(overview.customer.id, { pageSize: 3 }).then(res => setRecent(res.items))
+    setRecentError(null)
+    api.customers.orders(overview.customer.id, { pageSize: 3 }).then(res => setRecent(res.items)).catch(err => setRecentError(errorMessage(err)))
   }, [overview.customer.id])
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div>
         <div className="text-xs font-semibold text-slate-700 mb-2">Đơn mua gần đây</div>
-        {!recent ? <Spinner /> : recent.length === 0 ? <div className="text-xs text-slate-400">Chưa có đơn hàng</div> : (
+        {recentError ? <ErrorState message={recentError} /> : !recent ? <Spinner /> : recent.length === 0 ? <div className="text-xs text-slate-400">Chưa có đơn hàng</div> : (
           <Table
             cols={['Mã đơn', 'Ngày', 'Tổng tiền', 'Trạng thái']}
             rows={recent.map(o => [
@@ -159,7 +169,12 @@ function OverviewTab({ overview, onOrderDetail }: { overview: Overview; onOrderD
 
 function OrdersTab({ customerId, onOrderDetail }: { customerId: string; onOrderDetail: (id: string) => void }) {
   const [orders, setOrders] = useState<Order[] | null>(null)
-  useEffect(() => { api.customers.orders(customerId, { pageSize: 50 }).then(res => setOrders(res.items)) }, [customerId])
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    setError(null)
+    api.customers.orders(customerId, { pageSize: 50 }).then(res => setOrders(res.items)).catch(err => setError(errorMessage(err)))
+  }, [customerId])
+  if (error) return <ErrorState message={error} />
   if (!orders) return <Spinner />
   if (orders.length === 0) return <div className="text-xs text-slate-400 py-8 text-center">Chưa có lịch sử mua hàng</div>
   return (
@@ -210,7 +225,12 @@ function ActiveOrdersTab({ orders, onOrderDetail }: { orders: Order[]; onOrderDe
 
 function ProductsBoughtTab({ customerId }: { customerId: string }) {
   const [items, setItems] = useState<Awaited<ReturnType<typeof api.customers.products>>['items'] | null>(null)
-  useEffect(() => { api.customers.products(customerId).then(res => setItems(res.items)) }, [customerId])
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    setError(null)
+    api.customers.products(customerId).then(res => setItems(res.items)).catch(err => setError(errorMessage(err)))
+  }, [customerId])
+  if (error) return <ErrorState message={error} />
   if (!items) return <Spinner />
   if (items.length === 0) return <div className="text-xs text-slate-400 py-8 text-center">Chưa mua sản phẩm nào</div>
   return (
@@ -227,7 +247,12 @@ function ProductsBoughtTab({ customerId }: { customerId: string }) {
 function InvoicesTab({ customerId }: { customerId: string }) {
   const dialog = useDialog()
   const [items, setItems] = useState<Invoice[] | null>(null)
-  useEffect(() => { api.customers.invoices(customerId).then(res => setItems(res.items)) }, [customerId])
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    setError(null)
+    api.customers.invoices(customerId).then(res => setItems(res.items)).catch(err => setError(errorMessage(err)))
+  }, [customerId])
+  if (error) return <ErrorState message={error} />
   if (!items) return <Spinner />
   if (items.length === 0) return <div className="text-xs text-slate-400 py-8 text-center">Chưa có hóa đơn nào</div>
   return (
@@ -250,7 +275,12 @@ function NotesTab({ customerId }: { customerId: string }) {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
-  function reload() { api.customers.notes(customerId).then(setNotes) }
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  function reload() {
+    setLoadError(null)
+    api.customers.notes(customerId).then(setNotes).catch(err => setLoadError(errorMessage(err)))
+  }
   useEffect(reload, [customerId])
 
   async function handleAdd() {
@@ -279,6 +309,7 @@ function NotesTab({ customerId }: { customerId: string }) {
     }
   }
 
+  if (loadError && !notes) return <ErrorState message={loadError} onRetry={reload} />
   if (!notes) return <Spinner />
   return (
     <div className="space-y-3">

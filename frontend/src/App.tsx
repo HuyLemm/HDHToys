@@ -145,10 +145,11 @@ function AppShell() {
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: '#f0f2f7' }}>
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:bg-white focus:text-blue-700 focus:px-3 focus:py-2 focus:rounded focus:shadow">Bỏ qua tới nội dung chính</a>
       <Sidebar active={nav.screen} onNav={go} collapsed={collapsed} onToggleCollapsed={toggleSidebar} mobileOpen={mobileNavOpen} onCloseMobile={() => setMobileNavOpen(false)} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Header title={titles[nav.screen] ?? ''} onToggleSidebar={toggleSidebar} onNav={go} />
-        <main className="flex-1 overflow-y-auto">
+        <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto focus:outline-none">
           {renderScreen()}
         </main>
       </div>

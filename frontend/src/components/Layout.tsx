@@ -106,7 +106,7 @@ export function Sidebar({ active, onNav, collapsed, onToggleCollapsed, mobileOpe
       >
         <div className={`flex items-center gap-2 px-3 py-4 border-b border-white/10 ${collapsed ? 'flex-col' : ''}`}>
           {collapsed ? (
-            <button onClick={onToggleCollapsed} title="Mở rộng thanh bên"
+            <button type="button" onClick={onToggleCollapsed} title="Mở rộng thanh bên" aria-label="Mở rộng thanh bên"
               className="relative w-8 h-8 flex-shrink-0 rounded-full group cursor-pointer">
               <img src={logoUrl} alt="HDH Toys" width={32} height={32}
                 className="w-8 h-8 rounded-full object-cover transition-opacity group-hover:opacity-0" />
@@ -118,7 +118,7 @@ export function Sidebar({ active, onNav, collapsed, onToggleCollapsed, mobileOpe
           ) : (
             <>
               <HdhLogo />
-              <button onClick={onToggleCollapsed} title="Thu gọn thanh bên"
+              <button type="button" onClick={onToggleCollapsed} title="Thu gọn thanh bên" aria-label="Thu gọn thanh bên"
                 className="ml-auto w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 active:bg-white/15 transition-colors cursor-pointer flex-shrink-0"
                 style={{ color: '#94a3b8' }}>
                 <PanelLeftClose size={18} strokeWidth={1.75} />
@@ -127,12 +127,13 @@ export function Sidebar({ active, onNav, collapsed, onToggleCollapsed, mobileOpe
           )}
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-2">
+        <nav aria-label="Điều hướng chính" className="flex-1 overflow-y-auto py-2">
           {navItems.map(item => {
             const isActive = activeKey === item.key
             const { Icon } = item
             return (
-              <button key={item.key} onClick={() => { onNav(item.key as Screen); onCloseMobile() }} title={collapsed ? item.label : undefined}
+              <button type="button" key={item.key} onClick={() => { onNav(item.key as Screen); onCloseMobile() }} title={collapsed ? item.label : undefined}
+                aria-label={collapsed ? item.label : undefined} aria-current={isActive ? 'page' : undefined}
                 className="w-full flex items-center gap-3 px-3 py-2.5 text-sm transition-colors cursor-pointer"
                 style={{
                   color: isActive ? '#fff' : '#94a3b8',
@@ -140,7 +141,7 @@ export function Sidebar({ active, onNav, collapsed, onToggleCollapsed, mobileOpe
                   fontWeight: isActive ? 600 : 400,
                   borderLeft: isActive ? '3px solid #f97316' : '3px solid transparent',
                 }}>
-                <Icon size={18} className="flex-shrink-0" strokeWidth={1.75} />
+                <Icon size={18} className="flex-shrink-0" strokeWidth={1.75} aria-hidden="true" />
                 {!collapsed && <span>{item.label}</span>}
               </button>
             )
@@ -158,7 +159,7 @@ export function Sidebar({ active, onNav, collapsed, onToggleCollapsed, mobileOpe
                 <div className="text-xs truncate" style={{ color: '#64748b' }}>{staffRoleLabel[staff?.vaiTro ?? 'ADMIN']}</div>
               </div>
             </div>
-            <button onClick={logout} className="w-full text-xs py-1.5 rounded flex items-center justify-center gap-1.5 hover:bg-white/10 transition-colors cursor-pointer" style={{ color: '#94a3b8' }}>
+            <button type="button" onClick={logout} className="w-full text-xs py-1.5 rounded flex items-center justify-center gap-1.5 hover:bg-white/10 transition-colors cursor-pointer" style={{ color: '#94a3b8' }}>
               <LogOut size={13} strokeWidth={1.75} /> Đăng xuất
             </button>
           </div>
@@ -262,8 +263,15 @@ export function Header({ title, onToggleSidebar, onNav }: {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setFocused(false)
       if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false)
     }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') { setFocused(false); setNotifOpen(false) }
+    }
     document.addEventListener('mousedown', onClick)
-    return () => document.removeEventListener('mousedown', onClick)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onClick)
+      document.removeEventListener('keydown', onKey)
+    }
   }, [])
 
   useEffect(() => {
@@ -294,13 +302,16 @@ export function Header({ title, onToggleSidebar, onNav }: {
 
   return (
     <header className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4 h-14 border-b border-slate-200 bg-white flex-shrink-0 z-10">
-      <button onClick={onToggleSidebar} className="md:hidden p-1.5 rounded hover:bg-slate-100 text-slate-500 cursor-pointer flex-shrink-0"><Menu size={18} strokeWidth={1.75} /></button>
-      <span className="font-semibold text-slate-800 text-sm truncate max-w-[30vw] sm:max-w-none flex-shrink-0">{title}</span>
+      <button type="button" onClick={onToggleSidebar} aria-label="Mở menu điều hướng" className="md:hidden p-2 rounded hover:bg-slate-100 text-slate-500 cursor-pointer flex-shrink-0"><Menu size={18} strokeWidth={1.75} aria-hidden="true" /></button>
+      <h1 className="font-semibold text-slate-800 text-sm truncate max-w-[30vw] sm:max-w-none flex-shrink-0">{title}</h1>
 
       <div className="flex-1 mx-1 sm:mx-4 relative min-w-0" ref={wrapRef}>
         <div className="relative max-w-md">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
+          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" strokeWidth={1.75} aria-hidden="true" />
           <input
+            type="search"
+            aria-label="Tìm kiếm toàn hệ thống"
+            aria-expanded={focused && searchVal.trim().length >= 2}
             value={searchVal}
             onChange={e => setSearchVal(e.target.value)}
             onFocus={() => setFocused(true)}
@@ -319,8 +330,10 @@ export function Header({ title, onToggleSidebar, onNav }: {
         <span className="hidden lg:inline">{new Date().toLocaleDateString('vi-VN')}</span>
         <span className="text-slate-300 hidden lg:inline">|</span>
         <div className="relative" ref={notifRef}>
-          <button onClick={() => setNotifOpen(v => !v)} className="relative p-1.5 rounded hover:bg-slate-100 text-slate-500 cursor-pointer">
-            <Bell size={17} strokeWidth={1.75} />
+          <button type="button" onClick={() => setNotifOpen(v => !v)} aria-expanded={notifOpen} aria-haspopup="true"
+            aria-label={unreadCount > 0 ? `Thông báo, ${unreadCount} chưa đọc` : 'Thông báo'}
+            className="relative p-2 rounded hover:bg-slate-100 text-slate-500 cursor-pointer">
+            <Bell size={17} strokeWidth={1.75} aria-hidden="true" />
             {unreadCount > 0 && (
               <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full text-[9px] font-bold text-white flex items-center justify-center" style={{ background: '#f97316' }}>
                 {unreadCount > 9 ? '9+' : unreadCount}

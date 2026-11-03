@@ -5,7 +5,7 @@ import { api, getToken, setToken, type Staff } from './api'
 interface AuthContextValue {
   staff: Staff | null
   loading: boolean
-  login: (email: string, matKhau: string) => Promise<void>
+  login: (email: string, matKhau: string, remember?: boolean) => Promise<void>
   logout: () => void
 }
 
@@ -27,9 +27,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false))
   }, [])
 
-  async function login(email: string, matKhau: string) {
+  async function login(email: string, matKhau: string, remember = true) {
     const { token, staff: loggedInStaff } = await api.auth.login(email, matKhau)
-    setToken(token)
+    setToken(token, remember)
     setStaff(loggedInStaff)
   }
 

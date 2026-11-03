@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend,
 } from 'recharts'
-import { Btn, SectionHeader, Table, Pagination, Spinner } from '../components/ui'
+import { Btn, SectionHeader, Table, Pagination, Spinner, ErrorState, errorMessage } from '../components/ui'
 import { FileDown } from 'lucide-react'
 import { api, ApiError, type RangeKey } from '../lib/api'
 import { paymentMethodLabel } from '../lib/labels'
@@ -35,10 +35,14 @@ export function RevenueScreen() {
   const [turnover, setTurnover] = useState<Awaited<ReturnType<typeof api.revenue.inventoryTurnover>>['items']>([])
   const [repeatCustomers, setRepeatCustomers] = useState<Awaited<ReturnType<typeof api.revenue.repeatCustomers>> | null>(null)
   const [detail, setDetail] = useState<Awaited<ReturnType<typeof api.revenue.detail>> | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [retryKey, setRetryKey] = useState(0)
   const pageSize = 10
 
   useEffect(() => {
     setLoading(true)
+    setLoadError(null)
+    let stale = false
     Promise.all([
       api.revenue.summary({ range }),
       api.revenue.projectedSummary({ range }),
@@ -49,14 +53,20 @@ export function RevenueScreen() {
       api.revenue.inventoryTurnover({ range }),
       api.revenue.repeatCustomers({ range }),
     ]).then(([s, proj, t, projT, p, bp, inv, rc]) => {
+      if (stale) return
       setSummary(s); setProjected(proj); setByTime(t.items); setProjectedByTime(projT.items); setByPayment(p.items); setByProduct(bp.items); setTurnover(inv.items); setRepeatCustomers(rc); setLoading(false)
+    }).catch(err => {
+      if (stale) return
+      setLoadError(errorMessage(err))
+      setLoading(false)
     })
     setPage(1)
-  }, [range])
+    return () => { stale = true }
+  }, [range, retryKey])
 
   useEffect(() => {
-    api.revenue.detail({ range, page, pageSize }).then(setDetail)
-  }, [range, page])
+    api.revenue.detail({ range, page, pageSize }).then(setDetail).catch(() => setDetail(null))
+  }, [range, page, retryKey])
 
   // Gộp 2 nguồn theo ngày để vẽ chung 1 biểu đồ — projectedByTime luôn phủ
   // đủ mọi ngày mà byTime có (Hoàn thành là tập con của "còn hiệu lực"), nên
@@ -87,7 +97,7 @@ export function RevenueScreen() {
         </Btn>
       </div>
 
-      {loading || !summary || !projected ? <Spinner /> : (
+      {loadError ? <ErrorState message={loadError} onRetry={() => setRetryKey(k => k + 1)} /> : loading || !summary || !projected ? <Spinner /> : (
         <>
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
             <div className="text-xs font-semibold text-amber-700 mb-2">Doanh thu dự kiến (đơn Mới + Đang xử lý + Hoàn thành — chưa chắc đã thu đủ tiền)</div>

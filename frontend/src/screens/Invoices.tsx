@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Eye, FileDown, Trash2 } from 'lucide-react'
-import { FilterBar, SearchInput, Table, Pagination, TinyBtn, Spinner, ErrorBox } from '../components/ui'
+import { FilterBar, SearchInput, Table, Pagination, TinyBtn, Spinner, ErrorBox, ErrorState, errorMessage } from '../components/ui'
 import { api, ApiError, type Invoice } from '../lib/api'
 import { paymentMethodLabel } from '../lib/labels'
 import { useAuth } from '../lib/auth'
@@ -15,14 +15,16 @@ export function InvoicesScreen({ onDetail }: { onDetail: (id: string) => void })
   const [page, setPage] = useScreenState('invoices.page', 1)
   const [q, setQ] = useScreenState('invoices.q', '')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const pageSize = 10
 
   function reload() {
     setLoading(true)
+    setLoadError(null)
     api.invoices.list({ q: q || undefined, page, pageSize }).then(res => {
       setItems(res.items); setTotal(res.total); setLoading(false)
-    })
+    }).catch(err => { setLoadError(errorMessage(err)); setLoading(false) })
   }
 
   useEffect(() => {
@@ -49,7 +51,7 @@ export function InvoicesScreen({ onDetail }: { onDetail: (id: string) => void })
         <FilterBar>
           <SearchInput placeholder="Tìm mã hóa đơn, mã đơn hoặc khách hàng..." width="w-64" value={q} onChange={v => { setQ(v); setPage(1) }} />
         </FilterBar>
-        {loading ? <Spinner /> : items.length === 0 ? (
+        {loading ? <Spinner /> : loadError ? <ErrorState message={loadError} onRetry={reload} /> : items.length === 0 ? (
           <div className="text-xs text-slate-400 py-12 text-center">Chưa có hóa đơn nào</div>
         ) : (
           <Table

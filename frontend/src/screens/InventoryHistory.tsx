@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Trash2 } from 'lucide-react'
-import { BackBtn, FilterBar, SearchInput, Select, Table, Pagination, Spinner, TinyBtn, ErrorBox } from '../components/ui'
+import { BackBtn, FilterBar, SearchInput, Select, Table, Pagination, Spinner, TinyBtn, ErrorBox, ErrorState, errorMessage } from '../components/ui'
 import { api, ApiError, type InventoryTransaction, type InventoryTransactionType } from '../lib/api'
 import { inventoryTransactionTypeLabel, reverseLookup } from '../lib/labels'
 import { useAuth } from '../lib/auth'
@@ -23,11 +23,13 @@ export function InventoryHistoryScreen({ onBack }: { onBack: () => void }) {
   const [q, setQ] = useScreenState('inventoryHistory.q', '')
   const [loai, setLoai] = useScreenState('inventoryHistory.loai', '')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const pageSize = 15
 
   function reload() {
     setLoading(true)
+    setLoadError(null)
     api.inventory.history({
       q: q || undefined,
       loai: (reverseLookup(inventoryTransactionTypeLabel, loai) as InventoryTransactionType) || undefined,
@@ -36,7 +38,7 @@ export function InventoryHistoryScreen({ onBack }: { onBack: () => void }) {
       setItems(res.items)
       setTotal(res.total)
       setLoading(false)
-    })
+    }).catch(err => { setLoadError(errorMessage(err)); setLoading(false) })
   }
 
   useEffect(() => {
@@ -68,7 +70,7 @@ export function InventoryHistoryScreen({ onBack }: { onBack: () => void }) {
           <Select placeholder="Loại giao dịch" options={Object.values(inventoryTransactionTypeLabel)} value={loai} onChange={v => { setLoai(v); setPage(1) }} />
           <SearchInput placeholder="Tìm sản phẩm hoặc SKU..." value={q} onChange={v => { setQ(v); setPage(1) }} />
         </FilterBar>
-        {loading ? <Spinner /> : items.length === 0 ? (
+        {loading ? <Spinner /> : loadError ? <ErrorState message={loadError} onRetry={reload} /> : items.length === 0 ? (
           <div className="text-xs text-slate-400 py-12 text-center">Chưa có giao dịch kho nào</div>
         ) : (
           <Table

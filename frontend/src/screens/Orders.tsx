@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Plus, Trophy, Eye, FileDown } from 'lucide-react'
-import { Btn, FilterBar, SearchInput, Select, Table, Pagination, TinyBtn, Badge, Spinner } from '../components/ui'
+import { Btn, FilterBar, SearchInput, Select, Table, Pagination, TinyBtn, Badge, Spinner, ErrorState, errorMessage } from '../components/ui'
 import { api, ApiError, type Order, type OrderStatus, type PaymentMethod, type DeliveryMethod } from '../lib/api'
 import { orderStatusLabel, paymentMethodLabel, deliveryMethodLabel, shippingCarrierLabel, reverseLookup, depositStatusLabel } from '../lib/labels'
 import { useDialog } from '../lib/dialog'
@@ -19,7 +19,10 @@ function TopCustomersPanel({ onSelectCustomer }: { onSelectCustomer: (customerId
   const [items, setItems] = useState<{ khachHang: { id: string; hoTen: string; sdt: string | null }; tongChiTieu: number; soDonHoanThanh: number }[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => { api.orders.topCustomers(5).then(res => { setItems(res.items); setLoading(false) }) }, [])
+  // Panel phụ: lỗi thì ẩn panel (không chặn cả màn hình), nhưng phải tắt loading.
+  useEffect(() => {
+    api.orders.topCustomers(5).then(res => setItems(res.items)).catch(() => setItems([])).finally(() => setLoading(false))
+  }, [])
 
   if (loading) return null
   if (items.length === 0) return null
@@ -62,10 +65,14 @@ export function OrdersScreen({ onDetail, onCreate, onViewCustomer }: {
   const [maVanDonFilter, setMaVanDonFilter] = useScreenState('orders.maVanDonFilter', '')
   const [sort, setSort] = useScreenState<keyof typeof SORT_OPTIONS>('orders.sort', 'Ngày mới nhất')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [retryKey, setRetryKey] = useState(0)
   const pageSize = 10
 
   useEffect(() => {
     setLoading(true)
+    setLoadError(null)
+    let stale = false
     const handle = setTimeout(() => {
       api.orders.list({
         q: q || undefined,
@@ -79,13 +86,18 @@ export function OrdersScreen({ onDetail, onCreate, onViewCustomer }: {
         page,
         pageSize,
       }).then(res => {
+        if (stale) return
         setItems(res.items)
         setTotal(res.total)
         setLoading(false)
+      }).catch(err => {
+        if (stale) return
+        setLoadError(errorMessage(err))
+        setLoading(false)
       })
     }, 250)
-    return () => clearTimeout(handle)
-  }, [q, trangThai, phuongThuc, thanhToan, nhanHang, maVanDonFilter, sort, page])
+    return () => { stale = true; clearTimeout(handle) }
+  }, [q, trangThai, phuongThuc, thanhToan, nhanHang, maVanDonFilter, sort, page, retryKey])
 
   return (
     <div className="p-5 space-y-4">
@@ -108,7 +120,7 @@ export function OrdersScreen({ onDetail, onCreate, onViewCustomer }: {
           <Select placeholder="Mã vận đơn" width="w-28" options={['Đã có mã', 'Chưa có mã']} value={maVanDonFilter} onChange={v => { setMaVanDonFilter(v); setPage(1) }} />
           <Select placeholder="Sắp xếp" width="w-36" options={Object.keys(SORT_OPTIONS)} value={sort} onChange={v => { setSort(v as keyof typeof SORT_OPTIONS); setPage(1) }} />
         </FilterBar>
-        {loading ? <Spinner /> : items.length === 0 ? (
+        {loading ? <Spinner /> : loadError ? <ErrorState message={loadError} onRetry={() => setRetryKey(k => k + 1)} /> : items.length === 0 ? (
           <div className="text-xs text-slate-400 py-12 text-center">Không có đơn hàng nào</div>
         ) : (
           <Table

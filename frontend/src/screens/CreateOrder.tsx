@@ -30,7 +30,7 @@ export function CreateOrderScreen({ onBack, onCreated }: { onBack: () => void; o
   useEffect(() => {
     if (customer || customerQuery.trim().length < 2) { setCustomerResults([]); return }
     const handle = setTimeout(() => {
-      api.customers.list({ q: customerQuery, pageSize: 5 }).then(res => setCustomerResults(res.items))
+      api.customers.list({ q: customerQuery, pageSize: 5 }).then(res => setCustomerResults(res.items)).catch(() => setCustomerResults([]))
     }, 250)
     return () => clearTimeout(handle)
   }, [customerQuery, customer])
@@ -38,7 +38,7 @@ export function CreateOrderScreen({ onBack, onCreated }: { onBack: () => void; o
   useEffect(() => {
     if (productQuery.trim().length < 2) { setProductResults([]); return }
     const handle = setTimeout(() => {
-      api.products.list({ q: productQuery, pageSize: 5 }).then(res => setProductResults(res.items))
+      api.products.list({ q: productQuery, pageSize: 5 }).then(res => setProductResults(res.items)).catch(() => setProductResults([]))
     }, 250)
     return () => clearTimeout(handle)
   }, [productQuery])

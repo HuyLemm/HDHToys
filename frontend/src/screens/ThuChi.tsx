@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Trash2 } from 'lucide-react'
-import { Btn, FilterBar, SearchInput, Select, Table, Pagination, Spinner, Modal, Field, Input, ErrorBox, TinyBtn } from '../components/ui'
+import { Btn, FilterBar, SearchInput, Select, Table, Pagination, Spinner, Modal, Field, Input, ErrorBox, TinyBtn, ErrorState, errorMessage } from '../components/ui'
 import { api, ApiError, type IncomeExpense, type RangeKey, type TransactionKind, type IncomeExpenseCategory } from '../lib/api'
 import { incomeExpenseCategoryLabel, transactionKindLabel, reverseLookup } from '../lib/labels'
 import { useDialog } from '../lib/dialog'
@@ -23,6 +23,7 @@ export function ThuChiScreen() {
   const [danhMuc, setDanhMuc] = useScreenState('thuChi.danhMuc', '')
   const [q, setQ] = useScreenState('thuChi.q', '')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [summary, setSummary] = useState<{ tongThu: number; tongChi: number; dongTienRong: number } | null>(null)
   const [modal, setModal] = useState<TransactionKind | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -41,6 +42,7 @@ export function ThuChiScreen() {
 
   function reload() {
     setLoading(true)
+    setLoadError(null)
     api.incomeExpense.list({
       q: q || undefined,
       range,
@@ -49,8 +51,8 @@ export function ThuChiScreen() {
       page, pageSize,
     }).then(res => {
       setItems(res.items); setTotal(res.total); setLoading(false)
-    })
-    api.incomeExpense.summary({ range }).then(setSummary)
+    }).catch(err => { setLoadError(errorMessage(err)); setLoading(false) })
+    api.incomeExpense.summary({ range }).then(setSummary).catch(() => setSummary(null))
   }
 
   useEffect(() => {
@@ -90,7 +92,7 @@ export function ThuChiScreen() {
           <Select placeholder="Danh mục" options={Object.values(incomeExpenseCategoryLabel)} value={danhMuc} onChange={v => { setDanhMuc(v); setPage(1) }} />
           <SearchInput placeholder="Tìm nội dung hoặc mã phiếu..." value={q} onChange={v => { setQ(v); setPage(1) }} />
         </FilterBar>
-        {loading ? <Spinner /> : items.length === 0 ? (
+        {loading ? <Spinner /> : loadError ? <ErrorState message={loadError} onRetry={reload} /> : items.length === 0 ? (
           <div className="text-xs text-slate-400 py-12 text-center">Chưa có phiếu thu/chi nào</div>
         ) : (
           <Table

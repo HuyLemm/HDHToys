@@ -2,8 +2,10 @@
 // Extracted from the original single-file App.tsx so screens can import them
 // independently once each screen moves to its own module.
 
-import { Search, X } from 'lucide-react'
+import { useEffect, useRef, useId } from 'react'
+import { Search, X, TriangleAlert, RotateCw } from 'lucide-react'
 import logoUrl from '../assets/logo.jpg'
+import { ApiError } from '../lib/api'
 
 export const statusColor: Record<string, string> = {
   'Hoàn thành': 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -88,14 +90,14 @@ export function SectionHeader({ title, action }: { title: string; action?: React
 
 export function LinkBtn({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {
   return (
-    <button onClick={onClick} className="text-xs font-medium cursor-pointer hover:underline" style={{ color: '#1a56db' }}>
+    <button type="button" onClick={onClick} className="text-xs font-medium cursor-pointer hover:underline" style={{ color: '#1a56db' }}>
       {children}
     </button>
   )
 }
 
-export function Btn({ children, variant = 'primary', small, onClick, disabled }: {
-  children: React.ReactNode; variant?: 'primary' | 'secondary' | 'danger' | 'ghost'; small?: boolean; onClick?: () => void; disabled?: boolean
+export function Btn({ children, variant = 'primary', small, onClick, disabled, type = 'button' }: {
+  children: React.ReactNode; variant?: 'primary' | 'secondary' | 'danger' | 'ghost'; small?: boolean; onClick?: () => void; disabled?: boolean; type?: 'button' | 'submit'
 }) {
   const base = `inline-flex items-center gap-1 font-medium rounded cursor-pointer transition-colors whitespace-nowrap flex-shrink-0 ${small ? 'text-xs px-2.5 py-1.5' : 'text-sm px-3 py-1.5'}`
   const v = {
@@ -105,7 +107,7 @@ export function Btn({ children, variant = 'primary', small, onClick, disabled }:
     ghost: 'bg-transparent text-slate-600 hover:bg-slate-100',
   }
   return (
-    <button onClick={onClick} disabled={disabled} className={`${base} ${v[variant]} disabled:opacity-50 disabled:cursor-not-allowed`} style={variant === 'primary' ? { background: '#1a56db' } : undefined}>
+    <button type={type} onClick={onClick} disabled={disabled} className={`${base} ${v[variant]} disabled:opacity-50 disabled:cursor-not-allowed`} style={variant === 'primary' ? { background: '#1a56db' } : undefined}>
       {children}
     </button>
   )
@@ -114,6 +116,7 @@ export function Btn({ children, variant = 'primary', small, onClick, disabled }:
 export function TinyBtn({ children, danger, title, onClick }: { children: React.ReactNode; danger?: boolean; title?: string; onClick?: () => void }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       title={title}
       aria-label={title}
@@ -135,7 +138,7 @@ export function Table({ cols, rows }: { cols: string[]; rows: React.ReactNode[][
         <thead>
           <tr className="border-b border-slate-200">
             {cols.map((c, i) => (
-              <th key={i} className={`text-left py-1.5 px-2 font-semibold text-slate-500 whitespace-nowrap ${i === 0 ? 'sticky left-0 z-20 bg-white' : ''}`}>{c}</th>
+              <th key={i} scope="col" className={`text-left py-1.5 px-2 font-semibold text-slate-500 whitespace-nowrap ${i === 0 ? 'sticky left-0 z-20 bg-white' : ''}`}>{c}</th>
             ))}
           </tr>
         </thead>
@@ -164,6 +167,8 @@ export function SearchInput({ placeholder, width = 'w-56', value, onChange }: {
     <div className="relative">
       <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" strokeWidth={1.75} />
       <input
+        type="search"
+        aria-label={placeholder}
         value={value}
         onChange={e => onChange?.(e.target.value)}
         className={`pl-7 pr-3 py-1.5 text-xs border border-slate-200 rounded-md bg-white focus:outline-none focus:border-blue-400 ${width}`}
@@ -178,6 +183,7 @@ export function Select({ placeholder, options, value, onChange, width }: {
 }) {
   return (
     <select
+      aria-label={placeholder}
       value={value ?? ''}
       onChange={e => onChange?.(e.target.value)}
       className={`text-xs px-2.5 py-1.5 border border-slate-200 rounded-md bg-white text-slate-600 focus:outline-none focus:border-blue-400 overflow-hidden text-ellipsis whitespace-nowrap ${width ?? ''}`}
@@ -226,19 +232,19 @@ export function Pagination({ total, page, pageSize = 20, onChange }: { total: nu
   const totalPages = Math.max(1, Math.ceil(total / pageSize))
   const pages = buildPageList(page, totalPages)
   return (
-    <div className="flex items-center justify-between mt-3 text-xs text-slate-500">
+    <nav aria-label="Phân trang" className="flex items-center justify-between mt-3 text-xs text-slate-500">
       <span>Tổng {total} bản ghi</span>
       <div className="flex items-center gap-1">
-        <button onClick={() => onChange?.(Math.max(1, page - 1))} className="px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 cursor-pointer">‹</button>
+        <button type="button" aria-label="Trang trước" disabled={page <= 1} onClick={() => onChange?.(Math.max(1, page - 1))} className="px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">‹</button>
         {pages.map((p, i) => p === DOTS ? (
-          <span key={`dots-${i}`} className="px-1.5 select-none">{DOTS}</span>
+          <span key={`dots-${i}`} className="px-1.5 select-none" aria-hidden="true">{DOTS}</span>
         ) : (
-          <button key={p} onClick={() => onChange?.(p)} className={`px-2.5 py-1 rounded border transition-colors cursor-pointer ${p === page ? 'text-white border-blue-500' : 'border-slate-200 hover:bg-slate-50'}`}
+          <button type="button" key={p} aria-label={`Trang ${p}`} aria-current={p === page ? 'page' : undefined} onClick={() => onChange?.(p)} className={`px-2.5 py-1 rounded border transition-colors cursor-pointer ${p === page ? 'text-white border-blue-500' : 'border-slate-200 hover:bg-slate-50'}`}
             style={p === page ? { background: '#1a56db' } : undefined}>{p}</button>
         ))}
-        <button onClick={() => onChange?.(Math.min(totalPages, page + 1))} className="px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 cursor-pointer">›</button>
+        <button type="button" aria-label="Trang sau" disabled={page >= totalPages} onClick={() => onChange?.(Math.min(totalPages, page + 1))} className="px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">›</button>
       </div>
-    </div>
+    </nav>
   )
 }
 
@@ -246,12 +252,12 @@ export type TabItem = string | { key: string; label: React.ReactNode }
 
 export function Tabs({ tabs, active, onChange }: { tabs: TabItem[]; active: string; onChange: (t: string) => void }) {
   return (
-    <div className="flex border-b border-slate-200 overflow-x-auto">
+    <div role="tablist" className="flex border-b border-slate-200 overflow-x-auto">
       {tabs.map(t => {
         const key = typeof t === 'string' ? t : t.key
         const label = typeof t === 'string' ? t : t.label
         return (
-          <button key={key} onClick={() => onChange(key)}
+          <button type="button" role="tab" aria-selected={active === key} key={key} onClick={() => onChange(key)}
             className={`px-4 py-2.5 text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${active === key ? 'border-b-2 text-blue-700' : 'text-slate-500 hover:text-slate-700'}`}
             style={active === key ? { borderBottomColor: '#1a56db', color: '#1a56db' } : undefined}>
             {label}
@@ -263,18 +269,51 @@ export function Tabs({ tabs, active, onChange }: { tabs: TabItem[]; active: stri
 }
 
 export function BackBtn({ label, onClick }: { label: string; onClick: () => void }) {
-  return <button onClick={onClick} className="text-xs font-medium cursor-pointer hover:underline" style={{ color: '#1a56db' }}>← {label}</button>
+  return <button type="button" onClick={onClick} className="text-xs font-medium cursor-pointer hover:underline" style={{ color: '#1a56db' }}>← {label}</button>
 }
+
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
 
 export function Modal({ title, onClose, children, width = 'max-w-md' }: {
   title: string; onClose: () => void; children: React.ReactNode; width?: string
 }) {
+  const titleId = useId()
+  const dialogRef = useRef<HTMLDivElement>(null)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
+  // Chuẩn dialog: nhớ phần tử đang focus để trả lại khi đóng, đưa focus vào
+  // modal, bẫy phím Tab trong modal và đóng bằng Esc.
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null
+    const dialog = dialogRef.current
+    if (dialog && !dialog.contains(document.activeElement)) {
+      const first = dialog.querySelector<HTMLElement>('input:not([disabled]),select:not([disabled]),textarea:not([disabled])') ?? dialog.querySelector<HTMLElement>(FOCUSABLE)
+      ;(first ?? dialog).focus()
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') { e.stopPropagation(); onCloseRef.current(); return }
+      if (e.key !== 'Tab' || !dialogRef.current) return
+      const items = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(FOCUSABLE))
+      if (items.length === 0) { e.preventDefault(); return }
+      const first = items[0], last = items[items.length - 1]
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) { e.preventDefault(); last.focus() }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      previous?.focus?.()
+    }
+  }, [])
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className={`bg-white rounded-lg shadow-xl w-full ${width}`} onClick={e => e.stopPropagation()}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}
+        className={`bg-white rounded-lg shadow-xl w-full max-h-full overflow-y-auto ${width}`} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
-          <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={16} /></button>
+          <h3 id={titleId} className="text-sm font-semibold text-slate-800">{title}</h3>
+          <button type="button" onClick={onClose} aria-label="Đóng" className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={16} aria-hidden="true" /></button>
         </div>
         <div className="p-4">{children}</div>
       </div>
@@ -282,11 +321,17 @@ export function Modal({ title, onClose, children, width = 'max-w-md' }: {
   )
 }
 
+// Nhãn bọc luôn ô nhập con — bấm nhãn focus được ô, screen reader đọc đúng
+// tên trường (không cần htmlFor/id cho từng chỗ dùng).
 export function Field({ label, children, required }: { label: string; children: React.ReactNode; required?: boolean }) {
   return (
     <div className="mb-3">
-      <label className="text-xs font-semibold text-slate-700 block mb-1">{label}{required && <span className="text-red-500"> *</span>}</label>
-      {children}
+      <label className="block">
+        <span className="text-xs font-semibold text-slate-700 block mb-1">
+          {label}{required && <><span className="text-red-500" aria-hidden="true"> *</span><span className="sr-only"> (bắt buộc)</span></>}
+        </span>
+        {children}
+      </label>
     </div>
   )
 }
@@ -299,11 +344,33 @@ export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
 
 export function ErrorBox({ message }: { message: string | null }) {
   if (!message) return null
-  return <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700 mb-3">{message}</div>
+  return <div role="alert" className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-xs text-red-700 mb-3">{message}</div>
 }
 
 export function Spinner() {
-  return <div className="flex items-center justify-center py-12 text-slate-400 text-xs">Đang tải...</div>
+  return <div role="status" aria-live="polite" className="flex items-center justify-center py-12 text-slate-500 text-xs">Đang tải...</div>
+}
+
+/** Thông điệp lỗi hiển thị cho người dùng từ lỗi bắt được của API. */
+export function errorMessage(err: unknown, fallback = 'Không thể tải dữ liệu. Vui lòng kiểm tra kết nối và thử lại.') {
+  // Lỗi mạng của fetch là TypeError tiếng Anh ("Failed to fetch") — chỉ hiện
+  // message của ApiError (do server trả), còn lại dùng thông điệp mặc định.
+  return err instanceof ApiError && err.message ? err.message : fallback
+}
+
+/** Trạng thái lỗi tải dữ liệu — thay cho spinner quay mãi khi API lỗi/mất mạng. */
+export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  return (
+    <div role="alert" className="flex flex-col items-center justify-center gap-2 py-12 text-center">
+      <TriangleAlert size={22} strokeWidth={1.75} className="text-red-500" aria-hidden="true" />
+      <div className="text-xs text-slate-600 max-w-sm">{message}</div>
+      {onRetry && (
+        <button type="button" onClick={onRetry} className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded border border-slate-200 bg-white hover:bg-slate-50 cursor-pointer">
+          <RotateCw size={12} strokeWidth={2} aria-hidden="true" /> Thử lại
+        </button>
+      )}
+    </div>
+  )
 }
 
 export function formatMoney(n: number) {

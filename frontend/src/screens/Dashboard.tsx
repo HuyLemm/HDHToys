@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend,
 } from 'recharts'
 import { AlertTriangle, PackageCheck } from 'lucide-react'
-import { KpiCard, SectionHeader, LinkBtn, Badge, Table, Spinner } from '../components/ui'
+import { KpiCard, SectionHeader, LinkBtn, Badge, Table, Spinner, ErrorState, errorMessage } from '../components/ui'
 import { api, type Order, type RangeKey } from '../lib/api'
 import { orderStatusLabel } from '../lib/labels'
 import { preorderDueStatus, type PreorderDueStatus } from '../lib/preorderStatus'
@@ -48,10 +48,13 @@ export function DashboardScreen({ onNav }: { onNav: (s: Screen, id?: string) => 
   const [unitsRange, setUnitsRange] = useScreenState<RangeKey>('dashboard.unitsRange', 'hom_nay')
   const [unitsSold, setUnitsSold] = useState<{ productId: string; sku: string; ten: string; soLuong: number }[]>([])
   const [unitsLoading, setUnitsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [retryKey, setRetryKey] = useState(0)
 
   useEffect(() => {
     let cancelled = false
     setLoading(true)
+    setLoadError(null)
     Promise.all([
       api.revenue.summary({ range: 'hom_nay' }),
       api.revenue.summary({ range: 'hom_qua' }),
@@ -104,9 +107,13 @@ export function DashboardScreen({ onNav }: { onNav: (s: Screen, id?: string) => 
           .map(p => ({ id: p.id, ten: p.ten, sku: p.sku, ngayDuKienVe: p.ngayDuKienVe!, trangThai: p.trangThai })),
       )
       setLoading(false)
+    }).catch(err => {
+      if (cancelled) return
+      setLoadError(errorMessage(err))
+      setLoading(false)
     })
     return () => { cancelled = true }
-  }, [range])
+  }, [range, retryKey])
 
   useEffect(() => {
     let cancelled = false
@@ -115,10 +122,15 @@ export function DashboardScreen({ onNav }: { onNav: (s: Screen, id?: string) => 
       if (cancelled) return
       setUnitsSold(res.items)
       setUnitsLoading(false)
+    }).catch(() => {
+      if (cancelled) return
+      setUnitsSold([])
+      setUnitsLoading(false)
     })
     return () => { cancelled = true }
   }, [unitsRange])
 
+  if (loadError && !kpi) return <ErrorState message={loadError} onRetry={() => setRetryKey(k => k + 1)} />
   if (loading || !kpi) return <Spinner />
 
   return (

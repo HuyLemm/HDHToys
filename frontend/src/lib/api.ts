@@ -2,12 +2,14 @@ const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? 'http:/
 
 const TOKEN_KEY = 'hdh_token'
 
-let authToken: string | null = localStorage.getItem(TOKEN_KEY)
+let authToken: string | null = localStorage.getItem(TOKEN_KEY) ?? sessionStorage.getItem(TOKEN_KEY)
 
-export function setToken(token: string | null) {
+/** remember=true lưu qua các lần mở trình duyệt (localStorage); false chỉ trong phiên hiện tại (sessionStorage). */
+export function setToken(token: string | null, remember = true) {
   authToken = token
-  if (token) localStorage.setItem(TOKEN_KEY, token)
-  else localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(TOKEN_KEY)
+  sessionStorage.removeItem(TOKEN_KEY)
+  if (token) (remember ? localStorage : sessionStorage).setItem(TOKEN_KEY, token)
 }
 
 export function getToken() {
