@@ -32,10 +32,10 @@ function TopCustomersPanel({ onSelectCustomer }: { onSelectCustomer: (customerId
       <div className="flex items-center gap-2 mb-3 text-xs font-semibold text-slate-700">
         <Trophy size={14} strokeWidth={2} className="text-amber-500" /> Khách mua nhiều nhất (đơn Hoàn thành)
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+      <div className="flex gap-2 overflow-x-auto snap-x pb-1 md:grid md:grid-cols-5 md:overflow-visible md:pb-0">
         {items.map((it, i) => (
           <button key={it.khachHang.id} onClick={() => onSelectCustomer(it.khachHang.id)}
-            className="flex flex-col items-start p-2.5 rounded-lg border border-slate-100 hover:border-slate-300 hover:bg-slate-50 cursor-pointer text-left transition-colors">
+            className="flex flex-col items-start p-2.5 min-w-[190px] snap-start md:min-w-0 rounded-lg border border-slate-100 hover:border-slate-300 hover:bg-slate-50 cursor-pointer text-left transition-colors">
             <div className="flex items-center gap-1.5 w-full">
               <span className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0"
                 style={{ background: i === 0 ? '#f97316' : '#e2e8f0', color: i === 0 ? '#fff' : '#64748b' }}>{i + 1}</span>
@@ -99,6 +99,19 @@ export function OrdersScreen({ onDetail, onCreate, onViewCustomer }: {
     return () => { stale = true; clearTimeout(handle) }
   }, [q, trangThai, phuongThuc, thanhToan, nhanHang, maVanDonFilter, sort, page, retryKey])
 
+  // Số bộ lọc trong bảng lọc của điện thoại (Trạng thái đã có chip riêng nên không tính).
+  const activeFilterCount = [phuongThuc, thanhToan, nhanHang, maVanDonFilter].filter(Boolean).length + (sort !== 'Ngày mới nhất' ? 1 : 0)
+
+  function clearFilters() {
+    setPhuongThuc(''); setThanhToan(''); setNhanHang(''); setMaVanDonFilter(''); setSort('Ngày mới nhất'); setPage(1)
+  }
+
+  function pdfAction(o: Order): { label: string; run: () => void } | null {
+    if (o.invoice) return { label: 'Xuất PDF', run: () => { api.invoices.openPdf(o.invoice!.id).catch(err => dialog.alert(err instanceof ApiError ? err.message : 'Không thể tải hóa đơn.')) } }
+    if (o.trangThai === 'DANG_XU_LY') return { label: 'Phiếu tạm tính', run: () => { api.orders.openPreviewPdf(o.id).catch(err => dialog.alert(err instanceof ApiError ? err.message : 'Không thể tải phiếu tạm tính.')) } }
+    return null
+  }
+
   return (
     <div className="p-5 space-y-4">
       <div className="flex items-center justify-between">
@@ -111,9 +124,21 @@ export function OrdersScreen({ onDetail, onCreate, onViewCustomer }: {
       {onViewCustomer && <TopCustomersPanel onSelectCustomer={onViewCustomer} />}
 
       <div className="bg-white rounded-lg border border-slate-200 p-4">
-        <FilterBar>
-          <SearchInput placeholder="Tìm theo mã đơn, tên khách hàng hoặc SĐT..." width="w-48" value={q} onChange={v => { setQ(v); setPage(1) }} />
-          <Select placeholder="Trạng thái" width="w-28" options={Object.values(orderStatusLabel)} value={trangThai} onChange={v => { setTrangThai(v); setPage(1) }} />
+        <div className="md:hidden flex gap-1.5 overflow-x-auto -mx-1 px-1 pb-2 mb-1" role="group" aria-label="Lọc nhanh theo trạng thái">
+          {['', ...Object.values(orderStatusLabel)].map(label => (
+            <button key={label || 'all'} type="button" aria-pressed={trangThai === label}
+              onClick={() => { setTrangThai(label); setPage(1) }}
+              className={`flex-shrink-0 min-h-11 px-3.5 rounded-full border text-sm font-medium whitespace-nowrap cursor-pointer transition-colors ${trangThai === label ? 'text-white border-blue-600' : 'bg-white border-slate-200 text-slate-600'}`}
+              style={trangThai === label ? { background: '#1a56db' } : undefined}>
+              {label || 'Tất cả'}
+            </button>
+          ))}
+        </div>
+        <FilterBar
+          activeCount={activeFilterCount}
+          onClear={clearFilters}
+          search={<SearchInput placeholder="Tìm mã đơn, khách hàng, SĐT..." width="w-full md:w-48" value={q} onChange={v => { setQ(v); setPage(1) }} />}>
+          <Select placeholder="Trạng thái" width="hidden md:inline-block w-28" options={Object.values(orderStatusLabel)} value={trangThai} onChange={v => { setTrangThai(v); setPage(1) }} />
           <Select placeholder="Thanh toán" width="w-28" options={Object.values(paymentMethodLabel)} value={phuongThuc} onChange={v => { setPhuongThuc(v); setPage(1) }} />
           <Select placeholder="Đã thanh toán?" width="w-32" options={['Đã thanh toán', 'Chưa thanh toán']} value={thanhToan} onChange={v => { setThanhToan(v); setPage(1) }} />
           <Select placeholder="Nhận hàng" width="w-28" options={Object.values(deliveryMethodLabel)} value={nhanHang} onChange={v => { setNhanHang(v); setPage(1) }} />
@@ -124,6 +149,45 @@ export function OrdersScreen({ onDetail, onCreate, onViewCustomer }: {
           <div className="text-xs text-slate-400 py-12 text-center">Không có đơn hàng nào</div>
         ) : (
           <Table
+            priority={[1, 1, 2, 1, 3, 3, 3, 1, 2, 1, 3, 3, 3, 3]}
+            onCardClick={i => onDetail(items[i].id)}
+            renderCard={i => {
+              const o = items[i]
+              const action = pdfAction(o)
+              return (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-xs font-semibold" style={{ color: '#1a56db' }}>{o.ma}</span>
+                    <Badge label={orderStatusLabel[o.trangThai]} />
+                  </div>
+                  <div className="text-sm font-medium text-slate-800 truncate">
+                    {o.khachHang.hoTen}<span className="font-normal text-slate-500"> · {o.khachHang.sdt || '—'}</span>
+                  </div>
+                  {o.items[0] && (
+                    <div className="text-xs text-slate-500 truncate">
+                      {o.items[0].product.ten}{o.items.length > 1 && <span className="text-slate-400"> +{o.items.length - 1}</span>}
+                    </div>
+                  )}
+                  <div className="flex items-end justify-between gap-2">
+                    <span className="text-base font-bold text-slate-900 tabular-nums">{o.tongCong.toLocaleString('vi-VN')} VNĐ</span>
+                    <span className="text-xs text-slate-500">{new Date(o.createdAt).toLocaleDateString('vi-VN')}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    <Badge label={o.daThanhToan ? 'Đã thanh toán' : 'Chưa thanh toán'} />
+                    <Badge label={depositStatusLabel(o.tienCoc, o.tongCong)} />
+                    <Badge label={o.phuongThucNhanHang === 'SHIP' && o.donViVanChuyen ? shippingCarrierLabel[o.donViVanChuyen] : deliveryMethodLabel[o.phuongThucNhanHang]} />
+                  </div>
+                  {action && (
+                    <div className="pt-2 border-t border-slate-100">
+                      <button type="button" onClick={e => { e.stopPropagation(); action.run() }}
+                        className="inline-flex items-center gap-1.5 min-h-11 px-3 text-sm font-medium rounded border border-slate-200 text-slate-700 cursor-pointer">
+                        <FileDown size={15} strokeWidth={1.75} aria-hidden="true" /> {action.label}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )
+            }}
             cols={['Thao tác', 'Mã đơn', 'Ngày tạo', 'Khách hàng', 'SĐT', 'Sản phẩm', 'Số SP', 'Tổng tiền', 'Thanh toán', 'Trạng thái', 'Đã thu tiền', 'Trạng thái cọc', 'Nhận hàng', 'Mã vận đơn']}
             rows={items.map(o => [
               <div className="flex gap-1">
@@ -138,7 +202,7 @@ export function OrdersScreen({ onDetail, onCreate, onViewCustomer }: {
                   </TinyBtn>
                 )}
               </div>,
-              <button onClick={() => onDetail(o.id)} className="font-mono text-[10px] font-semibold hover:underline cursor-pointer" style={{ color: '#1a56db' }}>{o.ma}</button>,
+              <button onClick={() => onDetail(o.id)} className="font-mono text-[10px] font-semibold whitespace-nowrap hover:underline cursor-pointer" style={{ color: '#1a56db' }}>{o.ma}</button>,
               new Date(o.createdAt).toLocaleDateString('vi-VN'),
               <span className="block max-w-[140px] truncate" title={o.khachHang.hoTen}>{o.khachHang.hoTen}</span>,
               <span className="block max-w-[110px] truncate" title={o.khachHang.sdt ?? undefined}>{o.khachHang.sdt || '—'}</span>,
@@ -152,7 +216,7 @@ export function OrdersScreen({ onDetail, onCreate, onViewCustomer }: {
                 </div>
               ) : <span className="text-slate-300">—</span>,
               <span className="font-semibold">{o.items.length}</span>,
-              <span className="font-semibold">{o.tongCong.toLocaleString('vi-VN')} VNĐ</span>,
+              <span className="font-semibold tabular-nums whitespace-nowrap">{o.tongCong.toLocaleString('vi-VN')} VNĐ</span>,
               paymentMethodLabel[o.phuongThucThanhToan], <Badge label={orderStatusLabel[o.trangThai]} />,
               <Badge label={o.daThanhToan ? 'Đã thanh toán' : 'Chưa thanh toán'} />,
               <Badge label={depositStatusLabel(o.tienCoc, o.tongCong)} />,

@@ -74,7 +74,9 @@ function AppShell() {
   // vừa đi, về đúng màn trước đó bất kể đường đi thế nào.
   const [navStack, setNavStack] = useState<Nav[]>(() => [navFromLocation()])
   const nav = navStack[navStack.length - 1]
-  const [collapsed, setCollapsed] = useState(false)
+  // iPad dọc (768–1023px): mặc định thu sidebar thành thanh icon 56px để
+  // nhường chỗ cho nội dung; từ 1024px trở lên mở rộng như cũ.
+  const [collapsed, setCollapsed] = useState(() => window.matchMedia('(max-width: 1023px)').matches)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const isMobile = useIsMobile()
 
@@ -144,7 +146,7 @@ function AppShell() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: '#f0f2f7' }}>
+    <div className="flex h-dvh overflow-hidden" style={{ background: '#f0f2f7' }}>
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:bg-white focus:text-blue-700 focus:px-3 focus:py-2 focus:rounded focus:shadow">Bỏ qua tới nội dung chính</a>
       <Sidebar active={nav.screen} onNav={go} collapsed={collapsed} onToggleCollapsed={toggleSidebar} mobileOpen={mobileNavOpen} onCloseMobile={() => setMobileNavOpen(false)} />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">

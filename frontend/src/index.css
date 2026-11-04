@@ -48,3 +48,14 @@ textarea:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Cảm ứng (điện thoại/iPad): ô nhập < 16px làm iOS Safari tự phóng to khi
+   focus; bỏ độ trễ double-tap-zoom trên mọi điều khiển bấm được. */
+@media (pointer: coarse) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+button, a, [role='tab'], [role='button'] {
+  touch-action: manipulation;
+}

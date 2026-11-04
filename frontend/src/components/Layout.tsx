@@ -8,6 +8,7 @@ import { HdhLogo, Badge } from './ui'
 import logoUrl from '../assets/logo.jpg'
 import { api, type Notification } from '../lib/api'
 import { useAuth } from '../lib/auth'
+import { useIsMobile } from '../lib/responsive'
 import { staffRoleLabel } from '../lib/labels'
 import type { Screen } from '../types'
 
@@ -83,10 +84,12 @@ const navItems = [
   { key: 'cai-dat', Icon: Settings, label: 'Cài đặt' },
 ]
 
-export function Sidebar({ active, onNav, collapsed, onToggleCollapsed, mobileOpen, onCloseMobile }: {
+export function Sidebar({ active, onNav, collapsed: collapsedProp, onToggleCollapsed, mobileOpen, onCloseMobile }: {
   active: Screen; onNav: (s: Screen) => void; collapsed: boolean; onToggleCollapsed: () => void; mobileOpen: boolean; onCloseMobile: () => void
 }) {
   const { staff, logout } = useAuth()
+  // Điện thoại: ngăn kéo luôn mở đầy đủ nhãn (thanh icon 56px chỉ dành cho tablet/desktop).
+  const collapsed = collapsedProp && !useIsMobile()
   const activeKey = (['order-detail', 'create-order'].includes(active) ? 'orders' :
     ['inventory-history'].includes(active) ? 'inventory' :
     ['product-detail'].includes(active) ? 'products' :
@@ -99,7 +102,7 @@ export function Sidebar({ active, onNav, collapsed, onToggleCollapsed, mobileOpe
         <div className="fixed inset-0 bg-black/40 z-30 md:hidden" onClick={onCloseMobile} />
       )}
       <aside
-        className={`flex flex-col h-screen flex-shrink-0 transition-transform md:transition-[width] duration-200
+        className={`flex flex-col h-dvh flex-shrink-0 transition-transform md:transition-[width] duration-200
           fixed inset-y-0 left-0 z-40 md:static md:translate-x-0
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}
         style={{ width: collapsed ? 56 : 208, background: '#0f172a' }}
@@ -119,7 +122,7 @@ export function Sidebar({ active, onNav, collapsed, onToggleCollapsed, mobileOpe
             <>
               <HdhLogo />
               <button type="button" onClick={onToggleCollapsed} title="Thu gọn thanh bên" aria-label="Thu gọn thanh bên"
-                className="ml-auto w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 active:bg-white/15 transition-colors cursor-pointer flex-shrink-0"
+                className="ml-auto w-8 h-8 [@media(pointer:coarse)]:w-11 [@media(pointer:coarse)]:h-11 flex items-center justify-center rounded-lg hover:bg-white/10 active:bg-white/15 transition-colors cursor-pointer flex-shrink-0"
                 style={{ color: '#94a3b8' }}>
                 <PanelLeftClose size={18} strokeWidth={1.75} />
               </button>
@@ -134,7 +137,7 @@ export function Sidebar({ active, onNav, collapsed, onToggleCollapsed, mobileOpe
             return (
               <button type="button" key={item.key} onClick={() => { onNav(item.key as Screen); onCloseMobile() }} title={collapsed ? item.label : undefined}
                 aria-label={collapsed ? item.label : undefined} aria-current={isActive ? 'page' : undefined}
-                className="w-full flex items-center gap-3 px-3 py-2.5 text-sm transition-colors cursor-pointer"
+                className="w-full flex items-center gap-3 px-3 py-2.5 [@media(pointer:coarse)]:min-h-12 text-sm transition-colors cursor-pointer"
                 style={{
                   color: isActive ? '#fff' : '#94a3b8',
                   background: isActive ? 'rgba(255,255,255,0.12)' : undefined,
@@ -148,6 +151,14 @@ export function Sidebar({ active, onNav, collapsed, onToggleCollapsed, mobileOpe
           })}
         </nav>
 
+        {collapsed && (
+          <div className="p-2 border-t border-white/10">
+            <button type="button" onClick={logout} title="Đăng xuất" aria-label="Đăng xuất"
+              className="w-full h-10 [@media(pointer:coarse)]:h-12 rounded flex items-center justify-center hover:bg-white/10 transition-colors cursor-pointer" style={{ color: '#94a3b8' }}>
+              <LogOut size={18} strokeWidth={1.75} aria-hidden="true" />
+            </button>
+          </div>
+        )}
         {!collapsed && (
           <div className="p-3 border-t border-white/10">
             <div className="flex items-center gap-2 mb-2">
@@ -302,7 +313,7 @@ export function Header({ title, onToggleSidebar, onNav }: {
 
   return (
     <header className="flex items-center gap-2 sm:gap-3 px-2 sm:px-4 h-14 border-b border-slate-200 bg-white flex-shrink-0 z-10">
-      <button type="button" onClick={onToggleSidebar} aria-label="Mở menu điều hướng" className="md:hidden p-2 rounded hover:bg-slate-100 text-slate-500 cursor-pointer flex-shrink-0"><Menu size={18} strokeWidth={1.75} aria-hidden="true" /></button>
+      <button type="button" onClick={onToggleSidebar} aria-label="Mở menu điều hướng" className="md:hidden p-2 min-w-11 min-h-11 flex items-center justify-center rounded hover:bg-slate-100 text-slate-500 cursor-pointer flex-shrink-0"><Menu size={18} strokeWidth={1.75} aria-hidden="true" /></button>
       <h1 className="font-semibold text-slate-800 text-sm truncate max-w-[30vw] sm:max-w-none flex-shrink-0">{title}</h1>
 
       <div className="flex-1 mx-1 sm:mx-4 relative min-w-0" ref={wrapRef}>
@@ -332,7 +343,7 @@ export function Header({ title, onToggleSidebar, onNav }: {
         <div className="relative" ref={notifRef}>
           <button type="button" onClick={() => setNotifOpen(v => !v)} aria-expanded={notifOpen} aria-haspopup="true"
             aria-label={unreadCount > 0 ? `Thông báo, ${unreadCount} chưa đọc` : 'Thông báo'}
-            className="relative p-2 rounded hover:bg-slate-100 text-slate-500 cursor-pointer">
+            className="relative p-2 [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:min-h-11 flex items-center justify-center rounded hover:bg-slate-100 text-slate-500 cursor-pointer">
             <Bell size={17} strokeWidth={1.75} aria-hidden="true" />
             {unreadCount > 0 && (
               <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full text-[9px] font-bold text-white flex items-center justify-center" style={{ background: '#f97316' }}>

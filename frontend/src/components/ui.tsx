@@ -2,10 +2,11 @@
 // Extracted from the original single-file App.tsx so screens can import them
 // independently once each screen moves to its own module.
 
-import { useEffect, useRef, useId } from 'react'
-import { Search, X, TriangleAlert, RotateCw } from 'lucide-react'
+import { useEffect, useRef, useId, useState } from 'react'
+import { Search, X, TriangleAlert, RotateCw, SlidersHorizontal } from 'lucide-react'
 import logoUrl from '../assets/logo.jpg'
 import { ApiError } from '../lib/api'
+import { useIsMobile } from '../lib/responsive'
 
 export const statusColor: Record<string, string> = {
   'Hoàn thành': 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -99,7 +100,7 @@ export function LinkBtn({ children, onClick }: { children: React.ReactNode; onCl
 export function Btn({ children, variant = 'primary', small, onClick, disabled, type = 'button' }: {
   children: React.ReactNode; variant?: 'primary' | 'secondary' | 'danger' | 'ghost'; small?: boolean; onClick?: () => void; disabled?: boolean; type?: 'button' | 'submit'
 }) {
-  const base = `inline-flex items-center gap-1 font-medium rounded cursor-pointer transition-colors whitespace-nowrap flex-shrink-0 ${small ? 'text-xs px-2.5 py-1.5' : 'text-sm px-3 py-1.5'}`
+  const base = `inline-flex items-center gap-1 font-medium rounded cursor-pointer [@media(pointer:coarse)]:min-h-11 transition-colors whitespace-nowrap flex-shrink-0 ${small ? 'text-xs px-2.5 py-1.5' : 'text-sm px-3 py-1.5'}`
   const v = {
     primary: 'text-white hover:opacity-90',
     secondary: 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50',
@@ -120,7 +121,7 @@ export function TinyBtn({ children, danger, title, onClick }: { children: React.
       onClick={onClick}
       title={title}
       aria-label={title}
-      className={`text-[10px] px-1.5 py-1 rounded border cursor-pointer whitespace-nowrap transition-colors inline-flex items-center justify-center
+      className={`text-[10px] px-1.5 py-1 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 rounded border cursor-pointer whitespace-nowrap transition-colors inline-flex items-center justify-center
         ${danger ? 'border-red-200 text-red-600 hover:bg-red-50' : 'border-slate-200 hover:bg-slate-50 text-slate-600'}`}
     >
       {children}
@@ -128,7 +129,35 @@ export function TinyBtn({ children, danger, title, onClick }: { children: React.
   )
 }
 
-export function Table({ cols, rows }: { cols: string[]; rows: React.ReactNode[][] }) {
+export function Table({ cols, rows, priority, renderCard, onCardClick }: {
+  cols: string[]; rows: React.ReactNode[][]
+  /** Mức ưu tiên từng cột: 1 = luôn hiện, 2 = từ 768px (tablet), 3 = từ 1024px (desktop). Bỏ trống = luôn hiện. */
+  priority?: (1 | 2 | 3)[]
+  /** Điện thoại (< 768px): hiển thị mỗi bản ghi thành 1 thẻ thay cho bảng. */
+  renderCard?: (rowIndex: number) => React.ReactNode
+  /** Bấm vào cả thẻ (chỉ dùng cùng renderCard). */
+  onCardClick?: (rowIndex: number) => void
+}) {
+  const isMobile = useIsMobile()
+
+  if (isMobile && renderCard) {
+    return (
+      <ul className="space-y-2">
+        {rows.map((_, ri) => (
+          <li key={ri}
+            role={onCardClick ? 'button' : undefined}
+            tabIndex={onCardClick ? 0 : undefined}
+            onClick={onCardClick ? () => onCardClick(ri) : undefined}
+            onKeyDown={onCardClick ? e => { if (e.key === 'Enter' && e.target === e.currentTarget) onCardClick(ri) } : undefined}
+            className={`rounded-lg border border-slate-200 bg-white p-3 ${onCardClick ? 'cursor-pointer active:bg-slate-50' : ''}`}>
+            {renderCard(ri)}
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
+  const hide = (i: number) => priority?.[i] === 2 ? 'hidden md:table-cell' : priority?.[i] === 3 ? 'hidden lg:table-cell' : ''
   // Cột đầu tiên (luôn là "Thao tác" theo quy ước toàn app) được ghim lại khi
   // cuộn ngang — bảng nào cũng có nhiều cột nên vẫn bấm được nút thao tác mà
   // không phải cuộn ngược về đầu bảng.
@@ -138,7 +167,7 @@ export function Table({ cols, rows }: { cols: string[]; rows: React.ReactNode[][
         <thead>
           <tr className="border-b border-slate-200">
             {cols.map((c, i) => (
-              <th key={i} scope="col" className={`text-left py-1.5 px-2 font-semibold text-slate-500 whitespace-nowrap ${i === 0 ? 'sticky left-0 z-20 bg-white' : ''}`}>{c}</th>
+              <th key={i} scope="col" className={`text-left py-1.5 px-2 font-semibold text-slate-500 whitespace-nowrap ${i === 0 ? 'sticky left-0 z-20 bg-white' : ''} ${hide(i)}`}>{c}</th>
             ))}
           </tr>
         </thead>
@@ -146,7 +175,7 @@ export function Table({ cols, rows }: { cols: string[]; rows: React.ReactNode[][
           {rows.map((row, ri) => (
             <tr key={ri} className="group border-b border-slate-100 hover:bg-slate-50 transition-colors">
               {row.map((cell, ci) => (
-                <td key={ci} className={`py-1.5 px-2 text-slate-700 ${ci === 0 ? 'sticky left-0 z-10 bg-white group-hover:bg-slate-50' : ''}`}>{cell}</td>
+                <td key={ci} className={`py-1.5 px-2 text-slate-700 ${ci === 0 ? 'sticky left-0 z-10 bg-white group-hover:bg-slate-50' : ''} ${hide(ci)}`}>{cell}</td>
               ))}
             </tr>
           ))}
@@ -156,8 +185,49 @@ export function Table({ cols, rows }: { cols: string[]; rows: React.ReactNode[][
   )
 }
 
-export function FilterBar({ children }: { children: React.ReactNode }) {
-  return <div className="flex items-center gap-1.5 flex-wrap mb-3">{children}</div>
+/**
+ * Điện thoại: chỉ ô tìm kiếm + nút "Bộ lọc (n)" mở bảng lọc kéo từ dưới lên —
+ * trước đây 5–7 ô lọc xếp thành 4 hàng chiếm hết màn hình. Từ 768px trở lên
+ * (hoặc khi màn hình không truyền `search`) giữ nguyên bố cục cũ.
+ */
+export function FilterBar({ children, search, activeCount = 0, onClear }: {
+  children: React.ReactNode
+  search?: React.ReactNode
+  activeCount?: number
+  onClear?: () => void
+}) {
+  const isMobile = useIsMobile()
+  const [open, setOpen] = useState(false)
+
+  if (search === undefined) {
+    return <div className="flex items-center gap-1.5 flex-wrap mb-3">{children}</div>
+  }
+  if (!isMobile) {
+    return <div className="flex items-center gap-1.5 flex-wrap mb-3">{search}{children}</div>
+  }
+  return (
+    <>
+      <div className="flex items-center gap-2 mb-3">
+        <div className="flex-1 min-w-0">{search}</div>
+        <button type="button" onClick={() => setOpen(true)} aria-haspopup="dialog"
+          className="relative inline-flex items-center gap-1.5 min-h-11 px-3 text-sm font-medium rounded-md border border-slate-200 bg-white text-slate-700 cursor-pointer flex-shrink-0">
+          <SlidersHorizontal size={15} strokeWidth={1.75} aria-hidden="true" /> Bộ lọc
+          {activeCount > 0 && (
+            <span className="min-w-5 h-5 px-1 rounded-full text-[11px] font-bold text-white flex items-center justify-center" style={{ background: '#1a56db' }}>{activeCount}</span>
+          )}
+        </button>
+      </div>
+      {open && (
+        <Modal title="Bộ lọc" placement="bottom" onClose={() => setOpen(false)}>
+          <div className="flex flex-col gap-3 [&_select]:w-full [&_select]:min-h-11 [&_input]:w-full">{children}</div>
+          <div className="flex gap-2 mt-4">
+            {onClear && <Btn variant="secondary" onClick={() => { onClear(); setOpen(false) }}>Xóa lọc</Btn>}
+            <Btn onClick={() => setOpen(false)}>Xong</Btn>
+          </div>
+        </Modal>
+      )}
+    </>
+  )
 }
 
 export function SearchInput({ placeholder, width = 'w-56', value, onChange }: {
@@ -186,7 +256,7 @@ export function Select({ placeholder, options, value, onChange, width }: {
       aria-label={placeholder}
       value={value ?? ''}
       onChange={e => onChange?.(e.target.value)}
-      className={`text-xs px-2.5 py-1.5 border border-slate-200 rounded-md bg-white text-slate-600 focus:outline-none focus:border-blue-400 overflow-hidden text-ellipsis whitespace-nowrap ${width ?? ''}`}
+      className={`text-xs px-2.5 py-1.5 [@media(pointer:coarse)]:w-auto [@media(pointer:coarse)]:min-h-11 border border-slate-200 rounded-md bg-white text-slate-600 focus:outline-none focus:border-blue-400 overflow-hidden text-ellipsis whitespace-nowrap ${width ?? ''}`}
     >
       <option value="">{placeholder}</option>
       {options.map(o => <option key={o}>{o}</option>)}
@@ -235,14 +305,14 @@ export function Pagination({ total, page, pageSize = 20, onChange }: { total: nu
     <nav aria-label="Phân trang" className="flex items-center justify-between mt-3 text-xs text-slate-500">
       <span>Tổng {total} bản ghi</span>
       <div className="flex items-center gap-1">
-        <button type="button" aria-label="Trang trước" disabled={page <= 1} onClick={() => onChange?.(Math.max(1, page - 1))} className="px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">‹</button>
+        <button type="button" aria-label="Trang trước" disabled={page <= 1} onClick={() => onChange?.(Math.max(1, page - 1))} className="px-2 py-1 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 rounded border border-slate-200 hover:bg-slate-50 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">‹</button>
         {pages.map((p, i) => p === DOTS ? (
           <span key={`dots-${i}`} className="px-1.5 select-none" aria-hidden="true">{DOTS}</span>
         ) : (
-          <button type="button" key={p} aria-label={`Trang ${p}`} aria-current={p === page ? 'page' : undefined} onClick={() => onChange?.(p)} className={`px-2.5 py-1 rounded border transition-colors cursor-pointer ${p === page ? 'text-white border-blue-500' : 'border-slate-200 hover:bg-slate-50'}`}
+          <button type="button" key={p} aria-label={`Trang ${p}`} aria-current={p === page ? 'page' : undefined} onClick={() => onChange?.(p)} className={`px-2.5 py-1 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 rounded border transition-colors cursor-pointer ${p === page ? 'text-white border-blue-500' : 'border-slate-200 hover:bg-slate-50'}`}
             style={p === page ? { background: '#1a56db' } : undefined}>{p}</button>
         ))}
-        <button type="button" aria-label="Trang sau" disabled={page >= totalPages} onClick={() => onChange?.(Math.min(totalPages, page + 1))} className="px-2 py-1 rounded border border-slate-200 hover:bg-slate-50 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">›</button>
+        <button type="button" aria-label="Trang sau" disabled={page >= totalPages} onClick={() => onChange?.(Math.min(totalPages, page + 1))} className="px-2 py-1 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11 rounded border border-slate-200 hover:bg-slate-50 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed">›</button>
       </div>
     </nav>
   )
@@ -274,8 +344,10 @@ export function BackBtn({ label, onClick }: { label: string; onClick: () => void
 
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
 
-export function Modal({ title, onClose, children, width = 'max-w-md' }: {
+export function Modal({ title, onClose, children, width = 'max-w-md', placement = 'center' }: {
   title: string; onClose: () => void; children: React.ReactNode; width?: string
+  /** 'bottom' = bảng kéo từ cạnh dưới (dùng cho bộ lọc trên điện thoại). */
+  placement?: 'center' | 'bottom'
 }) {
   const titleId = useId()
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -308,12 +380,12 @@ export function Modal({ title, onClose, children, width = 'max-w-md' }: {
   }, [])
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+    <div className={`fixed inset-0 bg-black/40 flex z-50 overscroll-contain ${placement === 'bottom' ? 'items-end justify-center' : 'items-center justify-center p-4'}`} onClick={onClose}>
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}
-        className={`bg-white rounded-lg shadow-xl w-full max-h-full overflow-y-auto ${width}`} onClick={e => e.stopPropagation()}>
+        className={`bg-white shadow-xl w-full overflow-y-auto overscroll-contain ${placement === 'bottom' ? 'rounded-t-xl max-h-[85dvh] pb-[env(safe-area-inset-bottom)]' : `rounded-lg max-h-full ${width}`}`} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
           <h3 id={titleId} className="text-sm font-semibold text-slate-800">{title}</h3>
-          <button type="button" onClick={onClose} aria-label="Đóng" className="text-slate-400 hover:text-slate-600 cursor-pointer"><X size={16} aria-hidden="true" /></button>
+          <button type="button" onClick={onClose} aria-label="Đóng" className="text-slate-400 hover:text-slate-600 cursor-pointer [@media(pointer:coarse)]:min-w-11 [@media(pointer:coarse)]:min-h-11 flex items-center justify-center"><X size={16} aria-hidden="true" /></button>
         </div>
         <div className="p-4">{children}</div>
       </div>
